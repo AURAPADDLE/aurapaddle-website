@@ -247,88 +247,52 @@ section{padding:7rem 3.5rem}
   position:sticky;top:80px;
   padding:2rem 1rem 2rem 3.5rem;
   display:flex;
-  flex-direction:column;
+  flex-direction:row;
   gap:1rem;
-  align-items:stretch;
+  align-items:flex-start;
 }
 
-/* ── Board three-view row ── */
-.board-three-view{
-  display:grid;
-  grid-template-columns:2fr 0.6fr 2fr;
-  gap:.6rem;
-  align-items:center;
-  background:var(--foam);
-  border-radius:.8rem;
-  padding:1.2rem;
-}
-.board-view-img{
-  width:100%;
-  object-fit:contain;
-  border-radius:.4rem;
-}
-.board-view-top{ max-height:240px; }
-.board-view-side{ max-height:300px; }
-.board-view-bottom{ max-height:240px; }
-.board-view-label{
-  text-align:center;
-  font-size:.58rem;
-  letter-spacing:.1em;
-  text-transform:uppercase;
-  color:var(--grey);
-  margin-top:.4rem;
-  font-weight:300;
-}
-
-/* ── Accessories grid ── */
-.acc-section-label{
-  font-size:.62rem;
-  letter-spacing:.16em;
-  text-transform:uppercase;
-  color:var(--grey);
-  font-weight:300;
-  padding:.2rem 0;
-}
-.acc-grid{
-  display:grid;
-  grid-template-columns:repeat(5,1fr);
-  gap:.5rem;
-}
-.acc-item{
-  background:var(--foam);
-  border-radius:.5rem;
-  padding:.6rem .4rem;
+/* Thumbnail strip */
+.thumb-strip{
   display:flex;
   flex-direction:column;
-  align-items:center;
-  gap:.3rem;
-  border:1.5px solid transparent;
+  gap:.6rem;
+  flex-shrink:0;
+}
+.thumb{
+  width:80px;height:80px;
+  border-radius:.5rem;
+  border:2px solid transparent;
+  background:var(--foam);
   cursor:pointer;
+  overflow:hidden;
   transition:border-color .2s;
+  display:flex;align-items:center;justify-content:center;
 }
-.acc-item:hover{border-color:var(--grey)}
-.acc-item img{
-  width:100%;
+.thumb.active{border-color:var(--ink)}
+.thumb:hover{border-color:var(--grey)}
+.thumb img{width:100%;height:100%;object-fit:contain;padding:.3rem}
+
+/* Main image */
+.main-img-wrap{
+  flex:1;
   aspect-ratio:1/1;
+  background:var(--foam);
+  border-radius:.8rem;
+  overflow:hidden;
+  display:flex;align-items:center;justify-content:center;
+  position:relative;
+}
+.main-img-wrap img{
+  width:100%;height:100%;
   object-fit:contain;
-}
-.acc-item-label{
-  font-size:.52rem;
-  letter-spacing:.04em;
-  text-transform:uppercase;
-  color:var(--grey);
-  text-align:center;
-  line-height:1.3;
+  padding:1.5rem;
 }
 
-/* Thumbnail strip — kept for mobile fallback */
-.thumb-strip{ display:none }
-.thumb{ display:none }
-.thumb-placeholder{ display:none }
-
-/* Main image — hidden in new layout */
-.main-img-wrap{ display:none }
-.main-placeholder{ display:none }
+/* Hide new layout classes */
+.board-three-view{display:none}
+.acc-section-label{display:none}
+.acc-grid{display:none}
 
 }
 .main-placeholder-icon{
@@ -800,19 +764,23 @@ footer{
   }
   .product-stage{
     position:static;
+    flex-direction:column;
     padding:1rem 1.2rem;
     gap:.8rem;
   }
-  .board-three-view{
-    grid-template-columns:2fr 0.5fr 2fr;
-    padding:.8rem;
-    gap:.4rem;
+  .thumb-strip{
+    flex-direction:row;
+    overflow-x:auto;
+    gap:.5rem;
+    width:100%;
+    padding-bottom:.3rem;
   }
-  .board-view-top,.board-view-bottom{max-height:160px}
-  .board-view-side{max-height:200px}
-  .acc-grid{grid-template-columns:repeat(5,1fr);gap:.3rem}
-  .acc-item{padding:.4rem .2rem}
-  .acc-item-label{font-size:.45rem}
+  .thumb{width:64px;height:64px;flex-shrink:0}
+  .main-img-wrap{
+    width:100%;
+    aspect-ratio:1/1;
+    border-radius:.6rem;
+  }
   .product-info-panel{
     padding:1.4rem 1.2rem 3rem;
     max-height:none;
@@ -1118,50 +1086,38 @@ footer{
     <!-- ── LEFT: Image column ── -->
     <div class="product-stage">
 
-      <!-- Three-view board display -->
-      <div class="board-three-view">
-        <!-- Top view -->
-        <div>
-          <img class="board-view-img board-view-top" src="01_Board_Top.JPG" alt="Aura Yoga Cruiser 11' top view">
-          <div class="board-view-label">Top</div>
+      <!-- Left: Thumbnail strip -->
+      <div class="thumb-strip" id="thumbStrip">
+        <div class="thumb active" onclick="switchMainImg(this,'01_Board_Top.JPG')">
+          <img src="01_Board_Top.JPG" alt="Top view">
         </div>
-        <!-- Side view -->
-        <div>
-          <img class="board-view-img board-view-side" src="03_Board_L_side.JPG" alt="Aura Yoga Cruiser 11' side view">
-          <div class="board-view-label">Side</div>
+        <div class="thumb" onclick="switchMainImg(this,'03_Board_L_side.JPG')">
+          <img src="03_Board_L_side.JPG" alt="Side view">
         </div>
-        <!-- Bottom view -->
-        <div>
-          <img class="board-view-img board-view-bottom" src="02_Board_Bottom.JPG" alt="Aura Yoga Cruiser 11' bottom view">
-          <div class="board-view-label">Bottom</div>
+        <div class="thumb" onclick="switchMainImg(this,'02_Board_Bottom.JPG')">
+          <img src="02_Board_Bottom.JPG" alt="Bottom view">
+        </div>
+        <div class="thumb" onclick="switchMainImg(this,'05_Paddle_Face.JPG')">
+          <img src="05_Paddle_Face.JPG" alt="Paddle">
+        </div>
+        <div class="thumb" onclick="switchMainImg(this,'07_Leash.JPG')">
+          <img src="07_Leash.JPG" alt="Leash">
+        </div>
+        <div class="thumb" onclick="switchMainImg(this,'10_Repair_Kit.JPG')">
+          <img src="10_Repair_Kit.JPG" alt="Repair kit">
+        </div>
+        <div class="thumb" onclick="switchMainImg(this,'09_Phone_bag.JPG')">
+          <img src="09_Phone_bag.JPG" alt="Phone pouch">
+        </div>
+        <div class="thumb" onclick="switchMainImg(this,'08_E-pump.JPG')">
+          <img src="08_E-pump.JPG" alt="Electric pump">
         </div>
       </div>
 
-      <!-- Accessories grid -->
-      <div class="acc-section-label">What's in the box</div>
-      <div class="acc-grid">
-        <div class="acc-item">
-          <img src="05_Paddle_Face.JPG" alt="Adjustable paddle">
-          <div class="acc-item-label">Paddle</div>
-        </div>
-        <div class="acc-item">
-          <img src="07_Leash.JPG" alt="Coiled leash">
-          <div class="acc-item-label">Leash</div>
-        </div>
-        <div class="acc-item">
-          <img src="10_Repair_Kit.JPG" alt="Repair kit">
-          <div class="acc-item-label">Repair Kit</div>
-        </div>
-        <div class="acc-item">
-          <img src="09_Phone_bag.JPG" alt="Waterproof phone pouch">
-          <div class="acc-item-label">Phone Pouch</div>
-        </div>
-        <div class="acc-item">
-          <img src="08_E-pump.JPG" alt="Electric pump optional">
-          <div class="acc-item-label">E-Pump*</div>
-        </div>
+      <!-- Right: Main image -->
+      <div class="main-img-wrap" id="mainImgWrap">
+        <img id="mainProductImg" src="01_Board_Top.JPG" alt="Aura Yoga Cruiser 11'">
       </div>
-      <p style="font-size:.65rem;color:var(--coral);font-weight:300">* Electric pump optional upgrade · Dual action hand pump included as standard</p>
 
     </div>
 
@@ -1720,6 +1676,14 @@ function initReveal(){
   document.querySelectorAll('.page.active .rv:not(.in)').forEach(el=>obs.observe(el));
 }
 document.addEventListener('DOMContentLoaded',initReveal);
+
+/* ── Product page: thumbnail switcher ── */
+function switchMainImg(el, src){
+  document.querySelectorAll('#thumbStrip .thumb').forEach(t=>t.classList.remove('active'));
+  el.classList.add('active');
+  const main = document.getElementById('mainProductImg');
+  if(main) main.src = src;
+}
 
 /* ── Product page: colour selector ── */
 const colourLabels={
