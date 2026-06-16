@@ -1982,9 +1982,9 @@ footer{
              ║       style="width:100%;height:100%;object-fit:contain;     ║
              ║              padding:1rem" alt="Aura Yoga Cruiser 11'">           ║
              ╚══════════════════════════════════════════════════════════════╝ -->
-        <div class="sc-img" style="background:var(--foam);padding:0;overflow:hidden">
+        <div class="sc-img" style="background:var(--foam);padding:1rem;overflow:hidden">
           <span class="sc-tag sc-tag-new">Best Seller</span>
-          <img src="01_Board_Top.JPG" alt="Aura Yoga Cruiser 11'" style="width:100%;height:100%;object-fit:cover">
+          <img src="01_Board_Top.JPG" alt="Aura Yoga Cruiser 11'" style="width:100%;height:100%;object-fit:contain">
         </div>
         <div class="sc-body">
           <div class="sc-name">Aura Yoga Cruiser 11'</div>
@@ -1998,9 +1998,10 @@ footer{
 
       <!-- Product 2: coming soon -->
       <div class="shop-card">
-        <div class="sc-img" style="background:var(--foam);padding:0;overflow:hidden">
+        <div class="sc-img" style="background:var(--foam);padding:1rem;overflow:hidden;cursor:pointer" onclick="cycleCardColour(this,'fishing');event.stopPropagation()">
           <span class="sc-tag sc-tag-soon">Coming Q4 2026</span>
-          <img src="pic 7 fishing glacier blue.png" alt="Aura Fishing Angler 12'" style="width:100%;height:100%;object-fit:contain;padding:1rem">
+          <img id="fishing-card-img" src="pic 7 fishing glacier blue.png" alt="Aura Fishing Angler 12' — Glacier Blue" style="width:100%;height:100%;object-fit:contain">
+          <span style="position:absolute;bottom:.7rem;right:.9rem;font-size:.58rem;letter-spacing:.08em;text-transform:uppercase;color:var(--grey);background:rgba(255,255,255,.8);padding:.2rem .5rem;border-radius:1rem">tap to change colour</span>
         </div>
         <div class="sc-body">
           <div class="sc-name">Aura Fishing Angler 12'</div>
@@ -2014,9 +2015,10 @@ footer{
 
       <!-- Product 3: coming soon -->
       <div class="shop-card">
-        <div class="sc-img" style="background:var(--foam);padding:0;overflow:hidden">
+        <div class="sc-img" style="background:var(--foam);padding:1rem;overflow:hidden;cursor:pointer" onclick="cycleCardColour(this,'touring');event.stopPropagation()">
           <span class="sc-tag sc-tag-soon">Coming 2027</span>
-          <img src="pic 11 toring glacier blue.png" alt="Aura Touring Performance 14'" style="width:100%;height:100%;object-fit:contain;padding:1rem">
+          <img id="touring-card-img" src="pic 11 toring glacier blue.png" alt="Aura Touring Performance 14' — Glacier Blue" style="width:100%;height:100%;object-fit:contain">
+          <span style="position:absolute;bottom:.7rem;right:.9rem;font-size:.58rem;letter-spacing:.08em;text-transform:uppercase;color:var(--grey);background:rgba(255,255,255,.8);padding:.2rem .5rem;border-radius:1rem">tap to change colour</span>
         </div>
         <div class="sc-body">
           <div class="sc-name">Aura Touring Performance 14'</div>
@@ -2418,6 +2420,27 @@ function handleOrder(e){
     document.getElementById('orderSuccess').style.display = 'block';
   })
   .catch(()=>toast('Something went wrong. Please email us at admin@aurapaddle.com'));
+}
+
+/* ── Shop card: colour cycling ── */
+const cardColourData={
+  fishing:{
+    imgs:['pic 7 fishing glacier blue.png','pic 8 fishing matte sandstone.png','pic 9 fishing eucalyptus green.png','pic 10 fishing coral white.png'],
+    labels:['Glacier Blue','Matte Sandstone','Eucalyptus Green','Coral White'],
+    idx:0
+  },
+  touring:{
+    imgs:['pic 11 toring glacier blue.png','pic 12 toring matte sandstone.png','pic 13 toring eucalyptus green.png','pic 14 toring coral white.png'],
+    labels:['Glacier Blue','Matte Sandstone','Eucalyptus Green','Coral White'],
+    idx:0
+  }
+};
+function cycleCardColour(wrap,key){
+  const d=cardColourData[key];
+  d.idx=(d.idx+1)%d.imgs.length;
+  const img=wrap.querySelector('img');
+  img.src=d.imgs[d.idx];
+  img.alt=img.alt.replace(/— .+$/,'— '+d.labels[d.idx]);
 }
 
 /* Initial page state */
