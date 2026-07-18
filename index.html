@@ -2078,10 +2078,9 @@ footer{
     <!-- Right form -->
     <div class="contact-right">
       <div id="contactFormWrap">
-        <form name="contact" method="POST" data-netlify="true" netlify-honeypot="bot-field"
+        <form name="contact" method="POST" action="https://formspree.io/f/xaqrowoy"
               onsubmit="handleContactSubmit(event)">
-          <input type="hidden" name="form-name" value="contact">
-          <p style="display:none"><input name="bot-field"></p>
+          <input type="hidden" name="_subject" value="New Aura Paddle contact message">
 
           <div class="cf-group">
             <label class="cf-label">Full name <span class="cf-req">*</span></label>
@@ -2222,21 +2221,30 @@ function toggleMobileMenu(){
   document.body.style.overflow = m.classList.contains('open') ? 'hidden' : '';
 }
 
-/* ── Contact form (Netlify Forms) ─── */
-function handleContactSubmit(e){
+/* ── Contact form (Formspree) ─────── */
+async function handleContactSubmit(e){
   e.preventDefault();
   const form = e.target;
-  const data = new FormData(form);
-  fetch('/', {
-    method: 'POST',
-    headers: {'Content-Type': 'application/x-www-form-urlencoded'},
-    body: new URLSearchParams(data).toString()
-  })
-  .then(()=>{
+  const submitBtn = form.querySelector('button[type="submit"]');
+  submitBtn.disabled = true;
+
+  try {
+    const response = await fetch(form.action, {
+      method: 'POST',
+      body: new FormData(form),
+      headers: {'Accept': 'application/json'}
+    });
+
+    if (!response.ok) throw new Error('Form submission failed');
+
+    form.reset();
     document.getElementById('contactFormWrap').style.display='none';
     document.getElementById('contactSuccess').style.display='flex';
-  })
-  .catch(()=>toast('Something went wrong. Please email us directly at admin@aurapaddle.com'));
+  } catch (error) {
+    toast('Something went wrong. Please email us directly at admin@aurapaddle.com');
+  } finally {
+    submitBtn.disabled = false;
+  }
 }
 
 /* ── Nav scroll ──────────────────── */
