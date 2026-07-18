@@ -2240,6 +2240,12 @@ async function handleContactSubmit(e){
     form.reset();
     document.getElementById('contactFormWrap').style.display='none';
     document.getElementById('contactSuccess').style.display='flex';
+
+    if (typeof gtag === 'function') {
+      gtag('event', 'contact_form_submit', {
+        form_type: 'contact'
+      });
+    }
   } catch (error) {
     toast('Something went wrong. Please email us directly at admin@aurapaddle.com');
   } finally {
@@ -2403,9 +2409,18 @@ async function handleOrder(e){
 
     if (!response.ok) throw new Error('Form submission failed');
 
+    const orderValue = Number(form.elements.quantity.value) * 799;
     form.reset();
     document.getElementById('orderFormWrap').style.display = 'none';
     document.getElementById('orderSuccess').style.display = 'block';
+
+    if (typeof gtag === 'function') {
+      gtag('event', 'order_request_submit', {
+        form_type: 'order_request',
+        currency: 'AUD',
+        value: orderValue
+      });
+    }
   } catch (error) {
     toast('Something went wrong. Please email us at admin@aurapaddle.com');
   } finally {
