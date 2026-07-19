@@ -206,7 +206,7 @@
           "name": "Does Aura Paddle ship across Australia?",
           "acceptedAnswer": {
             "@type": "Answer",
-            "text": "Yes. Aura Paddle delivers across Australia. Shipping costs are calculated separately based on the delivery address and confirmed before payment."
+            "text": "Yes. Aura Paddle delivers across Australia. Shipping is quoted for the delivery address before payment. In-stock orders normally dispatch within 1–3 business days; estimated transit after dispatch is 3–7 business days for metro areas, 5–10 for regional areas and 7–15 for remote areas."
           }
         },
         {
@@ -905,6 +905,31 @@ footer{
 .fb-links a{color:rgba(255,255,255,.3);text-decoration:none;transition:color .2s}
 .fb-links a:hover{color:rgba(255,255,255,.6)}
 
+/* ── Policies Page ────────────────────────── */
+#p-policies{background:var(--parchment)}
+.policies-hero{padding:9rem 3.5rem 3.5rem;background:var(--ink);color:#fff}
+.policies-hero h1{font-family:var(--serif);font-size:clamp(2.4rem,5vw,4.6rem);font-weight:300;line-height:1.05;margin:.7rem 0 1rem}
+.policies-hero p{max-width:720px;color:rgba(255,255,255,.58);font-size:.94rem;line-height:1.8;font-weight:300}
+.policy-nav{display:flex;flex-wrap:wrap;gap:.65rem;margin-top:2rem}
+.policy-nav button{padding:.62rem 1rem;border:1px solid rgba(255,255,255,.2);border-radius:2rem;background:transparent;color:#fff;font-family:var(--sans);font-size:.68rem;letter-spacing:.08em;cursor:pointer}
+.policy-nav button:hover{background:var(--coral);border-color:var(--coral)}
+.policies-wrap{max-width:1040px;margin:0 auto;padding:4rem 3.5rem 6rem}
+.policy-section{scroll-margin-top:90px;padding:0 0 3.5rem;margin-bottom:3.5rem;border-bottom:1px solid rgba(13,27,36,.1)}
+.policy-section:last-child{border-bottom:none;margin-bottom:0}
+.policy-kicker{font-size:.62rem;letter-spacing:.2em;text-transform:uppercase;color:var(--coral);margin-bottom:.7rem}
+.policy-section h2{font-family:var(--serif);font-size:clamp(1.8rem,3vw,2.7rem);font-weight:300;color:var(--ink);margin-bottom:1.3rem}
+.policy-section h3{font-size:.86rem;font-weight:500;color:var(--ink);margin:1.6rem 0 .6rem}
+.policy-section p,.policy-section li{font-size:.88rem;line-height:1.85;font-weight:300;color:#56636b}
+.policy-section p{margin-bottom:.8rem}
+.policy-section ul{padding-left:1.2rem;margin:.5rem 0 1rem}
+.policy-section a{color:var(--ocean)}
+.policy-note{background:var(--foam);border-left:3px solid var(--tide);padding:1rem 1.2rem;margin:1rem 0;border-radius:0 .5rem .5rem 0}
+.delivery-table{width:100%;border-collapse:collapse;margin:1rem 0 1.3rem;font-size:.84rem}
+.delivery-table th,.delivery-table td{text-align:left;padding:.85rem;border-bottom:1px solid rgba(13,27,36,.09);vertical-align:top}
+.delivery-table th{color:var(--ink);font-weight:500;background:var(--sand)}
+.legal-footer{background:var(--ink);padding:2rem 3.5rem;display:flex;justify-content:space-between;gap:1.5rem;align-items:center;color:rgba(255,255,255,.35);font-size:.72rem}
+.legal-footer a{color:rgba(255,255,255,.45);text-decoration:none}
+
 /* ════════════════════════════════════════════
    RESPONSIVE — Mobile & Tablet
    ════════════════════════════════════════════ */
@@ -1263,6 +1288,14 @@ footer{
   .faq-item:last-child{border-bottom:none}
 }
 
+@media(max-width:768px){
+  .policies-hero{padding:7rem 1.4rem 2.8rem}
+  .policies-wrap{padding:3rem 1.4rem 4rem}
+  .policy-section{padding-bottom:2.5rem;margin-bottom:2.5rem}
+  .delivery-table{display:block;overflow-x:auto;white-space:nowrap}
+  .legal-footer{padding:2rem 1.4rem;flex-direction:column;text-align:center}
+}
+
 /* ── Reveal ── */
 .rv{opacity:0;transform:translateY(28px);transition:opacity .85s var(--ease),transform .85s var(--ease)}
 .rv.d1{transition-delay:.1s}.rv.d2{transition-delay:.2s}.rv.d3{transition-delay:.3s}.rv.d4{transition-delay:.4s}
@@ -1292,6 +1325,7 @@ footer{
     <li><a href="#" onclick="showPage('product');return false">Shop</a></li>
     <li><a href="#" onclick="showPage('about');return false">Our Story</a></li>
     <li><a href="#" onclick="showPage('shop');return false">The Board</a></li>
+    <li><a href="#" onclick="showPage('policies');return false">Policies</a></li>
   </ul>
   <button class="nav-btn" onclick="openModal()">Buy Now — AUD $799</button>
   <button class="hamburger" id="hamburger" onclick="toggleMobileMenu()" aria-label="Menu">
@@ -1307,7 +1341,8 @@ footer{
     <a onclick="showPage('product');toggleMobileMenu()">Shop</a>
     <a onclick="showPage('about');toggleMobileMenu()">Our Story</a>
     <a onclick="showPage('shop');toggleMobileMenu()">The Board</a>
-    <a onclick="showPage('wholesale');toggleMobileMenu()">Wholesale</a>
+    <a onclick="showPage('policies');toggleMobileMenu()">Policies</a>
+    <a onclick="showPage('contact');toggleMobileMenu()">Contact</a>
   </nav>
   <button class="mm-buy btn-fill" onclick="openModal();toggleMobileMenu()">Buy Now — AUD $799</button>
 </div>
@@ -1482,7 +1517,7 @@ footer{
           <svg class="faq-icon" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
         </button>
         <div class="faq-body">
-          <div class="faq-inner">Yes — Aura Paddle delivers across Australia. Shipping costs are calculated separately based on your delivery address and confirmed before payment.</div>
+          <div class="faq-inner">Yes — we deliver across Australia. Shipping is confirmed before payment. In-stock orders normally dispatch within 1–3 business days; estimated transit after dispatch is 3–7 business days for metro areas, 5–10 for regional areas and 7–15 for remote areas. <a href="#" onclick="showPolicy('shipping');return false" style="color:var(--ocean)">Read the Shipping Policy.</a></div>
         </div>
       </div>
 
@@ -1526,7 +1561,8 @@ footer{
         <div class="fc-h">Support</div>
         <ul class="fc-links">
           <li><a href="#faq">FAQs</a></li>
-          <li><a href="#faq">Shipping & Returns</a></li>
+          <li><a href="#" onclick="showPolicy('shipping');return false">Shipping Policy</a></li>
+          <li><a href="#" onclick="showPolicy('returns');return false">Returns & Refunds</a></li>
           <li><a href="#faq">2-Year Warranty</a></li>
           <li><a href="#" onclick="showPage('contact');return false">Contact Us</a></li>
         </ul>
@@ -1543,6 +1579,8 @@ footer{
     <div class="footer-bot">
       <span>© 2026 Aura Paddle Pty Ltd</span>
       <div class="fb-links">
+        <a href="#" onclick="showPolicy('privacy');return false">Privacy</a>
+        <a href="#" onclick="showPolicy('terms');return false">Terms</a>
         <a href="#" onclick="showPage('contact');return false">Contact</a>
       </div>
     </div>
@@ -1780,8 +1818,8 @@ footer{
           </div>
           <div class="pi-acc-body">
             <div class="pi-acc-inner" style="font-size:.83rem;line-height:1.8;font-weight:300;color:var(--grey)">
-              <p style="margin-bottom:.6rem"><strong style="color:var(--ink);font-weight:500">Australia-wide delivery.</strong> Shipping costs are calculated separately based on your delivery address and confirmed before payment.</p>
-              <p><strong style="color:var(--ink);font-weight:500">30-day returns.</strong> If you're not completely satisfied, contact us and we'll arrange a hassle-free return.</p>
+              <p style="margin-bottom:.6rem"><strong style="color:var(--ink);font-weight:500">Australia-wide delivery.</strong> In-stock orders normally dispatch within 1–3 business days. Estimated transit is 3–7 business days for metro areas, 5–10 for regional areas and 7–15 for remote areas after dispatch. Shipping is confirmed before payment.</p>
+              <p><strong style="color:var(--ink);font-weight:500">30-day change-of-mind returns.</strong> Eligible unused products may be returned within 30 days after delivery. Australian Consumer Law rights also apply. <a href="#" onclick="showPolicy('returns');return false" style="color:var(--ocean)">View full conditions.</a></p>
             </div>
           </div>
         </div>
@@ -2010,7 +2048,7 @@ footer{
     <div class="checkout-banner rv">
       <div class="cb-text">
         <h3>The Aura Yoga Cruiser. Ready when you are.</h3>
-        <p>Delivery available Australia-wide. Shipping is calculated separately. 30-day returns. 2-year warranty. The water is waiting.</p>
+        <p>Delivery available Australia-wide. In-stock orders normally dispatch in 1–3 business days. Shipping is confirmed before payment. Eligible 30-day returns and a 2-year warranty apply in addition to Australian Consumer Law rights.</p>
       </div>
       <div style="display:flex;flex-direction:column;gap:1.2rem;align-items:flex-end;flex-shrink:0">
         <div class="cb-perks">
@@ -2107,7 +2145,7 @@ footer{
             <textarea class="cf-input cf-textarea" name="message" id="cf-message" placeholder="How can we help you?" required></textarea>
           </div>
           <button type="submit" class="cf-submit">Send Message</button>
-          <p class="cf-fine">This site is protected by reCAPTCHA and the Google <a href="https://policies.google.com/privacy" target="_blank">Privacy Policy</a> applies.</p>
+          <p class="cf-fine">By sending this form, you agree that we may use your details to respond as described in our <a href="#" onclick="showPolicy('privacy');return false">Privacy Policy</a>. This site is protected by reCAPTCHA and the Google <a href="https://policies.google.com/privacy" target="_blank" rel="noopener noreferrer">Privacy Policy</a> applies.</p>
         </form>
       </div>
 
@@ -2131,6 +2169,127 @@ footer{
   </footer>
 </div>
 
+<!-- ════════════════════ POLICIES PAGE ════════════════════ -->
+<div class="page" id="p-policies">
+  <header class="policies-hero">
+    <p class="policy-kicker" style="color:var(--mist)">Clear, practical and customer-first</p>
+    <h1>Policies &amp; customer care</h1>
+    <p>Important information about ordering from Aura Paddle, including delivery estimates, returns, privacy and the terms that apply to purchases. Nothing in these policies excludes rights that cannot be excluded under the Australian Consumer Law.</p>
+    <div class="policy-nav" aria-label="Policy sections">
+      <button onclick="scrollPolicy('shipping')">Shipping</button>
+      <button onclick="scrollPolicy('returns')">Returns &amp; Refunds</button>
+      <button onclick="scrollPolicy('privacy')">Privacy</button>
+      <button onclick="scrollPolicy('terms')">Terms &amp; Conditions</button>
+      <button onclick="scrollPolicy('contact-details')">Contact Details</button>
+      <button onclick="scrollPolicy('pricing-delivery')">Pricing &amp; Delivery</button>
+    </div>
+  </header>
+
+  <main class="policies-wrap">
+    <section class="policy-section" id="shipping">
+      <p class="policy-kicker">Last updated 20 July 2026</p>
+      <h2>Shipping Policy</h2>
+      <p>We currently deliver within Australia. Orders are dispatched from our Australian fulfilment location after payment and order details have been confirmed. We do not ship to PO boxes or parcel lockers because paddle board kits are oversized.</p>
+      <h3>Processing and delivery estimates</h3>
+      <p>In-stock orders are normally prepared for dispatch within 1–3 business days. The estimates below begin after dispatch and are guides, not guaranteed delivery dates.</p>
+      <table class="delivery-table">
+        <thead><tr><th>Destination</th><th>Estimated transit time</th><th>Notes</th></tr></thead>
+        <tbody>
+          <tr><td>Australian metro areas</td><td>3–7 business days</td><td>After dispatch</td></tr>
+          <tr><td>Regional areas</td><td>5–10 business days</td><td>After dispatch</td></tr>
+          <tr><td>Remote areas</td><td>7–15 business days</td><td>Some locations may require a depot collection or individual quote</td></tr>
+        </tbody>
+      </table>
+      <p>Peak periods, severe weather, carrier disruption and remote-area access can extend these estimates. We will provide tracking when it is available and contact you if we become aware of a material delay.</p>
+      <h3>Shipping charges and address accuracy</h3>
+      <p>Shipping is charged separately from the advertised product price. The amount depends on the delivery postcode, order quantity and carrier requirements, and will be shown or confirmed before payment. Customers must provide a complete street address and a safe delivery location. Contact us promptly if an address needs to be corrected; changes may not be possible after dispatch.</p>
+      <h3>Delivery inspection</h3>
+      <p>Please inspect the outer carton and contents as soon as practical. If an item arrives damaged, incomplete or appears lost in transit, email <a href="mailto:admin@aurapaddle.com">admin@aurapaddle.com</a> with your order number, photos and a description of the issue. This request for prompt notice does not limit your rights under the Australian Consumer Law.</p>
+    </section>
+
+    <section class="policy-section" id="returns">
+      <p class="policy-kicker">Customer care</p>
+      <h2>Returns &amp; Refund Policy</h2>
+      <div class="policy-note"><p><strong>Australian Consumer Law:</strong> Our products come with consumer guarantees that cannot be excluded. You may be entitled to a repair, replacement or refund for a major failure, and compensation for other reasonably foreseeable loss or damage.</p></div>
+      <h3>30-day change-of-mind returns</h3>
+      <p>In addition to your statutory rights, you may request a change-of-mind return within 30 calendar days after delivery. To qualify, the product must be unused on water, clean, undamaged, complete with all accessories, and returned in its original or equivalently protective packaging in resalable condition.</p>
+      <p>Contact us before sending anything back. If approved, we will provide return instructions. Change-of-mind return freight is paid by the customer, and original delivery charges are not refundable unless required by law. We recommend using tracked and insured transport because the customer is responsible for the item until it is received by us.</p>
+      <h3>Faulty, damaged or incorrect products</h3>
+      <p>If a product is faulty, damaged, not as described or incorrect, contact us with proof of purchase and evidence of the issue. We will assess the claim and provide a remedy required by the Australian Consumer Law. Where a product has a major failure, you may choose a refund or replacement. For a non-major problem, we may choose to repair the product within a reasonable time; if we cannot, you may be entitled to a replacement or refund.</p>
+      <h3>Refund timing</h3>
+      <p>Approved refunds are issued to the original payment method. We normally initiate the refund within five business days after approval, but your bank or payment provider may take additional time to display it.</p>
+      <h3>Two-year product warranty</h3>
+      <p>Our advertised two-year warranty applies to manufacturing defects under normal recreational use and is additional to, and does not replace, Australian Consumer Law rights. It does not cover ordinary wear, cosmetic damage, punctures, misuse, impact damage, improper inflation, unauthorised repair, commercial or rental use, poor storage, prolonged sun exposure, or failure to follow care and safety instructions.</p>
+    </section>
+
+    <section class="policy-section" id="privacy">
+      <p class="policy-kicker">Your information</p>
+      <h2>Privacy Policy</h2>
+      <p>Aura Paddle Pty Ltd respects your privacy. This policy explains how we handle personal information when you browse our website, submit an enquiry or order request, make a purchase, or communicate with us.</p>
+      <h3>Information we collect</h3>
+      <ul>
+        <li>contact and identity details, such as your name, email address and phone number;</li>
+        <li>order and delivery details, including your address, selected product, colour and quantity;</li>
+        <li>communications, support requests, returns and warranty information;</li>
+        <li>website usage data, such as device, browser, approximate location, pages viewed and referral source; and</li>
+        <li>payment status and transaction references supplied by a payment provider. We do not intend to store full payment-card numbers on this website.</li>
+      </ul>
+      <h3>How we use and disclose information</h3>
+      <p>We use information to respond to enquiries, process and deliver orders, provide support, prevent fraud, maintain business records, improve the website and meet legal obligations. We may disclose only what is reasonably necessary to service providers such as website hosting, Formspree for form delivery, Google Analytics, payment processors, carriers, professional advisers and government authorities where required by law.</p>
+      <p>Some service providers may process information outside Australia. Their privacy practices are governed by their own terms. Our site currently uses Google Analytics, which may place cookies or similar technologies in your browser. You can restrict cookies through your browser settings, although some features may work differently.</p>
+      <h3>Access, correction, retention and complaints</h3>
+      <p>You may ask to access or correct personal information we hold about you. We retain information only for as long as reasonably necessary for the purposes described above, including tax, accounting, dispute and warranty records, then delete or de-identify it where practical.</p>
+      <p>For a privacy request or complaint, email <a href="mailto:admin@aurapaddle.com">admin@aurapaddle.com</a>. We aim to acknowledge privacy complaints within five business days and respond within a reasonable period. If applicable and you are not satisfied, you may contact the Office of the Australian Information Commissioner.</p>
+    </section>
+
+    <section class="policy-section" id="terms">
+      <p class="policy-kicker">Website and sales</p>
+      <h2>Terms &amp; Conditions</h2>
+      <h3>About these terms</h3>
+      <p>These terms apply when you use aurapaddle.com or order products from Aura Paddle Pty Ltd. By submitting an order, you confirm that the details you provide are accurate, you are authorised to use the selected payment method, and you accept these terms.</p>
+      <h3>Orders, prices and payment</h3>
+      <p>All prices are in Australian dollars. Any GST required by law is included unless clearly stated otherwise. Shipping is additional and is shown or confirmed before payment. An order request is not accepted until we confirm availability, total price and payment. We may decline or cancel an order before dispatch for stock errors, pricing errors, suspected fraud, delivery limitations or legal reasons; if payment has been received, we will refund the affected amount.</p>
+      <h3>Products and availability</h3>
+      <p>We make reasonable efforts to display products, dimensions and colours accurately, but screens and production batches may vary slightly. Products marked “coming soon” are not available for purchase. We may correct genuine errors or update information without notice, subject to any existing accepted order and applicable law.</p>
+      <h3>Safe use</h3>
+      <p>Paddle sports involve inherent risks. Customers are responsible for following product instructions, checking equipment before use, staying within stated weight and pressure limits, wearing an appropriate personal flotation device and leash where suitable, considering weather and water conditions, and complying with local laws. Children must be supervised by a responsible adult. Nothing in this section limits liability that cannot lawfully be limited.</p>
+      <h3>Intellectual property and website use</h3>
+      <p>Website content, branding, photographs and design are owned by or licensed to Aura Paddle Pty Ltd. You may view the site for personal use but must not reproduce, sell, scrape, interfere with or misuse it without permission.</p>
+      <h3>Liability and governing law</h3>
+      <p>To the maximum extent permitted by law, we are not liable for indirect or consequential loss arising from website availability or misuse of a product. This limitation does not exclude Australian Consumer Law guarantees or any liability that cannot be excluded. These terms are governed by the laws of Australia and the applicable State or Territory connected with the transaction.</p>
+    </section>
+
+    <section class="policy-section" id="contact-details">
+      <p class="policy-kicker">Business information</p>
+      <h2>Contact Details</h2>
+      <p><strong>Legal entity:</strong> Aura Paddle Pty Ltd<br>
+      <strong>ACN:</strong> 687 865 759<br>
+      <strong>ABN:</strong> Application pending; this page will be updated when issued<br>
+      <strong>Customer care:</strong> <a href="mailto:admin@aurapaddle.com">admin@aurapaddle.com</a><br>
+      <strong>Website:</strong> <a href="https://www.aurapaddle.com">www.aurapaddle.com</a><br>
+      <strong>Service area:</strong> Australia</p>
+      <p>We aim to respond within one business day. Please include your order number when contacting us about an existing order. A return address will be provided after a return is authorised; do not send returns without contacting us first.</p>
+    </section>
+
+    <section class="policy-section" id="pricing-delivery">
+      <p class="policy-kicker">Current offer</p>
+      <h2>AUD Pricing &amp; Expected Delivery</h2>
+      <p><strong>Aura Yoga Cruiser 11' complete kit: AUD $799.</strong> The complete kit includes the board, adjustable three-piece paddle, wheeled carry bag, electric pump, 10ft coiled leg rope, 2+1 removable fins, waterproof floating phone pouch and repair kit.</p>
+      <p>Shipping is additional and confirmed for the delivery address before payment. In-stock orders normally dispatch within 1–3 business days. Estimated transit is 3–7 business days for metro areas, 5–10 for regional areas, and 7–15 for remote areas after dispatch. These estimates are not guaranteed.</p>
+      <p>Other models displayed as “coming soon” are previews only; their indicated “from” prices are not offers for sale and may change before release.</p>
+    </section>
+  </main>
+
+  <footer class="legal-footer">
+    <span>© 2026 Aura Paddle Pty Ltd · ACN 687 865 759</span>
+    <div style="display:flex;gap:1.5rem;flex-wrap:wrap;justify-content:center">
+      <a href="#" onclick="showPage('home');return false">Home</a>
+      <a href="#" onclick="showPage('product');return false">Shop</a>
+      <a href="#" onclick="showPage('contact');return false">Contact</a>
+    </div>
+  </footer>
+</div>
+
 <!-- ════════════════════ ORDER MODAL ════════════════════ -->
 <div class="modal-wrap" id="modalWrap">
   <div class="modal-box">
@@ -2140,7 +2299,7 @@ footer{
     <div id="orderFormWrap">
       <div class="modal-ey">Order Now</div>
       <h2 class="modal-h">Aura Yoga Cruiser 11'</h2>
-      <p class="modal-sub">Australia-wide delivery · Shipping calculated separately · 30-day returns · 2-year warranty</p>
+      <p class="modal-sub">Australia-wide delivery · Dispatch normally 1–3 business days · Shipping confirmed before payment · Eligible 30-day returns</p>
       <div class="modal-summary">
         <div>
           <div class="ms-name">Aura Yoga Cruiser 11' — Complete Package</div>
@@ -2189,6 +2348,10 @@ footer{
             <option>WA</option><option>SA</option><option>TAS</option>
             <option>ACT</option><option>NT</option>
           </select>
+          <label style="display:flex;align-items:flex-start;gap:.6rem;font-size:.7rem;line-height:1.55;color:var(--grey);margin-top:.25rem">
+            <input type="checkbox" name="terms_accepted" value="yes" required style="margin-top:.2rem;accent-color:var(--coral)">
+            <span>I agree to the <a href="#" onclick="showPolicy('terms');return false" style="color:var(--ocean)">Terms &amp; Conditions</a> and acknowledge the <a href="#" onclick="showPolicy('privacy');return false" style="color:var(--ocean)">Privacy Policy</a>.</span>
+          </label>
         </div>
         <button type="submit" class="submit-btn">Submit Order Request — AUD $799</button>
       </form>
@@ -2261,7 +2424,7 @@ window.addEventListener('scroll',()=>{
 },{passive:true});
 
 /* ── Page Router ─────────────────── */
-const pages={home:'p-home',product:'p-product',about:'p-about',shop:'p-shop',contact:'p-contact'};
+const pages={home:'p-home',product:'p-product',about:'p-about',shop:'p-shop',contact:'p-contact',policies:'p-policies'};
 function showPage(id){
   document.querySelectorAll('.page').forEach(p=>{p.classList.remove('active');});
   const pg=document.getElementById(pages[id]);
@@ -2278,6 +2441,16 @@ function showPage(id){
     nav.classList.add('stuck');
     document.body.className='on-light';
   }
+}
+
+function scrollPolicy(sectionId){
+  const section=document.getElementById(sectionId);
+  if(section) section.scrollIntoView({behavior:'smooth',block:'start'});
+}
+function showPolicy(sectionId){
+  closeModal();
+  showPage('policies');
+  setTimeout(()=>scrollPolicy(sectionId),50);
 }
 
 /* ── Scroll reveal ───────────────── */
