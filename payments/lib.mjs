@@ -177,7 +177,7 @@ export function buildCheckoutParams({items,priceBySku,siteUrl,returnPath,shippin
     const sourceItem=items[index],paymentAmount=sourceItem.unitPaymentAmount??(variant.orderMode==="preorder"?variant.depositAmount:variant.checkoutAmount);
     params.set(`${prefix}[price_data][currency]`,"aud");
     if(stripePrice)params.set(`${prefix}[price_data][product]`,stripePrice.productId);
-    else{params.set(`${prefix}[price_data][product_data][name]`,variant.productName);params.set(`${prefix}[price_data][product_data][description]`,sourceItem.bundleApplied?"Fishing Rack — Angler Fishing bundle price":variant.kind==="accessory"?"Fishing Rack accessory":`${variant.shortName} · ${variant.size} · ${variant.colour} · ${variant.sku}`);params.set(`${prefix}[price_data][product_data][metadata][aura_sku]`,variant.sku)}
+    else{params.set(`${prefix}[price_data][product_data][name]`,`${variant.productName} · ${orderNumber}`);params.set(`${prefix}[price_data][product_data][description]`,sourceItem.bundleApplied?"Fishing Rack — Angler Fishing bundle price":variant.kind==="accessory"?"Fishing Rack accessory":`${variant.shortName} · ${variant.size} · ${variant.colour} · ${variant.sku}`);params.set(`${prefix}[price_data][product_data][metadata][aura_sku]`,variant.sku)}
     params.set(`${prefix}[price_data][unit_amount]`,String(paymentAmount));
     params.set(`${prefix}[quantity]`,String(quantity));
   });

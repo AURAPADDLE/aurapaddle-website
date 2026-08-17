@@ -23,7 +23,7 @@ test("Hydrofoil Kit Set applies the AUD 50 incentive and a 50% initial payment",
   assert.equal(variant.slug,"hydrofoil-set");assert.equal(variant.retailAmount,149900);assert.equal(variant.checkoutAmount,144900);assert.equal(variant.depositAmount,72450);
   assert.equal(stripeMap.bySku.has("AP246531"),false);
   const items=normaliseCheckoutItems([{sku:"AP246531",quantity:1}],catalog),params=buildCheckoutParams({items,priceBySku:stripeMap.bySku,siteUrl:"http://localhost:4242",returnPath:"/products/hydrofoil-set.html",shipping:shippingFor(items)});
-  assert.equal(params.get("line_items[0][price_data][product_data][name]"),"AURA PADDLE Hydrofoil Kit Set");
+  assert.equal(params.get("line_items[0][price_data][product_data][name]"),"AURA PADDLE Hydrofoil Kit Set · APO00000");
   assert.equal(params.get("line_items[0][price_data][unit_amount]"),"72450");
   assert.equal(params.get("metadata[aura_shipping_amount]"),"quote_required");
 });
@@ -43,7 +43,7 @@ test("Fishing Rack is AUD 129 alone and AUD 69 per paired Angler board",()=>{
   const standalone=normaliseCheckoutItems([{sku:"AP667703",quantity:1}],catalog);
   let params=buildCheckoutParams({items:standalone,priceBySku:stripeMap.bySku,siteUrl:"http://localhost:4242",returnPath:"/cart-preview.html",shipping:shippingFor(standalone)});
   assert.equal(params.get("line_items[0][price_data][unit_amount]"),"6450");
-  assert.equal(params.get("line_items[0][price_data][product_data][name]"),"AURA PADDLE Fishing Rack");
+  assert.equal(params.get("line_items[0][price_data][product_data][name]"),"AURA PADDLE Fishing Rack · APO00000");
   const bundled=normaliseCheckoutItems([{sku:angler.sku,quantity:2},{sku:"AP667703",quantity:3}],catalog),bundleLine=bundled.find(item=>item.bundleApplied),fullPriceLine=bundled.find(item=>item.variant.sku==="AP667703"&&!item.bundleApplied);
   assert.equal(bundleLine.quantity,2);assert.equal(bundleLine.unitPaymentAmount,3450);assert.equal(fullPriceLine.quantity,1);
   params=buildCheckoutParams({items:bundled,priceBySku:stripeMap.bySku,siteUrl:"http://localhost:4242",returnPath:"/cart-preview.html",shipping:shippingFor(bundled)});
@@ -118,10 +118,11 @@ test("Stripe records shipping for the balance request without charging it today"
 
 test("Checkout assigns the APO order identity to Stripe metadata",()=>{
   const items=normaliseCheckoutItems([{sku:"AP734955",quantity:1}],catalog);
-  const params=buildCheckoutParams({items,priceBySku:stripeMap.bySku,siteUrl:"http://localhost:4242",returnPath:"/cart/",shipping:shippingFor(items),orderNumber:"APO48217",trackingToken:"secure_tracking_token_48217"});
+  const params=buildCheckoutParams({items,priceBySku:new Map(),siteUrl:"http://localhost:4242",returnPath:"/cart/",shipping:shippingFor(items),orderNumber:"APO48217",trackingToken:"secure_tracking_token_48217"});
   assert.equal(params.get("metadata[aura_order_number]"),"APO48217");
   assert.equal(params.get("payment_intent_data[metadata][aura_order_number]"),"APO48217");
   assert.equal(params.get("payment_intent_data[description]"),"AURA PADDLE APO48217 initial payment");
+  assert.equal(params.get("line_items[0][price_data][product_data][name]"),"AURA PADDLE Yoga Cruiser · APO48217");
   assert.equal(params.get("metadata[aura_tracking_token]"),"secure_tracking_token_48217");
 });
 
