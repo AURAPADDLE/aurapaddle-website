@@ -23,7 +23,7 @@ function loadLocalEnvironment(){
 loadLocalEnvironment();
 const dataDir=process.env.ORDER_DATA_DIR?path.resolve(process.env.ORDER_DATA_DIR):path.join(here,"data");
 const statePath=path.join(dataDir,"state.json");
-const databaseUrl=process.env.DATABASE_URL||process.env.RENDER_URL||"";
+const databaseUrl=process.env.DATABASE_URL||process.env.ORDERS_DB_URL||process.env.RENDER_URL||"";
 const port=Number(process.env.PORT||4242);
 const host=process.env.HOST||"127.0.0.1";
 const siteUrl=(process.env.PUBLIC_SITE_URL||`http://localhost:${port}`).replace(/\/$/,"");
