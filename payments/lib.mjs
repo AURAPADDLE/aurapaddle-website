@@ -190,6 +190,7 @@ export function buildCheckoutParams({items,priceBySku,siteUrl,returnPath,shippin
   params.set("allow_promotion_codes","false");
   params.set("locale","en");
   params.set("submit_type","pay");
+  params.set("payment_intent_data[description]",`AURA PADDLE ${orderNumber} initial payment`);
   params.set("success_url",`${siteUrl}/checkout-success.html?session_id={CHECKOUT_SESSION_ID}`);
   params.set("cancel_url",cancelUrl.toString());
   const freightCopy=shipping.quoteRequired?`${shipping.label}: freight quote required.`:shipping.pickup?"Free local pickup in Gold Coast, QLD. Exact pickup address is provided after order confirmation.":`${shipping.label}: AUD $${(shipping.amount/100).toFixed(2)} shipping.`;

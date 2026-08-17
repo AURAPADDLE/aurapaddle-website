@@ -121,6 +121,7 @@ test("Checkout assigns the APO order identity to Stripe metadata",()=>{
   const params=buildCheckoutParams({items,priceBySku:stripeMap.bySku,siteUrl:"http://localhost:4242",returnPath:"/cart/",shipping:shippingFor(items),orderNumber:"APO48217",trackingToken:"secure_tracking_token_48217"});
   assert.equal(params.get("metadata[aura_order_number]"),"APO48217");
   assert.equal(params.get("payment_intent_data[metadata][aura_order_number]"),"APO48217");
+  assert.equal(params.get("payment_intent_data[description]"),"AURA PADDLE APO48217 initial payment");
   assert.equal(params.get("metadata[aura_tracking_token]"),"secure_tracking_token_48217");
 });
 
