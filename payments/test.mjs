@@ -1,0 +1,159 @@
+import assert from "node:assert/strict";
+import crypto from "node:crypto";
+import test from "node:test";
+import {applyStripeEvent,buildCheckoutParams,calculateShipping,campaignProgress,loadCatalog,loadShippingRates,loadStripeMap,normaliseCheckoutItems,normaliseQuantity,verifyStripeSignature} from "./lib.mjs";
+
+const catalog=loadCatalog();
+const shippingRates=loadShippingRates();
+const stripeMap=loadStripeMap(catalog);
+const shippingFor=(items,regionId="gold-coast-brisbane")=>calculateShipping(items,regionId,shippingRates);
+
+test("catalogue contains 77 board SKUs and the Fishing Rack accessory",()=>{
+  assert.equal(catalog.variants.length,78);
+  assert.equal(catalog.bySku.size,78);
+  assert.equal(catalog.variants.filter(item=>item.orderMode==="available").length,0);
+  assert.equal(catalog.variants.filter(item=>item.orderMode==="preorder").length,78);
+  assert.equal(catalog.variants.filter(item=>item.campaign?.thresholdRequired===false).length,4);
+  assert.equal(stripeMap.bySku.size,76);
+  const rack=catalog.bySku.get("AP667703");assert.equal(rack.checkoutAmount,12900);assert.equal(rack.depositAmount,6450);assert.equal(rack.retailAmount-rack.checkoutAmount,0);assert.equal(rack.bundle.unitAmount,6900);
+});
+
+test("Hydrofoil Kit Set applies the AUD 50 incentive and a 50% initial payment",()=>{
+  const variant=catalog.bySku.get("AP246531");
+  assert.equal(variant.slug,"hydrofoil-set");assert.equal(variant.retailAmount,149900);assert.equal(variant.checkoutAmount,144900);assert.equal(variant.depositAmount,72450);
+  assert.equal(stripeMap.bySku.has("AP246531"),false);
+  const items=normaliseCheckoutItems([{sku:"AP246531",quantity:1}],catalog),params=buildCheckoutParams({items,priceBySku:stripeMap.bySku,siteUrl:"http://localhost:4242",returnPath:"/products/hydrofoil-set.html",shipping:shippingFor(items)});
+  assert.equal(params.get("line_items[0][price_data][product_data][name]"),"AURA PADDLE Hydrofoil Kit Set");
+  assert.equal(params.get("line_items[0][price_data][unit_amount]"),"72450");
+  assert.equal(params.get("metadata[aura_shipping_amount]"),"quote_required");
+});
+
+test("Wayfinder RRP follows the approved size bands",()=>{
+  const variants=catalog.variants.filter(item=>item.slug==="wayfinder");
+  for(const variant of variants){
+    const lowerBand=["6'6\"","7'0\"","7'6\""].includes(variant.size);
+    assert.equal(variant.retailAmount,lowerBand?59900:69900);
+    assert.equal(variant.checkoutAmount,lowerBand?54900:64900);
+    assert.equal(variant.depositAmount,lowerBand?27450:32450);
+  }
+});
+
+test("Fishing Rack is AUD 129 alone and AUD 69 per paired Angler board",()=>{
+  const angler=catalog.variants.find(item=>item.slug==="angler-fishing");
+  const standalone=normaliseCheckoutItems([{sku:"AP667703",quantity:1}],catalog);
+  let params=buildCheckoutParams({items:standalone,priceBySku:stripeMap.bySku,siteUrl:"http://localhost:4242",returnPath:"/cart-preview.html",shipping:shippingFor(standalone)});
+  assert.equal(params.get("line_items[0][price_data][unit_amount]"),"6450");
+  assert.equal(params.get("line_items[0][price_data][product_data][name]"),"AURA PADDLE Fishing Rack");
+  const bundled=normaliseCheckoutItems([{sku:angler.sku,quantity:2},{sku:"AP667703",quantity:3}],catalog),bundleLine=bundled.find(item=>item.bundleApplied),fullPriceLine=bundled.find(item=>item.variant.sku==="AP667703"&&!item.bundleApplied);
+  assert.equal(bundleLine.quantity,2);assert.equal(bundleLine.unitPaymentAmount,3450);assert.equal(fullPriceLine.quantity,1);
+  params=buildCheckoutParams({items:bundled,priceBySku:stripeMap.bySku,siteUrl:"http://localhost:4242",returnPath:"/cart-preview.html",shipping:shippingFor(bundled)});
+  assert.equal(params.get("metadata[aura_items]"),`${angler.sku}:2,AP667703:3`);
+  assert.equal(params.get("line_items[1][price_data][unit_amount]"),"3450");
+  assert.equal(params.get("line_items[2][price_data][unit_amount]"),"6450");
+});
+
+test("checkout trusts the 50% deposit, excludes Afterpay and retains dynamic payment methods",()=>{
+  const variant=catalog.bySku.get("AP734955");
+  const items=[{variant,quantity:2}],params=buildCheckoutParams({items,priceBySku:stripeMap.bySku,siteUrl:"http://localhost:4242",returnPath:"/products/yoga-cruiser.html?colour=glacier",shipping:shippingFor(items),integrationIdentifier:"aura_cart_abcdefgh"});
+  assert.equal(params.get("line_items[0][price]"),null);
+  assert.equal(params.get("line_items[0][price_data][product]"),stripeMap.bySku.get("AP734955").productId);
+  assert.equal(params.get("line_items[0][price_data][unit_amount]"),"37450");
+  assert.equal(params.get("line_items[0][quantity]"),"2");
+  assert.equal(params.get("payment_method_types[0]"),null);
+  assert.equal(params.get("adaptive_pricing[enabled]"),"false");
+  assert.equal(params.get("excluded_payment_method_types[0]"),"afterpay_clearpay");
+  assert.equal(params.get("integration_identifier"),"aura_cart_abcdefgh");
+  assert.equal(params.get("shipping_address_collection[allowed_countries][0]"),"AU");
+});
+
+test("pre-order checkout applies the AUD 50 incentive and collects exactly 50%",()=>{
+  const variant=catalog.bySku.get("AP233694");
+  assert.equal(variant.retailAmount-variant.checkoutAmount,5000);
+  const items=[{variant,quantity:1}],params=buildCheckoutParams({items,priceBySku:stripeMap.bySku,siteUrl:"http://localhost:4242",returnPath:"/products/yoga-cruiser.html?colour=eucalyptus",shipping:shippingFor(items)});
+  assert.equal(variant.depositAmount,37450);
+  assert.equal(params.get("line_items[0][price_data][unit_amount]"),"37450");
+  assert.equal(params.get("metadata[aura_items]"),"AP233694:1");
+  assert.equal(params.get("metadata[aura_payment_stage]"),"initial_50_percent");
+});
+
+test("multi-SKU cart is merged and rendered as multiple trusted line items",()=>{
+  const items=normaliseCheckoutItems([{sku:"AP734955",quantity:1},{sku:"AP233694",quantity:2},{sku:"AP233694",quantity:1}],catalog);
+  assert.equal(items.length,2);assert.equal(items[1].quantity,3);
+  const params=buildCheckoutParams({items,priceBySku:stripeMap.bySku,siteUrl:"http://localhost:4242",returnPath:"/cart-preview.html",shipping:shippingFor(items)});
+  assert.equal(params.get("line_items[0][price_data][unit_amount]"),"37450");
+  assert.equal(params.get("line_items[1][price_data][unit_amount]"),"37450");
+  assert.equal(params.get("line_items[1][quantity]"),"3");
+  assert.equal(params.get("metadata[aura_order_mode]"),"preorder");
+});
+
+test("shipping regions use the approved iSUP and surfboard prices",()=>{
+  const isup=normaliseCheckoutItems([{sku:"AP734955",quantity:1}],catalog);
+  assert.equal(shippingFor(isup,"local-pickup").amount,0);
+  assert.equal(shippingFor(isup,"gold-coast-brisbane").amount,4900);
+  assert.equal(shippingFor(isup,"qld-nsw-main").amount,7900);
+  assert.equal(shippingFor(isup,"canberra-melbourne").amount,9900);
+  assert.equal(shippingFor(isup,"adelaide").amount,12900);
+  assert.equal(shippingFor(isup,"perth").amount,17900);
+  assert.equal(shippingFor(isup,"tasmania").amount,14900);
+  assert.equal(shippingFor(isup,"remote").quoteRequired,true);
+  const gannetVariant=catalog.variants.find(item=>item.slug==="gannet"),gannet=[{variant:gannetVariant,quantity:1}];
+  assert.equal(shippingFor(gannet,"gold-coast-brisbane").amount,7900);
+  assert.equal(shippingFor(gannet,"qld-nsw-main").amount,10900);
+  const meridianVariant=catalog.variants.find(item=>item.slug==="meridian"),meridian=[{variant:meridianVariant,quantity:1}];
+  assert.equal(shippingFor(meridian,"perth").amount,27900);
+  assert.equal(shippingFor([{variant:gannetVariant,quantity:2}],"qld-nsw-main").quoteRequired,true);
+});
+
+test("Stripe records shipping for the balance request without charging it today",()=>{
+  const items=normaliseCheckoutItems([{sku:"AP734955",quantity:1}],catalog),shipping=shippingFor(items,"qld-nsw-main");
+  const params=buildCheckoutParams({items,priceBySku:stripeMap.bySku,siteUrl:"http://localhost:4242",returnPath:"/cart-preview.html",shipping});
+  assert.equal(params.get("metadata[aura_shipping_region]"),"qld-nsw-main");
+  assert.equal(params.get("metadata[aura_shipping_amount]"),"7900");
+  assert.equal(params.get("line_items[0][price_data][unit_amount]"),"37450");
+  assert.match(params.get("custom_text[submit][message]"),/full refund within 48 hours/);
+  assert.match(params.get("custom_text[submit][message]"),/confirms production in writing/);
+  const pickup=shippingFor(items,"local-pickup"),pickupParams=buildCheckoutParams({items,priceBySku:stripeMap.bySku,siteUrl:"http://localhost:4242",returnPath:"/cart-preview.html",shipping:pickup});
+  assert.equal(pickupParams.get("shipping_address_collection[allowed_countries][0]"),null);
+});
+
+test("Checkout assigns the APO order identity to Stripe metadata",()=>{
+  const items=normaliseCheckoutItems([{sku:"AP734955",quantity:1}],catalog);
+  const params=buildCheckoutParams({items,priceBySku:stripeMap.bySku,siteUrl:"http://localhost:4242",returnPath:"/cart/",shipping:shippingFor(items),orderNumber:"APO48217",trackingToken:"secure_tracking_token_48217"});
+  assert.equal(params.get("metadata[aura_order_number]"),"APO48217");
+  assert.equal(params.get("payment_intent_data[metadata][aura_order_number]"),"APO48217");
+  assert.equal(params.get("metadata[aura_tracking_token]"),"secure_tracking_token_48217");
+});
+
+test("quantity validation rejects tampering",()=>{
+  assert.equal(normaliseQuantity("3"),3);
+  assert.throws(()=>normaliseQuantity(0));
+  assert.throws(()=>normaliseQuantity(21));
+  assert.throws(()=>normaliseQuantity(1.5));
+});
+
+test("Stripe webhook signature is verified",()=>{
+  const payload='{"id":"evt_test"}',timestamp=1_800_000_000,secret="whsec_test";
+  const signature=crypto.createHmac("sha256",secret).update(`${timestamp}.${payload}`).digest("hex");
+  assert.equal(verifyStripeSignature(payload,`t=${timestamp},v1=${signature}`,secret,300,timestamp),true);
+  assert.equal(verifyStripeSignature(`${payload}x`,`t=${timestamp},v1=${signature}`,secret,300,timestamp),false);
+});
+
+test("paid and refunded events update preorder progress idempotently",()=>{
+  const state={events:{},orders:{}};
+  const completed={id:"evt_paid",type:"checkout.session.completed",created:1,data:{object:{id:"cs_test_1",payment_status:"paid",payment_intent:"pi_test_1",amount_total:74900,currency:"aud",metadata:{aura_items:"AP233694:2",aura_order_mode:"preorder",aura_payment_stage:"initial_50_percent"}}}};
+  assert.equal(applyStripeEvent(state,completed),true);
+  assert.equal(applyStripeEvent(state,completed),false);
+  assert.equal(campaignProgress(state,catalog).find(item=>item.id==="paddle-launch-batch-01").reserved,2);
+  const refunded={id:"evt_refund",type:"charge.refunded",created:2,data:{object:{payment_intent:"pi_test_1",amount_refunded:37450,refunded:false}}};
+  applyStripeEvent(state,refunded);
+  assert.equal(campaignProgress(state,catalog).find(item=>item.id==="paddle-launch-batch-01").reserved,1);
+});
+
+test("Invoice payment updates the remaining-balance order state",()=>{
+  const state={events:{},orders:{}};
+  applyStripeEvent(state,{id:"evt_initial",type:"checkout.session.completed",created:1,data:{object:{id:"cs_test_order",customer:"cus_test",payment_status:"paid",payment_intent:"pi_test_order",amount_total:37450,currency:"aud",metadata:{aura_items:"AP734955:1",aura_order_number:"APO48217",aura_tracking_token:"secure_tracking_token_48217",aura_order_mode:"preorder",aura_payment_stage:"initial_50_percent"}}}});
+  const order=state.orders.cs_test_order;
+  assert.equal(order.orderNumber,"APO48217");assert.equal(order.customerId,"cus_test");assert.equal(order.orderStatus,"initial_payment_received");
+  applyStripeEvent(state,{id:"evt_balance",type:"invoice.paid",created:2,data:{object:{id:"in_test",amount_paid:45350,metadata:{aura_order_number:"APO48217"}}}});
+  assert.equal(order.balancePaymentStatus,"paid");assert.equal(order.orderStatus,"balance_paid");assert.equal(order.fulfilmentStatus,"preparing_for_dispatch");
+});
