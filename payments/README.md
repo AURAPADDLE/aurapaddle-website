@@ -8,7 +8,7 @@ This folder contains the server-side portion of the Stripe Checkout review build
 - Live keys are rejected unless `ALLOW_LIVE_PAYMENTS=true` is deliberately configured later.
 - Dynamic payment methods are enabled; Afterpay is explicitly excluded.
 - The browser submits only an AP SKU and quantity. `catalog.json` supplies the trusted AUD amount.
-- The existing 76 enabled board SKUs have persistent sandbox Product objects. The checkout service creates trusted 50% initial-payment line items from the local catalogue while `stripe-sandbox-map.json` supplies the corresponding sandbox Product IDs without storing credentials.
+- The existing 76 enabled board SKUs have persistent Product objects in the original review sandbox. When `STRIPE_ACCOUNT_ID` identifies a different Stripe account, the server deliberately ignores those account-bound IDs and creates trusted inline product data from the local catalogue instead. This keeps every amount and SKU server-controlled while preventing cross-account Product ID failures.
 - Hydrofoil Set (AP246531) uses server-validated inline Stripe product data until a persistent sandbox Product is created. Its amount still comes only from the trusted local catalogue, never from browser input.
 - 77 priced board SKUs plus the Fishing Rack accessory are enabled. Vela is excluded because its RRP is not confirmed in the current website data.
 - Eligible board pre-orders apply the approved AUD 50 incentive first and then collect exactly 50% of the reduced pre-order price. Fishing Rack checkout uses its applicable catalogue or bundle price and collects 50% when ordered.

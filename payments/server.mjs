@@ -34,7 +34,13 @@ const adminApiToken=process.env.ADMIN_API_TOKEN||"";
 const allowLive=process.env.ALLOW_LIVE_PAYMENTS==="true";
 const catalog=loadCatalog();
 const shippingRates=loadShippingRates();
-const stripeMap=allowLive?{accountId:"live",mode:"live",bySku:new Map()}:loadStripeMap(catalog);
+const configuredStripeAccount=process.env.STRIPE_ACCOUNT_ID||"";
+const sandboxStripeMap=loadStripeMap(catalog);
+const stripeMap=allowLive
+  ? {accountId:"live",mode:"live",bySku:new Map()}
+  : configuredStripeAccount&&sandboxStripeMap.accountId!==configuredStripeAccount
+    ? {accountId:configuredStripeAccount,mode:"sandbox-inline",bySku:new Map()}
+    : sandboxStripeMap;
 const store=createStateStore({databaseUrl,statePath});
 const mime={".html":"text/html; charset=utf-8",".js":"text/javascript; charset=utf-8",".mjs":"text/javascript; charset=utf-8",".css":"text/css; charset=utf-8",".json":"application/json; charset=utf-8",".png":"image/png",".jpg":"image/jpeg",".jpeg":"image/jpeg",".webp":"image/webp",".svg":"image/svg+xml",".txt":"text/plain; charset=utf-8",".xml":"application/xml; charset=utf-8"};
 
