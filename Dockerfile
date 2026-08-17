@@ -1,6 +1,7 @@
 FROM node:22-alpine
 WORKDIR /app
 COPY . .
+RUN npm ci --omit=dev --prefix payments
 ENV HOST=0.0.0.0 PORT=4242 ORDER_DATA_DIR=/data
 VOLUME ["/data"]
 EXPOSE 4242
