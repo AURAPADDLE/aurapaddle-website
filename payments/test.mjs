@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import crypto from "node:crypto";
 import test from "node:test";
-import {applyStripeEvent,buildCheckoutParams,calculateShipping,campaignProgress,loadCatalog,loadShippingRates,loadStripeMap,normaliseCheckoutItems,normaliseQuantity,verifyStripeSignature} from "./lib.mjs";
+import {applyStripeEvent,buildCheckoutParams,calculateShipping,campaignProgress,loadCatalog,loadShippingRates,loadStripeMap,normaliseCheckoutItems,normaliseQuantity,reserveCheckoutIdentity,verifyStripeSignature} from "./lib.mjs";
 
 const catalog=loadCatalog();
 const shippingRates=loadShippingRates();
@@ -122,6 +122,20 @@ test("Checkout assigns the APO order identity to Stripe metadata",()=>{
   assert.equal(params.get("metadata[aura_order_number]"),"APO48217");
   assert.equal(params.get("payment_intent_data[metadata][aura_order_number]"),"APO48217");
   assert.equal(params.get("metadata[aura_tracking_token]"),"secure_tracking_token_48217");
+});
+
+test("checkout retries reuse the same APO identity and Stripe integration identifier",()=>{
+  const state={events:{},orders:{},reservations:{},checkoutRequests:{}};
+  let integerCalls=0,byteCalls=0;
+  const randomInt=()=>{integerCalls+=1;return 19710};
+  const randomBytes=size=>{byteCalls+=1;return Buffer.alloc(size,byteCalls)};
+  const first=reserveCheckoutIdentity(state,{requestId:"retry-safe-123",now:1_800_000_000,randomInt,randomBytes});
+  const retry=reserveCheckoutIdentity(state,{requestId:"retry-safe-123",now:1_800_000_010,randomInt:()=>99999,randomBytes:()=>Buffer.alloc(24,9)});
+  assert.deepEqual(retry,first);
+  assert.equal(first.orderNumber,"APO19710");
+  assert.match(first.trackingToken,/^[A-Za-z0-9_-]{16,80}$/);
+  assert.match(first.integrationIdentifier,/^aura_cart_[a-z]{8}$/);
+  assert.equal(integerCalls,1);assert.equal(byteCalls,2);
 });
 
 test("quantity validation rejects tampering",()=>{

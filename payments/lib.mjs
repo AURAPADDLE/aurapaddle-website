@@ -80,6 +80,27 @@ export function normaliseQuantity(value){
   return quantity;
 }
 
+export function reserveCheckoutIdentity(state,{requestId,now=Math.floor(Date.now()/1000),randomInt=crypto.randomInt,randomBytes=crypto.randomBytes}={}){
+  if(!/^[a-zA-Z0-9_-]{8,80}$/.test(requestId||""))throw new Error("Invalid checkout request ID.");
+  state.orders??={};state.reservations??={};state.checkoutRequests??={};
+  for(const [key,entry] of Object.entries(state.checkoutRequests))if(now-Number(entry?.reservedAt||0)>86400)delete state.checkoutRequests[key];
+  const existing=state.checkoutRequests[requestId];
+  if(existing)return {orderNumber:existing.orderNumber,trackingToken:existing.trackingToken,integrationIdentifier:existing.integrationIdentifier};
+  const used=new Set(Object.values(state.orders).map(order=>order.orderNumber));
+  for(const [number,reservedAt] of Object.entries(state.reservations)){
+    if(now-Number(reservedAt)>86400)delete state.reservations[number];
+    else used.add(number);
+  }
+  let orderNumber;
+  do orderNumber=`APO${randomInt(0,100000).toString().padStart(5,"0")}`;while(used.has(orderNumber));
+  const trackingToken=randomBytes(24).toString("base64url");
+  const suffix=randomBytes(8).toString("hex").slice(0,8).replace(/[0-9]/g,char=>"abcdefghij"[Number(char)]);
+  const identity={orderNumber,trackingToken,integrationIdentifier:`aura_cart_${suffix}`,reservedAt:now};
+  state.reservations[orderNumber]=now;
+  state.checkoutRequests[requestId]=identity;
+  return {orderNumber,trackingToken,integrationIdentifier:identity.integrationIdentifier};
+}
+
 export function normaliseCheckoutItems(rawItems,catalog){
   if(!Array.isArray(rawItems)||rawItems.length<1||rawItems.length>20)throw new Error("A cart must contain between 1 and 20 distinct products.");
   const merged=new Map();
