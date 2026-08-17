@@ -272,7 +272,13 @@ export function applyStripeEvent(state,event){
   if(event.type==="invoice.paid"){
     const orderNumber=object.metadata?.aura_order_number;
     const order=Object.values(state.orders).find(item=>item.orderNumber===orderNumber);
-    if(order){order.balancePaymentStatus="paid";order.balanceInvoiceId=object.id;order.balancePaidAmount=Number(object.amount_paid||0);order.orderStatus="balance_paid";order.fulfilmentStatus="preparing_for_dispatch";order.updated=event.created}
+    if(order){
+      const paidAmount=Number(object.amount_paid||0),expectedAmount=Number(order.balanceRequestedAmount||0),invoiceMatches=!order.balanceInvoiceId||order.balanceInvoiceId===object.id;
+      order.balancePaidAmount=paidAmount;
+      if(expectedAmount>0&&paidAmount===expectedAmount&&invoiceMatches){order.balancePaymentStatus="paid";order.balanceInvoiceId=object.id;order.orderStatus="balance_paid";order.fulfilmentStatus="preparing_for_dispatch";delete order.requiresBalancePaymentReview}
+      else{order.balancePaymentStatus="payment_review";order.requiresBalancePaymentReview=true}
+      order.updated=event.created;
+    }
   }
   if(event.type==="invoice.voided"){
     const order=Object.values(state.orders).find(item=>item.orderNumber===object.metadata?.aura_order_number);

@@ -106,16 +106,21 @@ async function requestBalance(req,res){
   if(!Number.isInteger(shippingAmount)||shippingAmount<0)throw new Error("A confirmed shipping amount is required.");
   if(!order.customerId)throw new Error("Stripe customer is missing from the initial payment record.");
   const dueAmount=order.amountTotal+shippingAmount;
-  const item=new URLSearchParams({customer:order.customerId,currency:"aud",amount:String(dueAmount),description:`${order.orderNumber} — remaining product balance and shipping`});
-  item.set("metadata[aura_order_number]",order.orderNumber);
-  await stripeRequest("/v1/invoiceitems",{method:"POST",headers:{"Content-Type":"application/x-www-form-urlencoded","Idempotency-Key":`${order.orderNumber}-balance-item`},body:item});
   const invoiceParams=new URLSearchParams({customer:order.customerId,collection_method:"send_invoice",days_until_due:"14",description:`AURA PADDLE ${order.orderNumber} remaining balance and shipping`});
   invoiceParams.set("metadata[aura_order_number]",order.orderNumber);
   invoiceParams.set("custom_fields[0][name]","AURA order");invoiceParams.set("custom_fields[0][value]",order.orderNumber);
   const invoice=await stripeRequest("/v1/invoices",{method:"POST",headers:{"Content-Type":"application/x-www-form-urlencoded","Idempotency-Key":`${order.orderNumber}-balance-invoice`},body:invoiceParams});
-  const sent=await stripeRequest(`/v1/invoices/${invoice.id}/send`,{method:"POST",headers:{"Content-Type":"application/x-www-form-urlencoded","Idempotency-Key":`${order.orderNumber}-balance-send`},body:new URLSearchParams()});
-  await store.mutate(latest=>{const target=Object.values(latest.orders||{}).find(item=>item.orderNumber===body.orderNumber);if(!target)throw new Error("Order not found.");target.shippingAmount=shippingAmount;target.balanceRequestedAmount=dueAmount;target.balancePaymentStatus="requested";target.balanceInvoiceId=sent.id;target.balanceInvoiceUrl=sent.hosted_invoice_url||"";target.balanceRequestedAt=Math.floor(Date.now()/1000);target.orderStatus="balance_requested";target.updated=Math.floor(Date.now()/1000)});
-  send(res,200,{orderNumber:order.orderNumber,status:order.balancePaymentStatus,amount:dueAmount,invoiceUrl:order.balanceInvoiceUrl});
+  const item=new URLSearchParams({customer:order.customerId,invoice:invoice.id,currency:"aud",amount:String(dueAmount),description:`${order.orderNumber} — remaining product balance and shipping`});
+  item.set("metadata[aura_order_number]",order.orderNumber);
+  await stripeRequest("/v1/invoiceitems",{method:"POST",headers:{"Content-Type":"application/x-www-form-urlencoded","Idempotency-Key":`${order.orderNumber}-balance-item`},body:item});
+  const draft=await stripeRequest(`/v1/invoices/${invoice.id}`);
+  if(Number(draft.amount_due)!==dueAmount)throw new Error(`Stripe invoice total mismatch: expected ${dueAmount}, received ${Number(draft.amount_due||0)}.`);
+  await store.mutate(latest=>{const target=Object.values(latest.orders||{}).find(item=>item.orderNumber===body.orderNumber);if(!target)throw new Error("Order not found.");target.shippingAmount=shippingAmount;target.balanceRequestedAmount=dueAmount;target.balancePaymentStatus="requested";target.balanceInvoiceId=invoice.id;target.balanceInvoiceUrl="";target.balanceRequestedAt=Math.floor(Date.now()/1000);target.orderStatus="balance_requested";target.updated=Math.floor(Date.now()/1000)});
+  let sent;
+  try{sent=await stripeRequest(`/v1/invoices/${invoice.id}/send`,{method:"POST",headers:{"Content-Type":"application/x-www-form-urlencoded","Idempotency-Key":`${order.orderNumber}-balance-send`},body:new URLSearchParams()})}
+  catch(error){await store.mutate(latest=>{const target=Object.values(latest.orders||{}).find(item=>item.orderNumber===body.orderNumber);if(target){target.balancePaymentStatus="request_failed";target.orderStatus="initial_payment_received";target.updated=Math.floor(Date.now()/1000)}});throw error}
+  const updated=await store.mutate(latest=>{const target=Object.values(latest.orders||{}).find(item=>item.orderNumber===body.orderNumber);if(!target)throw new Error("Order not found.");target.balanceInvoiceUrl=sent.hosted_invoice_url||"";target.updated=Math.floor(Date.now()/1000);return target});
+  send(res,200,{orderNumber:updated.orderNumber,status:updated.balancePaymentStatus,amount:dueAmount,invoiceUrl:updated.balanceInvoiceUrl});
 }
 async function updateFulfilment(req,res){
   if(!requireAdmin(req))return send(res,401,{error:"Admin authorisation required."});

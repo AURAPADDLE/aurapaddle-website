@@ -168,6 +168,14 @@ test("Invoice payment updates the remaining-balance order state",()=>{
   applyStripeEvent(state,{id:"evt_initial",type:"checkout.session.completed",created:1,data:{object:{id:"cs_test_order",customer:"cus_test",payment_status:"paid",payment_intent:"pi_test_order",amount_total:37450,currency:"aud",metadata:{aura_items:"AP734955:1",aura_order_number:"APO48217",aura_tracking_token:"secure_tracking_token_48217",aura_order_mode:"preorder",aura_payment_stage:"initial_50_percent"}}}});
   const order=state.orders.cs_test_order;
   assert.equal(order.orderNumber,"APO48217");assert.equal(order.customerId,"cus_test");assert.equal(order.orderStatus,"initial_payment_received");
+  order.balanceRequestedAmount=45350;order.balanceInvoiceId="in_test";order.balancePaymentStatus="requested";
   applyStripeEvent(state,{id:"evt_balance",type:"invoice.paid",created:2,data:{object:{id:"in_test",amount_paid:45350,metadata:{aura_order_number:"APO48217"}}}});
   assert.equal(order.balancePaymentStatus,"paid");assert.equal(order.orderStatus,"balance_paid");assert.equal(order.fulfilmentStatus,"preparing_for_dispatch");
+});
+
+test("Invoice payment does not fulfil an order when the paid amount is zero or mismatched",()=>{
+  const state={events:{},orders:{cs_test_order:{orderNumber:"APO48218",balanceRequestedAmount:42350,balanceInvoiceId:"in_expected",balancePaymentStatus:"requested",orderStatus:"balance_requested",fulfilmentStatus:"awaiting_balance"}}};
+  const order=state.orders.cs_test_order;
+  applyStripeEvent(state,{id:"evt_zero",type:"invoice.paid",created:2,data:{object:{id:"in_expected",amount_paid:0,metadata:{aura_order_number:"APO48218"}}}});
+  assert.equal(order.balancePaymentStatus,"payment_review");assert.equal(order.orderStatus,"balance_requested");assert.equal(order.fulfilmentStatus,"awaiting_balance");assert.equal(order.requiresBalancePaymentReview,true);
 });
