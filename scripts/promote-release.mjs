@@ -23,6 +23,8 @@ const replacements=[
   [/support\.html/g,"support/"],
   [/Stripe sandbox · Afterpay disabled/g,"Secure checkout · Afterpay unavailable"],
   [/Australia-only offline preview/g,"Australia-wide online store"],
+  [/Australia-only offline shop preview/g,"Australia-wide online store"],
+  [/ · Not deployed · Payments inactive/g," · Secure payments by Stripe"],
   [/Offline review/g,"Online store"],
   [/Stripe-ready checkout position/g,"Secure Stripe checkout"],
   [/Two-stage pre-order payments are designed, not active\./g,"Secure two-stage pre-order payments."],
