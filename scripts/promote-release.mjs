@@ -44,20 +44,25 @@ function writeRoute(route,source){
   fs.writeFileSync(target,html);
 }
 
-writeRoute("","redesign-preview.html");
-writeRoute("shop","shop-preview.html");
-writeRoute("policies","policy-preview.html");
-writeRoute("pre-order","preorder-preview.html");
-writeRoute("cart","cart-preview.html");
-writeRoute("our-story","our-story.html");
-writeRoute("contact","contact.html");
-writeRoute("support","support.html");
+const productOnly=String(process.env.AURA_PRODUCT_ONLY||"").trim();
+if(!productOnly){
+  writeRoute("","redesign-preview.html");
+  writeRoute("shop","shop-preview.html");
+  writeRoute("policies","policy-preview.html");
+  writeRoute("pre-order","preorder-preview.html");
+  writeRoute("cart","cart-preview.html");
+  writeRoute("our-story","our-story.html");
+  writeRoute("contact","contact.html");
+  writeRoute("support","support.html");
+}
 
-for(const filename of fs.readdirSync(path.join(site,"products")).filter(name=>name.endsWith(".html"))){
+const productFiles=productOnly?[`${productOnly}.html`]:fs.readdirSync(path.join(site,"products")).filter(name=>name.endsWith(".html"));
+for(const filename of productFiles){
+  if(!fs.existsSync(path.join(site,"products",filename)))throw new Error(`Product page not found: ${filename}`);
   let html=fs.readFileSync(path.join(site,"products",filename),"utf8");
   for(const [pattern,value] of replacements)html=html.replace(pattern,value);
   fs.writeFileSync(path.join(site,"products",filename),html);
 }
 
-fs.writeFileSync(path.join(site,"release-manifest.json"),`${JSON.stringify({releaseAt,timezone:"Australia/Brisbane",generatedAt:new Date().toISOString(),entry:"/index.html",stripeActivation:"requires production readiness gate"},null,2)}\n`);
-console.log(`Production routes prepared for ${releaseAt}. Legacy index archived at ${path.relative(site,archive)}.`);
+if(!productOnly)fs.writeFileSync(path.join(site,"release-manifest.json"),`${JSON.stringify({releaseAt,timezone:"Australia/Brisbane",generatedAt:new Date().toISOString(),entry:"/index.html",stripeActivation:"requires production readiness gate"},null,2)}\n`);
+console.log(productOnly?`Production product page prepared: ${productOnly}.`:`Production routes prepared for ${releaseAt}. Legacy index archived at ${path.relative(site,archive)}.`);
