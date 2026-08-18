@@ -221,9 +221,39 @@ Object.assign(products.find(product=>product.slug==="angler-fishing"),{accessori
 Object.assign(products.find(product=>product.slug==="yoga-cruiser"),{status:"Glacier confirmed pre-order · 3 colours join shared 50",stock:"Pre-order · 50% due today"});
 Object.assign(products.find(product=>product.slug==="coast-go"),{status:"All 3 colours on confirmed pre-order",stock:"Pre-order · 50% due today"});
 Object.assign(products.find(product=>product.slug==="yoga-cruiser").images,{
-  sandstone:["../assets/products/yoga-cruiser/matte-sandstone/AP505002_yoga-cruiser_11ft_matte-sandstone_hero-01.jpg"],
-  eucalyptus:["../assets/products/yoga-cruiser/eucalyptus-green/AP233694_yoga-cruiser_11ft_eucalyptus-green_hero-01.jpg"],
-  coral:["../assets/products/yoga-cruiser/coral-white/AP587273_yoga-cruiser_11ft_coral-white_hero-01.jpg"]
+  sandstone:[
+    "../assets/products/yoga-cruiser/matte-sandstone/AP505002_yoga-cruiser_11ft_matte-sandstone_hero-01.jpg",
+    "../assets/products/yoga-cruiser/matte-sandstone/AP505002_yoga-cruiser_11ft_matte-sandstone_deck-02.webp",
+    "../assets/products/yoga-cruiser/matte-sandstone/AP505002_yoga-cruiser_11ft_matte-sandstone_bottom-03.webp",
+    "../assets/products/yoga-cruiser/matte-sandstone/AP505002_yoga-cruiser_11ft_matte-sandstone_side-04.webp",
+    "../assets/products/yoga-cruiser/matte-sandstone/AP505002_yoga-cruiser_11ft_matte-sandstone_three-quarter-05.webp",
+    "../assets/products/yoga-cruiser/matte-sandstone/AP505002_yoga-cruiser_11ft_matte-sandstone_deck-detail-06.webp",
+    "../assets/products/yoga-cruiser/matte-sandstone/AP505002_yoga-cruiser_11ft_matte-sandstone_full-kit-07.webp",
+    "../assets/products/yoga-cruiser/matte-sandstone/AP505002_yoga-cruiser_11ft_matte-sandstone_yoga-lifestyle-08.webp",
+    "../assets/products/yoga-cruiser/matte-sandstone/AP505002_yoga-cruiser_11ft_matte-sandstone_colour-lineup-09.webp"
+  ],
+  eucalyptus:[
+    "../assets/products/yoga-cruiser/eucalyptus-green/AP233694_yoga-cruiser_11ft_eucalyptus-green_hero-01.jpg",
+    "../assets/products/yoga-cruiser/eucalyptus-green/AP233694_yoga-cruiser_11ft_eucalyptus-green_deck-02.webp",
+    "../assets/products/yoga-cruiser/eucalyptus-green/AP233694_yoga-cruiser_11ft_eucalyptus-green_bottom-03.webp",
+    "../assets/products/yoga-cruiser/eucalyptus-green/AP233694_yoga-cruiser_11ft_eucalyptus-green_side-04.webp",
+    "../assets/products/yoga-cruiser/eucalyptus-green/AP233694_yoga-cruiser_11ft_eucalyptus-green_three-quarter-05.webp",
+    "../assets/products/yoga-cruiser/eucalyptus-green/AP233694_yoga-cruiser_11ft_eucalyptus-green_deck-detail-06.webp",
+    "../assets/products/yoga-cruiser/eucalyptus-green/AP233694_yoga-cruiser_11ft_eucalyptus-green_full-kit-07.webp",
+    "../assets/products/yoga-cruiser/eucalyptus-green/AP233694_yoga-cruiser_11ft_eucalyptus-green_yoga-lifestyle-08.webp",
+    "../assets/products/yoga-cruiser/eucalyptus-green/AP233694_yoga-cruiser_11ft_eucalyptus-green_colour-lineup-09.webp"
+  ],
+  coral:[
+    "../assets/products/yoga-cruiser/coral-white/AP587273_yoga-cruiser_11ft_coral-white_hero-01.jpg",
+    "../assets/products/yoga-cruiser/coral-white/AP587273_yoga-cruiser_11ft_coral-white_deck-02.webp",
+    "../assets/products/yoga-cruiser/coral-white/AP587273_yoga-cruiser_11ft_coral-white_bottom-03.webp",
+    "../assets/products/yoga-cruiser/coral-white/AP587273_yoga-cruiser_11ft_coral-white_side-04.webp",
+    "../assets/products/yoga-cruiser/coral-white/AP587273_yoga-cruiser_11ft_coral-white_three-quarter-05.webp",
+    "../assets/products/yoga-cruiser/coral-white/AP587273_yoga-cruiser_11ft_coral-white_deck-detail-06.webp",
+    "../assets/products/yoga-cruiser/coral-white/AP587273_yoga-cruiser_11ft_coral-white_full-kit-07.webp",
+    "../assets/products/yoga-cruiser/coral-white/AP587273_yoga-cruiser_11ft_coral-white_yoga-lifestyle-08.webp",
+    "../assets/products/yoga-cruiser/coral-white/AP587273_yoga-cruiser_11ft_coral-white_colour-lineup-09.webp"
+  ]
 });
 Object.assign(products.find(product=>product.slug==="angler-fishing"),{images:{
   glacier:["../assets/products/angler-fishing/glacier-blue/AP550986_angler-fishing_12ft_glacier-blue_hero-01.webp","../assets/products/angler-fishing/glacier-blue/AP550986_angler-fishing_12ft_glacier-blue_deck-02.webp","../assets/products/angler-fishing/glacier-blue/AP550986_angler-fishing_12ft_glacier-blue_bottom-03.webp","../assets/products/angler-fishing/glacier-blue/AP550986_angler-fishing_12ft_glacier-blue_side-04.webp","../assets/products/angler-fishing/glacier-blue/AP550986_angler-fishing_12ft_glacier-blue_three-quarter-05.webp","../assets/products/angler-fishing/glacier-blue/AP550986_angler-fishing_12ft_glacier-blue_mount-detail-06.webp","../assets/products/angler-fishing/glacier-blue/AP550986_angler-fishing_12ft_glacier-blue_fishing-rack-detail-07.webp","../assets/products/angler-fishing/glacier-blue/AP550986_angler-fishing_12ft_glacier-blue_fishing-lifestyle-09.webp"],
