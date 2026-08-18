@@ -402,7 +402,10 @@ const merchantAvailabilityDate=value=>{
 };
 const feedItems=paymentCatalogue.filter(item=>item.kind!=="accessory").map(item=>{
   const product=products.find(candidate=>candidate.slug===item.slug);
-  const image=(product?.images?.[item.colourKey]||[])[0]?.replace("../","https://www.aurapaddle.com/")||"https://www.aurapaddle.com/WEBSITE_HERO_IMAGE_1600_900.png";
+  const imageBase=(product?.images?.[item.colourKey]||[])[0]?.replace("../","https://www.aurapaddle.com/")||"https://www.aurapaddle.com/WEBSITE_HERO_IMAGE_1600_900.png";
+  // A new, RFC-compliant URL makes Merchant Center fetch the corrected image
+  // instead of retaining a previously failed crawl from the pre-launch host.
+  const image=`${encodeURI(imageBase)}?gmc=20260819`;
   const availabilityDate=merchantAvailabilityDate(item.campaign?.estimatedDelivery);
   return `<item><g:id>${xml(item.sku)}</g:id><title>${xml(`${item.productName} — ${item.size} — ${item.colour}`)}</title><description>${xml(product?.metaDescription||item.description)}</description><link>${xml(item.productUrl)}</link><g:image_link>${xml(image)}</g:image_link><g:availability>preorder</g:availability><g:availability_date>${availabilityDate}</g:availability_date><g:price>${(item.retailAmount/100).toFixed(2)} AUD</g:price><g:sale_price>${(item.checkoutAmount/100).toFixed(2)} AUD</g:sale_price><g:sale_price_effective_date>2026-08-18T01:18:00+10:00/2026-09-30T23:59:59+10:00</g:sale_price_effective_date><g:brand>AURA PADDLE</g:brand><g:condition>new</g:condition><g:color>${xml(item.colour)}</g:color><g:size>${xml(item.size)}</g:size><g:identifier_exists>yes</g:identifier_exists></item>`;
 }).join("");
