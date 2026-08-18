@@ -220,6 +220,11 @@ Object.assign(products.find(product=>product.slug==="angler-fishing"),{accessori
 
 Object.assign(products.find(product=>product.slug==="yoga-cruiser"),{status:"Glacier confirmed pre-order · 3 colours join shared 50",stock:"Pre-order · 50% due today"});
 Object.assign(products.find(product=>product.slug==="coast-go"),{status:"All 3 colours on confirmed pre-order",stock:"Pre-order · 50% due today"});
+Object.assign(products.find(product=>product.slug==="yoga-cruiser").images,{
+  sandstone:["../assets/products/yoga-cruiser/matte-sandstone/AP505002_yoga-cruiser_11ft_matte-sandstone_hero-01.jpg"],
+  eucalyptus:["../assets/products/yoga-cruiser/eucalyptus-green/AP233694_yoga-cruiser_11ft_eucalyptus-green_hero-01.jpg"],
+  coral:["../assets/products/yoga-cruiser/coral-white/AP587273_yoga-cruiser_11ft_coral-white_hero-01.jpg"]
+});
 Object.assign(products.find(product=>product.slug==="angler-fishing"),{images:{
   glacier:["../assets/products/angler-fishing/glacier-blue/AP550986_angler-fishing_12ft_glacier-blue_hero-01.webp","../assets/products/angler-fishing/glacier-blue/AP550986_angler-fishing_12ft_glacier-blue_deck-02.webp","../assets/products/angler-fishing/glacier-blue/AP550986_angler-fishing_12ft_glacier-blue_bottom-03.webp","../assets/products/angler-fishing/glacier-blue/AP550986_angler-fishing_12ft_glacier-blue_side-04.webp","../assets/products/angler-fishing/glacier-blue/AP550986_angler-fishing_12ft_glacier-blue_three-quarter-05.webp","../assets/products/angler-fishing/glacier-blue/AP550986_angler-fishing_12ft_glacier-blue_mount-detail-06.webp","../assets/products/angler-fishing/glacier-blue/AP550986_angler-fishing_12ft_glacier-blue_fishing-rack-detail-07.webp","../assets/products/angler-fishing/glacier-blue/AP550986_angler-fishing_12ft_glacier-blue_fishing-lifestyle-09.webp"],
   sandstone:["../assets/products/angler-fishing/matte-sandstone/AP246179_angler-fishing_12ft_matte-sandstone_hero-01.webp","../assets/products/angler-fishing/matte-sandstone/AP246179_angler-fishing_12ft_matte-sandstone_deck-02.webp","../assets/products/angler-fishing/matte-sandstone/AP246179_angler-fishing_12ft_matte-sandstone_bottom-03.webp","../assets/products/angler-fishing/matte-sandstone/AP246179_angler-fishing_12ft_matte-sandstone_side-04.webp","../assets/products/angler-fishing/matte-sandstone/AP246179_angler-fishing_12ft_matte-sandstone_three-quarter-05.webp","../assets/products/angler-fishing/matte-sandstone/AP246179_angler-fishing_12ft_matte-sandstone_mount-detail-06.webp","../assets/products/angler-fishing/matte-sandstone/AP246179_angler-fishing_12ft_matte-sandstone_full-kit-08.webp","../assets/products/angler-fishing/matte-sandstone/AP550986_angler-fishing_12ft_glacier-blue_fishing-lifestyle-09.webp"],
@@ -237,6 +242,7 @@ Object.assign(products.find(product=>product.slug==="touring-performance"),{imag
   eucalyptus:["../assets/products/touring-performance/eucalyptus-green/AP511450_touring-performance_14ft_eucalyptus-green_hero-01.webp","../assets/products/touring-performance/eucalyptus-green/AP511450_touring-performance_14ft_eucalyptus-green_deck-02.webp","../assets/products/touring-performance/eucalyptus-green/AP511450_touring-performance_14ft_eucalyptus-green_bottom-03.webp","../assets/products/touring-performance/eucalyptus-green/AP511450_touring-performance_14ft_eucalyptus-green_side-04.webp","../assets/products/touring-performance/eucalyptus-green/AP511450_touring-performance_14ft_eucalyptus-green_three-quarter-05.webp","../assets/products/touring-performance/eucalyptus-green/AP511450_touring-performance_14ft_eucalyptus-green_nose-hull-detail-06.webp","../assets/products/touring-performance/eucalyptus-green/AP511450_touring-performance_14ft_eucalyptus-green_full-kit-08.webp","../assets/products/touring-performance/eucalyptus-green/AP511450_touring-performance_14ft_eucalyptus-green_touring-lineup-09.webp"],
   coral:["../assets/products/touring-performance/coral-white/AP168023_touring-performance_14ft_coral-white_hero-01.webp","../assets/products/touring-performance/coral-white/AP168023_touring-performance_14ft_coral-white_deck-02.webp","../assets/products/touring-performance/coral-white/AP168023_touring-performance_14ft_coral-white_bottom-03.webp","../assets/products/touring-performance/coral-white/AP168023_touring-performance_14ft_coral-white_side-04.webp","../assets/products/touring-performance/coral-white/AP168023_touring-performance_14ft_coral-white_three-quarter-05.webp","../assets/products/touring-performance/coral-white/AP168023_touring-performance_14ft_coral-white_nose-hull-detail-06.webp","../assets/products/touring-performance/coral-white/AP168023_touring-performance_14ft_coral-white_full-kit-08.webp","../assets/products/touring-performance/coral-white/AP168023_touring-performance_14ft_coral-white_touring-lineup-09.webp"]
 },photoNeed:"Detailed studio imagery, full-kit and range-lineup views are available for all four catalogue colours. On-water touring photography can be added when available."});
+products.find(product=>product.slug==="coast-go").images.mintgrey[0]="../assets/products/coast-go/mint-grey/AP730047_coast-go-isup_10ft6in_mint-grey_hero-01.jpg";
 Object.assign(products.find(product=>product.slug==="inflatable-hydrofoil"),{images:{
   foil:["../assets/products/inflatable-hydrofoil/carbon-and-teal/AP428330_inflatable-hydrofoil_5ft8in_carbon-and-teal_hero-01.webp","../assets/products/inflatable-hydrofoil/carbon-and-teal/AP428330_inflatable-hydrofoil_5ft8in_carbon-and-teal_deck-02.webp","../assets/products/inflatable-hydrofoil/carbon-and-teal/AP428330_inflatable-hydrofoil_5ft8in_carbon-and-teal_bottom-03.webp","../assets/products/inflatable-hydrofoil/carbon-and-teal/AP428330_inflatable-hydrofoil_5ft8in_carbon-and-teal_side-04.webp","../assets/products/inflatable-hydrofoil/carbon-and-teal/AP428330_inflatable-hydrofoil_5ft8in_carbon-and-teal_foil-connection-detail-05.webp"]
 },photoNeed:"Detailed board studio imagery and foil-connection detail are available. Complete assembled-system, verified kit flat lay, packed-bag and on-water action photography are still required."});
@@ -391,7 +397,18 @@ if(paymentCatalogue.length<76)throw new Error(`Refusing to rebuild: only ${payme
 const requestedProductSlugs=new Set(String(process.env.AURA_PRODUCT_SLUGS||"").split(",").map(value=>value.trim()).filter(Boolean));
 const productsToWrite=requestedProductSlugs.size?products.filter(product=>requestedProductSlugs.has(product.slug)):products;
 if(requestedProductSlugs.size&&productsToWrite.length!==requestedProductSlugs.size)throw new Error("One or more requested product slugs were not found.");
-for(const product of productsToWrite)fs.writeFileSync(path.join(siteDir,"products",`${product.slug}.html`),htmlFor(product));
+function productionHtml(product){
+  return htmlFor(product)
+    .replaceAll("../redesign-preview.html","../")
+    .replaceAll("../shop-preview.html","../shop/")
+    .replaceAll("../cart-preview.html","../cart/")
+    .replaceAll("../our-story.html","../our-story/")
+    .replaceAll("../support.html","../support/")
+    .replaceAll("../contact.html","../contact/")
+    .replaceAll("../policy-preview.html","../policies/")
+    .replace("Australia-only offline preview","Australia-wide online store");
+}
+for(const product of productsToWrite)fs.writeFileSync(path.join(siteDir,"products",`${product.slug}.html`),productionHtml(product));
 fs.writeFileSync(path.join(siteDir,"payments","catalog.json"),`${JSON.stringify({generatedAt:new Date().toISOString(),currency:"aud",variants:paymentCatalogue},null,2)}\n`);
 const xml=value=>esc(value).replaceAll("'","&apos;");
 const merchantAvailabilityDate=value=>{
@@ -405,7 +422,7 @@ const feedItems=paymentCatalogue.filter(item=>item.kind!=="accessory").map(item=
   const imageBase=(product?.images?.[item.colourKey]||[])[0]?.replace("../","https://www.aurapaddle.com/")||"https://www.aurapaddle.com/WEBSITE_HERO_IMAGE_1600_900.png";
   // A new, RFC-compliant URL makes Merchant Center fetch the corrected image
   // instead of retaining a previously failed crawl from the pre-launch host.
-  const image=`${encodeURI(imageBase)}?gmc=20260819`;
+  const image=`${encodeURI(imageBase)}?gmc=20260819b`;
   const availabilityDate=merchantAvailabilityDate(item.campaign?.estimatedDelivery);
   return `<item><g:id>${xml(item.sku)}</g:id><title>${xml(`${item.productName} — ${item.size} — ${item.colour}`)}</title><description>${xml(product?.metaDescription||item.description)}</description><link>${xml(item.productUrl)}</link><g:image_link>${xml(image)}</g:image_link><g:availability>preorder</g:availability><g:availability_date>${availabilityDate}</g:availability_date><g:price>${(item.retailAmount/100).toFixed(2)} AUD</g:price><g:sale_price>${(item.checkoutAmount/100).toFixed(2)} AUD</g:sale_price><g:sale_price_effective_date>2026-08-18T01:18:00+10:00/2026-09-30T23:59:59+10:00</g:sale_price_effective_date><g:brand>AURA PADDLE</g:brand><g:condition>new</g:condition><g:color>${xml(item.colour)}</g:color><g:size>${xml(item.size)}</g:size><g:identifier_exists>yes</g:identifier_exists></item>`;
 }).join("");
