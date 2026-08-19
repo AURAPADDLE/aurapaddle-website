@@ -106,6 +106,9 @@ async function requestBalance(req,res){
   if(!Number.isInteger(shippingAmount)||shippingAmount<0)throw new Error("A confirmed shipping amount is required.");
   if(!order.customerId)throw new Error("Stripe customer is missing from the initial payment record.");
   const dueAmount=order.amountTotal+shippingAmount;
+  const customerLocaleParams=new URLSearchParams();
+  customerLocaleParams.set("preferred_locales[0]","en");
+  await stripeRequest(`/v1/customers/${encodeURIComponent(order.customerId)}`,{method:"POST",headers:{"Content-Type":"application/x-www-form-urlencoded"},body:customerLocaleParams});
   const invoiceParams=new URLSearchParams({customer:order.customerId,collection_method:"send_invoice",days_until_due:"14",description:`AURA PADDLE ${order.orderNumber} remaining balance and shipping`});
   invoiceParams.set("metadata[aura_order_number]",order.orderNumber);
   invoiceParams.set("custom_fields[0][name]","AURA order");invoiceParams.set("custom_fields[0][value]",order.orderNumber);
