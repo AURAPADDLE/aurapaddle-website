@@ -9,6 +9,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&amp;family=Manrope:wght@500;600;700&amp;display=swap" rel="stylesheet">
   <link rel="stylesheet" href="stripe-checkout.css">
+  <link rel="stylesheet" href="cookie-consent.css">
 </head>
 <body>
   <main class="checkout-shell">
@@ -31,6 +32,7 @@
     </section>
   </main>
   <script src="cart.js"></script>
+  <script src="cookie-consent.js"></script>
   <script>
   (async()=>{
     const id=new URLSearchParams(location.search).get("session_id");
@@ -46,7 +48,25 @@
       const orderLink=document.getElementById("orderStatusLink");
       if(session.orderNumber&&session.trackingToken){orderLink.href=`order/?order=${encodeURIComponent(session.orderNumber)}&token=${encodeURIComponent(session.trackingToken)}`;orderLink.hidden=false}
       document.getElementById("orderSummary").hidden=false;
-      if(paid)window.AURACart?.clear();
+      if(paid){
+        window.AURACart?.clear();
+        const conversionKey=`aura-purchase-recorded-${session.id}`;
+        const recordPurchase=()=>{
+          if(!(window.auraConsent?.analytics||window.auraConsent?.marketing))return;
+          try{if(localStorage.getItem(conversionKey)==="true")return}catch{}
+          if(typeof window.gtag!=="function")return;
+          window.gtag("event","purchase",{
+            transaction_id:session.orderNumber,
+            value:Number(session.amountTotal||0)/100,
+            currency:String(session.currency||"AUD").toUpperCase(),
+            items:items.map(item=>({item_id:item.sku,item_name:item.sku,quantity:Number(item.quantity||1)}))
+          });
+          try{localStorage.setItem(conversionKey,"true")}catch{}
+          window.removeEventListener("aura:consent",recordPurchase);
+        };
+        recordPurchase();
+        window.addEventListener("aura:consent",recordPurchase);
+      }
     }catch(error){document.getElementById("statusCopy").textContent=error.message}
   })();
   </script>

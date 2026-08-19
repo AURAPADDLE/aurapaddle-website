@@ -35,7 +35,7 @@
     @media(max-width:1040px){.nav-links{display:none}.menu-button{display:block}.mobile-menu{display:none;position:fixed;inset:0;background:var(--deep);z-index:45;padding:7rem 1.5rem 2rem}.mobile-menu.open{display:flex;flex-direction:column}.mobile-menu a{font:600 2rem "Manrope",sans-serif;color:#fff;text-decoration:none;padding:.8rem 0;border-bottom:1px solid rgba(255,255,255,.12)}.hero-grid,.manifesto-grid{grid-template-columns:1fr;gap:3rem}.manifesto-aside{position:static}.principle-grid{grid-template-columns:repeat(2,1fr)}.pie-card{grid-template-columns:1fr}.cta-box{grid-template-columns:1fr}.footer-grid{grid-template-columns:1fr 1fr}}
     @media(max-width:720px){.wrap{width:min(100% - 1.5rem,1220px)}.site-header .btn{display:none}.story-hero{padding:8.2rem 0 4.8rem}.story-hero h1{font-size:3.65rem}.manifesto,.principles,.comparison,.value{padding:5rem 0}.section-head{display:block}.section-head>p{margin-top:1.2rem}.principle-grid,.model-grid,.pie-grid{grid-template-columns:minmax(0,1fr)}.principle-card{min-height:235px}.flow{overflow-x:auto;padding-bottom:.35rem}.flow-step{min-width:92px}.pie-card{padding:1.35rem}.pie{width:190px}.pie-visual{min-height:240px}.footer-grid{grid-template-columns:1fr}.footer-bottom{display:block}.footer-bottom span{display:block;margin-top:.45rem}}
   </style>
-</head>
+<link rel="stylesheet" href="cookie-consent.css"></head>
 <body>
   <header class="site-header">
     <div class="wrap nav">
@@ -133,5 +133,5 @@
   <script>
     const menuButton=document.getElementById("menuButton"),mobileMenu=document.getElementById("mobileMenu");menuButton.addEventListener("click",()=>{const open=mobileMenu.classList.toggle("open");menuButton.setAttribute("aria-expanded",open);document.body.classList.toggle("menu-open",open)});mobileMenu.querySelectorAll("a").forEach(a=>a.addEventListener("click",()=>{mobileMenu.classList.remove("open");document.body.classList.remove("menu-open");menuButton.setAttribute("aria-expanded","false")}));
   </script>
-</body>
+<script src="cookie-consent.js"></script></body>
 </html>

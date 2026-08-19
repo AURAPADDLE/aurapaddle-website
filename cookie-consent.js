@@ -1,10 +1,44 @@
 (()=>{
   const storageKey="aura-cookie-consent-v1";
+  const measurementId="G-0DJKT6VHVL";
   const defaults={necessary:true,analytics:false,marketing:false};
   const read=()=>{try{return {...defaults,...JSON.parse(localStorage.getItem(storageKey)||"null")}}catch{return {...defaults}}};
   const saved=()=>localStorage.getItem(storageKey)!==null;
+  let tagRequested=false;
+
+  window.dataLayer=window.dataLayer||[];
+  window.gtag=window.gtag||function(){window.dataLayer.push(arguments)};
+  window.gtag("consent","default",{
+    analytics_storage:"denied",
+    ad_storage:"denied",
+    ad_user_data:"denied",
+    ad_personalization:"denied",
+    wait_for_update:500
+  });
+
+  const loadGoogleTag=()=>{
+    if(tagRequested)return;
+    tagRequested=true;
+    const script=document.createElement("script");
+    script.async=true;
+    script.src=`https://www.googletagmanager.com/gtag/js?id=${measurementId}`;
+    document.head.append(script);
+    window.gtag("js",new Date());
+    window.gtag("config",measurementId,{send_page_view:true});
+  };
+  const updateGoogleConsent=preferences=>{
+    const analytics=Boolean(preferences.analytics),marketing=Boolean(preferences.marketing);
+    window.gtag("consent","update",{
+      analytics_storage:analytics?"granted":"denied",
+      ad_storage:marketing?"granted":"denied",
+      ad_user_data:marketing?"granted":"denied",
+      ad_personalization:marketing?"granted":"denied"
+    });
+    if(analytics||marketing)loadGoogleTag();
+  };
   const apply=preferences=>{
     window.auraConsent={...defaults,...preferences};
+    updateGoogleConsent(window.auraConsent);
     window.dispatchEvent(new CustomEvent("aura:consent",{detail:window.auraConsent}));
   };
   const save=preferences=>{
@@ -16,11 +50,11 @@
   const banner=document.createElement("section");
   banner.className="cookie-consent";
   banner.setAttribute("aria-label","Cookie preferences");
-  banner.innerHTML=`<div class="cookie-consent__inner"><div><h2>Your privacy choices</h2><p>We use necessary browser storage for features such as your cart. Optional analytics and marketing technologies stay off unless you choose them. <a href="${location.pathname.includes('/products/')?'../':''}policy-preview.html#privacy">Privacy Policy</a></p></div><div class="cookie-consent__actions"><button class="cookie-consent__secondary" data-cookie-settings>Settings</button><button class="cookie-consent__secondary" data-cookie-reject>Necessary only</button><button class="cookie-consent__primary" data-cookie-accept>Accept optional</button></div></div>`;
+  banner.innerHTML=`<div class="cookie-consent__inner"><div><h2>Your privacy choices</h2><p>We use necessary browser storage for features such as your cart. Optional analytics and marketing technologies stay off unless you choose them. <a href="/policies/#privacy">Privacy Policy</a></p></div><div class="cookie-consent__actions"><button class="cookie-consent__secondary" data-cookie-settings>Settings</button><button class="cookie-consent__secondary" data-cookie-reject>Necessary only</button><button class="cookie-consent__primary" data-cookie-accept>Accept optional</button></div></div>`;
 
   const dialog=document.createElement("dialog");
   dialog.className="cookie-settings";
-  dialog.innerHTML=`<form method="dialog" class="cookie-settings__body"><div class="cookie-settings__top"><h2>Privacy settings</h2><button class="cookie-settings__close" value="cancel" aria-label="Close">×</button></div><p>Choose whether AURA PADDLE may use optional technologies. No analytics or advertising tracker is currently active; these choices will control them if they are added later.</p><label class="cookie-option"><span><strong>Necessary</strong><span>Required for core features and to remember your privacy choice.</span></span><input type="checkbox" checked disabled></label><label class="cookie-option"><span><strong>Analytics</strong><span>Would help us understand aggregate visits and improve the website.</span></span><input id="cookieAnalytics" type="checkbox"></label><label class="cookie-option"><span><strong>Marketing</strong><span>Would support campaign measurement and relevant advertising.</span></span><input id="cookieMarketing" type="checkbox"></label><div class="cookie-settings__actions"><button class="cookie-consent__secondary" value="cancel">Cancel</button><button class="save" value="save">Save choices</button></div></form>`;
+  dialog.innerHTML=`<form method="dialog" class="cookie-settings__body"><div class="cookie-settings__top"><h2>Privacy settings</h2><button class="cookie-settings__close" value="cancel" aria-label="Close">×</button></div><p>Choose whether AURA PADDLE may use optional analytics and advertising technologies. These remain off unless you allow them.</p><label class="cookie-option"><span><strong>Necessary</strong><span>Required for core features and to remember your privacy choice.</span></span><input type="checkbox" checked disabled></label><label class="cookie-option"><span><strong>Analytics</strong><span>Helps us understand aggregate visits, purchases and website performance.</span></span><input id="cookieAnalytics" type="checkbox"></label><label class="cookie-option"><span><strong>Marketing</strong><span>Supports campaign measurement and relevant advertising.</span></span><input id="cookieMarketing" type="checkbox"></label><div class="cookie-settings__actions"><button class="cookie-consent__secondary" value="cancel">Cancel</button><button class="save" value="save">Save choices</button></div></form>`;
   document.body.append(banner,dialog);
 
   const openSettings=()=>{const p=read();dialog.querySelector("#cookieAnalytics").checked=Boolean(p.analytics);dialog.querySelector("#cookieMarketing").checked=Boolean(p.marketing);dialog.showModal()};
