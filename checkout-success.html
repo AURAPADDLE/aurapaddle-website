@@ -32,7 +32,7 @@
     </section>
   </main>
   <script src="cart.js"></script>
-  <script src="cookie-consent.js"></script>
+  <script src="cookie-consent.js?v=20260822-ga4-ecommerce"></script>
   <script>
   (async()=>{
     const id=new URLSearchParams(location.search).get("session_id");
@@ -54,12 +54,12 @@
         const recordPurchase=()=>{
           if(!(window.auraConsent?.analytics||window.auraConsent?.marketing))return;
           try{if(localStorage.getItem(conversionKey)==="true")return}catch{}
-          if(typeof window.gtag!=="function")return;
-          window.gtag("event","purchase",{
+          if(!window.AURAAnalytics)return;
+          window.AURAAnalytics.event("purchase",{
             transaction_id:session.orderNumber,
             value:Number(session.amountTotal||0)/100,
             currency:String(session.currency||"AUD").toUpperCase(),
-            items:items.map(item=>({item_id:item.sku,item_name:item.sku,quantity:Number(item.quantity||1)}))
+            items:items.map(item=>({item_id:item.sku,item_name:item.productName||item.name||item.sku,item_brand:"AURA PADDLE",item_variant:[item.size,item.colour].filter(Boolean).join(" · "),quantity:Number(item.quantity||1)}))
           });
           try{localStorage.setItem(conversionKey,"true")}catch{}
           window.removeEventListener("aura:consent",recordPurchase);

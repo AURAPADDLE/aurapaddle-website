@@ -5,6 +5,7 @@
   const read=()=>{try{return {...defaults,...JSON.parse(localStorage.getItem(storageKey)||"null")}}catch{return {...defaults}}};
   const saved=()=>localStorage.getItem(storageKey)!==null;
   let tagRequested=false;
+  const pendingAnalytics=[];
 
   window.dataLayer=window.dataLayer||[];
   window.gtag=window.gtag||function(){window.dataLayer.push(arguments)};
@@ -36,9 +37,25 @@
     });
     if(analytics||marketing)loadGoogleTag();
   };
+  const analyticsAllowed=()=>Boolean(window.auraConsent?.analytics||window.auraConsent?.marketing);
+  const sendAnalyticsEvent=(name,parameters={})=>{
+    if(!analyticsAllowed()||typeof window.gtag!=="function")return false;
+    loadGoogleTag();
+    window.gtag("event",String(name),parameters);
+    return true;
+  };
+  window.AURAAnalytics={
+    event(name,parameters={}){
+      if(sendAnalyticsEvent(name,parameters))return true;
+      if(!saved())pendingAnalytics.push([name,parameters]);
+      return false;
+    }
+  };
   const apply=preferences=>{
     window.auraConsent={...defaults,...preferences};
     updateGoogleConsent(window.auraConsent);
+    if(analyticsAllowed())while(pendingAnalytics.length)sendAnalyticsEvent(...pendingAnalytics.shift());
+    else if(saved())pendingAnalytics.length=0;
     window.dispatchEvent(new CustomEvent("aura:consent",{detail:window.auraConsent}));
   };
   const save=preferences=>{
@@ -64,5 +81,6 @@
   dialog.addEventListener("close",()=>{if(dialog.returnValue!=="save")return;save({necessary:true,analytics:dialog.querySelector("#cookieAnalytics").checked,marketing:dialog.querySelector("#cookieMarketing").checked});banner.classList.remove("is-visible")});
   document.addEventListener("click",event=>{if(event.target.closest("[data-open-cookie-settings]"))openSettings()});
   apply(read());
+  window.dispatchEvent(new CustomEvent("aura:analytics-ready"));
   if(!saved())banner.classList.add("is-visible");
 })();

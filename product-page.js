@@ -52,6 +52,13 @@
     const v=variant(),c=colour(),unit=numericPrice(v);
     return {sku:v.sku,productName:data.name,shortName:data.short,size:selectedSize,colour:c.name,colourKey:selectedColour,unitAmount:unit*100,retailAmount:Number(v.retailAUD||unit)*100,orderMode:v.orderMode,productUrl:`products/${data.slug}.html?size=${encodeURIComponent(selectedSize)}&colour=${encodeURIComponent(selectedColour)}`,campaign:v.preorder||null,image:(c.images||[])[0]?.replace(/^\.\.\//,"")||""};
   }
+  function analyticsItem(item=cartItem(),itemQuantity=quantity){
+    return {item_id:item.sku,item_name:item.productName,item_brand:"AURA PADDLE",item_category:data.category,item_variant:[item.size,item.colour].filter(Boolean).join(" · "),price:Number(item.unitAmount||0)/100,quantity:Number(itemQuantity||1)};
+  }
+  function track(eventName,parameters){
+    const send=()=>window.AURAAnalytics?.event(eventName,parameters);
+    if(window.AURAAnalytics)send();else window.addEventListener("aura:analytics-ready",send,{once:true});
+  }
   function updateUrl(){const url=new URL(location.href);url.searchParams.set("size",selectedSize);url.searchParams.set("colour",selectedColour);history.replaceState({},"",url)}
 
   function renderGallery(){
@@ -155,7 +162,9 @@
 
   function addToCart(){
     if(!cart)return;
-    cart.add(cartItem(),quantity);
+    const item=cartItem();
+    cart.add(item,quantity);
+    track("add_to_cart",{currency:"AUD",value:Number(item.unitAmount||0)*quantity/100,items:[analyticsItem(item)]});
     let toast=document.getElementById("cartToast");
     if(!toast){toast=document.createElement("div");toast.id="cartToast";toast.className="cart-toast";toast.setAttribute("role","status");document.body.append(toast)}
     toast.innerHTML=`<span><strong>${quantity} × ${data.short}</strong> added to your cart.</span><a href="../cart-preview.html">View cart</a>`;toast.classList.add("show");clearTimeout(addToCart.timer);addToCart.timer=setTimeout(()=>toast.classList.remove("show"),4500);
@@ -163,7 +172,9 @@
 
   function buyNow(){
     if(!cart)return;
-    cart.add(cartItem(),quantity);
+    const item=cartItem();
+    cart.add(item,quantity);
+    track("add_to_cart",{currency:"AUD",value:Number(item.unitAmount||0)*quantity/100,items:[analyticsItem(item)]});
     location.href="../cart-preview.html";
   }
 
@@ -171,7 +182,9 @@
     if(!cart)return;
     const item=(data.accessories||[]).find(accessory=>accessory.sku===sku);
     if(!item)return;
-    cart.add({sku:item.sku,productName:`AURA PADDLE ${item.name}`,shortName:item.name,size:"Accessory",colour:"White",colourKey:"white",unitAmount:Number(item.retailAUD)*100,retailAmount:Number(item.retailAUD)*100,orderMode:"preorder",productUrl:"products/angler-fishing.html",campaign:null,image:String(item.cartImage||item.image||"").replace(/^\.\.\//,"")},1);
+    const cartAccessory={sku:item.sku,productName:`AURA PADDLE ${item.name}`,shortName:item.name,size:"Accessory",colour:"White",colourKey:"white",unitAmount:Number(item.retailAUD)*100,retailAmount:Number(item.retailAUD)*100,orderMode:"preorder",productUrl:"products/angler-fishing.html",campaign:null,image:String(item.cartImage||item.image||"").replace(/^\.\.\//,"")};
+    cart.add(cartAccessory,1);
+    track("add_to_cart",{currency:"AUD",value:Number(cartAccessory.unitAmount||0)/100,items:[analyticsItem(cartAccessory,1)]});
     let toast=document.getElementById("cartToast");
     if(!toast){toast=document.createElement("div");toast.id="cartToast";toast.className="cart-toast";toast.setAttribute("role","status");document.body.append(toast)}
     toast.innerHTML=`<span><strong>${item.name}</strong> added. It will be AUD $${item.bundleAUD} when paired with an Angler Fishing board in this cart.</span><a href="../cart-preview.html">View cart</a>`;toast.classList.add("show");clearTimeout(addAccessory.timer);addAccessory.timer=setTimeout(()=>toast.classList.remove("show"),4500);
@@ -200,6 +213,8 @@
       const response=await fetch(endpoint,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({sku:v.sku,quantity,returnPath:`${location.pathname}${location.search}`,requestId})});
       const payload=await response.json().catch(()=>({}));
       if(!response.ok||!payload.url)throw new Error(payload.error||"Stripe Checkout could not be prepared.");
+      const item=cartItem(),dueToday=isPreorder(v)?Number(item.unitAmount||0)/200:Number(item.unitAmount||0)/100;
+      track("begin_checkout",{currency:"AUD",value:dueToday*quantity,items:[{...analyticsItem(item),price:dueToday}]});
       location.assign(payload.url);
     }catch(error){
       $("checkoutStatus").innerHTML=`<strong>Checkout unavailable:</strong> ${String(error.message||error)} Please try again or contact AURA PADDLE.`;
@@ -246,4 +261,6 @@
   document.querySelectorAll("[data-add-accessory]").forEach(button=>button.addEventListener("click",()=>addAccessory(button.dataset.addAccessory)));
   const menuButton=$("menuButton"),mobileMenu=$("mobileMenu");menuButton.addEventListener("click",()=>{const open=mobileMenu.classList.toggle("open");menuButton.setAttribute("aria-expanded",String(open));document.body.classList.toggle("menu-open",open)});mobileMenu.querySelectorAll("a").forEach(a=>a.addEventListener("click",()=>{mobileMenu.classList.remove("open");document.body.classList.remove("menu-open");menuButton.setAttribute("aria-expanded","false")}));
   renderShippingSupport();setupSurfSizeFinder();renderSelection();refreshPreorderProgress();
+  const viewedItem=cartItem();
+  track("view_item",{currency:"AUD",value:Number(viewedItem.unitAmount||0)/100,items:[analyticsItem(viewedItem,1)]});
 })();

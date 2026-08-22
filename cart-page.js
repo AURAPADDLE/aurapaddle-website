@@ -29,6 +29,11 @@
   empty.querySelector("p").textContent="Choose a board and add its 50% initial pre-order payment to start your order.";
   const money=cents=>new Intl.NumberFormat("en-AU",{style:"currency",currency:"AUD",minimumFractionDigits:cents%100?2:0,maximumFractionDigits:cents%100?2:0}).format(cents/100);
   const escape=value=>String(value).replace(/[&<>'"]/g,char=>({"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;",'"':"&quot;"}[char]));
+  const analyticsItem=(item,price=Number(item.unitAmount||0)/100)=>({item_id:item.sku,item_name:item.productName,item_brand:"AURA PADDLE",item_category:item.sku==="AP667703"?"Accessory":item.shortName,item_variant:[item.size,item.colour].filter(Boolean).join(" · "),price,quantity:Number(item.quantity||1)});
+  const track=(eventName,parameters)=>{
+    const send=()=>window.AURAAnalytics?.event(eventName,parameters);
+    if(window.AURAAnalytics)send();else window.addEventListener("aura:analytics-ready",send,{once:true});
+  };
 
   function bundlePricing(items){
     const anglerQuantity=items.filter(item=>item.shortName==="Angler Fishing").reduce((sum,item)=>sum+item.quantity,0);
@@ -138,6 +143,13 @@
       const response=await fetch(config.checkoutEndpoint||"/api/checkout",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({items:items.map(({sku,quantity})=>({sku,quantity})),shippingRegion:regionSelect.value,returnPath:"/cart-preview.html",requestId:globalThis.crypto?.randomUUID?.()||`${Date.now()}-${Math.random().toString(36).slice(2)}`})});
       const payload=await response.json().catch(()=>({}));
       if(!response.ok||!payload.url)throw new Error(payload.error||"Stripe Checkout could not be prepared.");
+      const pricing=bundlePricing(items);
+      const pricedItems=items.map(item=>{
+        const fullLine=pricing.lineTotal(item),unitFull=fullLine/item.quantity/100;
+        return analyticsItem(item,item.orderMode==="preorder"?unitFull/2:unitFull);
+      });
+      const dueToday=pricedItems.reduce((sum,item)=>sum+item.price*item.quantity,0);
+      track("begin_checkout",{currency:"AUD",value:dueToday,items:pricedItems});
       location.assign(payload.url);
     }catch(reason){
       error.textContent=`Checkout unavailable: ${reason.message||reason}`;
@@ -149,4 +161,9 @@
 
   cart.subscribe(render);
   render();
+  const viewedItems=cart.read();
+  if(viewedItems.length){
+    const pricing=bundlePricing(viewedItems),items=viewedItems.map(item=>analyticsItem(item,pricing.lineTotal(item)/item.quantity/100));
+    track("view_cart",{currency:"AUD",value:items.reduce((sum,item)=>sum+item.price*item.quantity,0),items});
+  }
 })();
