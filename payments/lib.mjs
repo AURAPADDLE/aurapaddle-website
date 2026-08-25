@@ -80,12 +80,67 @@ export function normaliseQuantity(value){
   return quantity;
 }
 
-export function reserveCheckoutIdentity(state,{requestId,now=Math.floor(Date.now()/1000),randomInt=crypto.randomInt,randomBytes=crypto.randomBytes}={}){
+const attributionText=(value,max=120)=>{
+  if(typeof value!=="string")return "";
+  return value.trim().replace(/[\u0000-\u001f\u007f]/g,"").slice(0,max);
+};
+
+function normaliseAttributionTouch(value,{analytics,marketing}){
+  if(!value||typeof value!=="object")return null;
+  const touch={};
+  if(analytics){
+    touch.source=attributionText(value.source,100);
+    touch.medium=attributionText(value.medium,100);
+    touch.campaign=attributionText(value.campaign,160);
+    touch.campaignId=attributionText(value.campaignId,100);
+    touch.content=attributionText(value.content,160);
+    touch.term=attributionText(value.term,160);
+    touch.landingPath=attributionText(value.landingPath,240).startsWith("/")?attributionText(value.landingPath,240):"";
+    touch.referrerHost=attributionText(value.referrerHost,160).toLowerCase().replace(/[^a-z0-9.-]/g,"");
+  }
+  if(marketing){
+    const clickType=attributionText(value.clickType,16).toLowerCase();
+    if(["gclid","gbraid","wbraid"].includes(clickType)){
+      touch.clickType=clickType;
+      touch.clickId=attributionText(value.clickId,240).replace(/[^A-Za-z0-9._~-]/g,"");
+    }
+    touch.gadSource=attributionText(value.gadSource,40).replace(/[^A-Za-z0-9._~-]/g,"");
+  }
+  const capturedAt=Date.parse(value.capturedAt||"");
+  if(Number.isFinite(capturedAt))touch.capturedAt=new Date(capturedAt).toISOString();
+  for(const key of Object.keys(touch))if(touch[key]==="")delete touch[key];
+  return Object.keys(touch).length?touch:null;
+}
+
+export function normaliseAttribution(value){
+  const raw=value&&typeof value==="object"?value:{};
+  const consentRaw=raw.consent&&typeof raw.consent==="object"?raw.consent:{};
+  const consent={analytics:consentRaw.analytics===true,marketing:consentRaw.marketing===true};
+  const updatedAt=Date.parse(consentRaw.updatedAt||"");
+  if(Number.isFinite(updatedAt))consent.updatedAt=new Date(updatedAt).toISOString();
+  const attribution={version:1,consent};
+  attribution.first=normaliseAttributionTouch(raw.first,consent);
+  attribution.last=normaliseAttributionTouch(raw.last,consent);
+  if(consent.analytics){
+    const clientId=attributionText(raw.analyticsClientId,80);
+    const sessionId=attributionText(String(raw.analyticsSessionId||""),32);
+    if(/^\d+\.\d+$/.test(clientId))attribution.analyticsClientId=clientId;
+    if(/^\d+$/.test(sessionId))attribution.analyticsSessionId=sessionId;
+  }
+  if(!attribution.first)delete attribution.first;
+  if(!attribution.last)delete attribution.last;
+  return attribution;
+}
+
+export function reserveCheckoutIdentity(state,{requestId,attribution,now=Math.floor(Date.now()/1000),randomInt=crypto.randomInt,randomBytes=crypto.randomBytes}={}){
   if(!/^[a-zA-Z0-9_-]{8,80}$/.test(requestId||""))throw new Error("Invalid checkout request ID.");
   state.orders??={};state.reservations??={};state.checkoutRequests??={};
   for(const [key,entry] of Object.entries(state.checkoutRequests))if(now-Number(entry?.reservedAt||0)>86400)delete state.checkoutRequests[key];
   const existing=state.checkoutRequests[requestId];
-  if(existing)return {orderNumber:existing.orderNumber,trackingToken:existing.trackingToken,integrationIdentifier:existing.integrationIdentifier};
+  if(existing){
+    if(!existing.attribution&&attribution)existing.attribution=normaliseAttribution(attribution);
+    return {orderNumber:existing.orderNumber,trackingToken:existing.trackingToken,integrationIdentifier:existing.integrationIdentifier};
+  }
   const used=new Set(Object.values(state.orders).map(order=>order.orderNumber));
   for(const [number,reservedAt] of Object.entries(state.reservations)){
     if(now-Number(reservedAt)>86400)delete state.reservations[number];
@@ -95,7 +150,7 @@ export function reserveCheckoutIdentity(state,{requestId,now=Math.floor(Date.now
   do orderNumber=`APO${randomInt(0,100000).toString().padStart(5,"0")}`;while(used.has(orderNumber));
   const trackingToken=randomBytes(24).toString("base64url");
   const suffix=randomBytes(8).toString("hex").slice(0,8).replace(/[0-9]/g,char=>"abcdefghij"[Number(char)]);
-  const identity={orderNumber,trackingToken,integrationIdentifier:`aura_cart_${suffix}`,reservedAt:now};
+  const identity={orderNumber,trackingToken,integrationIdentifier:`aura_cart_${suffix}`,reservedAt:now,attribution:normaliseAttribution(attribution)};
   state.reservations[orderNumber]=now;
   state.checkoutRequests[requestId]=identity;
   return {orderNumber,trackingToken,integrationIdentifier:identity.integrationIdentifier};
@@ -134,11 +189,12 @@ export function safeReturnPath(value,fallbackValue="/cart-preview.html"){
   }catch{return fallback}
 }
 
-function orderMetadata(items,shipping,orderNumber,trackingToken){
+function orderMetadata(items,shipping,orderNumber,trackingToken,attribution){
   const modes=new Set(items.map(item=>item.variant.orderMode));
   const hasPreorder=items.some(item=>item.variant.orderMode==="preorder");
   const quantities=new Map();for(const item of items)quantities.set(item.variant.sku,(quantities.get(item.variant.sku)||0)+item.quantity);
-  return {
+  const normalised=normaliseAttribution(attribution),last=normalised.last||{};
+  const metadata={
     aura_cart_version:"2",
     aura_items:[...quantities].map(([sku,quantity])=>`${sku}:${quantity}`).join(","),
     aura_item_count:String(quantities.size),
@@ -150,20 +206,36 @@ function orderMetadata(items,shipping,orderNumber,trackingToken){
     aura_shipping_amount:shipping.amount===null?"quote_required":String(shipping.amount),
     aura_shipping_stage:"pay_before_dispatch",
     aura_order_number:orderNumber,
-    aura_tracking_token:trackingToken
+    aura_tracking_token:trackingToken,
+    aura_attribution_version:"1",
+    aura_consent_analytics:String(normalised.consent.analytics),
+    aura_consent_marketing:String(normalised.consent.marketing)
   };
+  const optional={
+    aura_attr_source:last.source,
+    aura_attr_medium:last.medium,
+    aura_attr_campaign:last.campaign,
+    aura_click_type:last.clickType,
+    aura_click_id:last.clickId,
+    aura_gad_source:last.gadSource,
+    aura_ga_client_id:normalised.analyticsClientId,
+    aura_ga_session_id:normalised.analyticsSessionId,
+    aura_consent_updated_at:normalised.consent.updatedAt
+  };
+  for(const [key,value] of Object.entries(optional))if(value)metadata[key]=value;
+  return metadata;
 }
 
 function appendObject(params,prefix,object){
   for(const [key,value] of Object.entries(object))params.set(`${prefix}[${key}]`,String(value));
 }
 
-export function buildCheckoutParams({items,priceBySku,siteUrl,returnPath,shipping,orderNumber="APO00000",trackingToken="test-tracking-token",integrationIdentifier="aura_cart_abcdefgh"}){
+export function buildCheckoutParams({items,priceBySku,siteUrl,returnPath,shipping,attribution,orderNumber="APO00000",trackingToken="test-tracking-token",integrationIdentifier="aura_cart_abcdefgh"}){
   const params=new URLSearchParams();
   if(!shipping?.regionId)throw new Error("Shipping region is required for checkout.");
   if(!/^APO\d{5}$/.test(orderNumber))throw new Error("Invalid AURA order number.");
   if(!/^[A-Za-z0-9_-]{16,80}$/.test(trackingToken))throw new Error("Invalid order tracking token.");
-  const metadata=orderMetadata(items,shipping,orderNumber,trackingToken);
+  const metadata=orderMetadata(items,shipping,orderNumber,trackingToken,attribution);
   const cancelPath=safeReturnPath(returnPath,"/cart-preview.html");
   const cancelUrl=new URL(cancelPath,siteUrl);
   cancelUrl.searchParams.set("checkout","cancelled");
@@ -221,12 +293,38 @@ export function verifyStripeSignature(payload,header,secret,toleranceSeconds=300
   });
 }
 
+function attributionFromMetadata(metadata={}){
+  const consent={
+    analytics:metadata.aura_consent_analytics==="true",
+    marketing:metadata.aura_consent_marketing==="true",
+    updatedAt:metadata.aura_consent_updated_at||undefined
+  };
+  const last={
+    source:metadata.aura_attr_source||undefined,
+    medium:metadata.aura_attr_medium||undefined,
+    campaign:metadata.aura_attr_campaign||undefined,
+    clickType:metadata.aura_click_type||undefined,
+    clickId:metadata.aura_click_id||undefined,
+    gadSource:metadata.aura_gad_source||undefined
+  };
+  return normaliseAttribution({
+    version:1,
+    consent,
+    first:last,
+    last,
+    analyticsClientId:metadata.aura_ga_client_id||undefined,
+    analyticsSessionId:metadata.aura_ga_session_id||undefined
+  });
+}
+
 export function applyStripeEvent(state,event){
   state.events??={};state.orders??={};
   if(state.events[event.id])return false;
   const object=event.data?.object||{};
   if(["checkout.session.completed","checkout.session.async_payment_succeeded"].includes(event.type)&&object.payment_status==="paid"){
     const metadata=object.metadata||{},items=parseMetadataItems(metadata),quantity=items.reduce((sum,item)=>sum+item.quantity,0);
+    const reservation=Object.values(state.checkoutRequests||{}).find(item=>item?.orderNumber===metadata.aura_order_number);
+    const attribution=reservation?.attribution?normaliseAttribution(reservation.attribution):attributionFromMetadata(metadata);
     state.orders[object.id]={
       sessionId:object.id,
       orderNumber:metadata.aura_order_number||"",
@@ -253,6 +351,7 @@ export function applyStripeEvent(state,event){
       balancePaymentStatus:"not_requested",
       fulfilmentStatus:"preorder_confirmed",
       customerEmail:object.customer_details?.email||object.customer_email||"",
+      attribution,
       created:object.created||event.created,
       updated:event.created
     };
@@ -284,6 +383,10 @@ export function applyStripeEvent(state,event){
   if(event.type==="invoice.voided"){
     const order=Object.values(state.orders).find(item=>item.orderNumber===object.metadata?.aura_order_number);
     if(order){order.balancePaymentStatus="voided";order.updated=event.created}
+  }
+  if(event.type==="invoice.payment_failed"){
+    const order=Object.values(state.orders).find(item=>item.orderNumber===object.metadata?.aura_order_number);
+    if(order){order.balancePaymentStatus="payment_failed";order.orderStatus="balance_payment_failed";order.updated=event.created}
   }
   state.events[event.id]={type:event.type,created:event.created};
   return true;

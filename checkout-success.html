@@ -51,22 +51,7 @@
       document.getElementById("orderSummary").hidden=false;
       if(paid){
         window.AURACart?.clear();
-        const conversionKey=`aura-purchase-recorded-${session.id}`;
-        const recordPurchase=()=>{
-          if(!(window.auraConsent?.analytics||window.auraConsent?.marketing))return;
-          try{if(localStorage.getItem(conversionKey)==="true")return}catch{}
-          if(!window.AURAAnalytics)return;
-          window.AURAAnalytics.event("purchase",{
-            transaction_id:session.orderNumber,
-            value:Number(session.amountTotal||0)/100,
-            currency:String(session.currency||"AUD").toUpperCase(),
-            items:items.map(item=>({item_id:item.sku,item_name:item.productName||item.name||item.sku,item_brand:"AURA PADDLE",item_variant:[item.size,item.colour].filter(Boolean).join(" · "),quantity:Number(item.quantity||1)}))
-          });
-          try{localStorage.setItem(conversionKey,"true")}catch{}
-          window.removeEventListener("aura:consent",recordPurchase);
-        };
-        recordPurchase();
-        window.addEventListener("aura:consent",recordPurchase);
+        window.AURAAnalytics?.event("payment_confirmation_view",{value:Number(session.amountTotal||0)/100,currency:String(session.currency||"AUD").toUpperCase(),payment_stage:session.paymentStage||"initial_50_percent",order_mode:session.orderMode||"preorder"});
       }
     }catch(error){document.getElementById("statusCopy").textContent=error.message}
   })();

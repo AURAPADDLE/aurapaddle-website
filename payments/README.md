@@ -32,6 +32,17 @@ The server also exposes:
 - `POST /api/stripe-webhook`
 - `GET /api/preorder-progress`
 
+## Consent-aware attribution and GA4
+
+- The browser records first- and last-touch campaign data only after the relevant optional consent is granted. Analytics consent covers UTM/referrer/landing data; Marketing consent covers Google ad-click identifiers (`gclid`, `gbraid`, `wbraid` and `gad_source`).
+- Attribution expires after 90 days, is attached to the reserved APO order, and is copied into Stripe metadata so the webhook can reconcile the order without trusting browser-supplied prices.
+- Stripe webhooks are authoritative for `purchase`, `refund`, remaining-balance payment and balance failure/void events. The browser success page emits only `payment_confirmation_view` to avoid duplicate purchases.
+- Server events are queued in the durable order store before delivery to GA4 and retried with backoff. `/api/health` reports whether GA4 is configured and the pending/failed outbox counts without exposing the API secret.
+- Configure `GA4_MEASUREMENT_ID`, `GA4_API_SECRET` and `GA4_SERVER_EVENTS_ENABLED=true` in the host secret manager. Keep `GA4_VALIDATION_MODE=false` in production.
+- `ENHANCED_CONVERSIONS_ENABLED` must remain `false` until a separately approved launch. No contact detail is hashed or sent while it is disabled.
+
+See `GA4_MEASUREMENT_PLAN.md` for the event ownership, funnel steps and BigQuery rollout gate.
+
 ## Before any live launch
 
 - Reconfirm the published regional freight rates against the production carrier account, then configure the separate remaining-balance payment request or invoice template to use the Stripe shipping metadata.

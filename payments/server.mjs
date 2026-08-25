@@ -3,7 +3,8 @@ import http from "node:http";
 import path from "node:path";
 import crypto from "node:crypto";
 import {fileURLToPath} from "node:url";
-import {applyStripeEvent,buildCheckoutParams,calculateShipping,campaignProgress,loadCatalog,loadShippingRates,loadStripeMap,normaliseCheckoutItems,normaliseQuantity,reserveCheckoutIdentity,safeReturnPath,verifyStripeSignature} from "./lib.mjs";
+import {applyStripeEvent,buildCheckoutParams,calculateShipping,campaignProgress,loadCatalog,loadShippingRates,loadStripeMap,normaliseAttribution,normaliseCheckoutItems,normaliseQuantity,reserveCheckoutIdentity,safeReturnPath,verifyStripeSignature} from "./lib.mjs";
+import {enqueueStripeAnalytics,measurementPayload} from "./analytics.mjs";
 import {createStateStore} from "./state-store.mjs";
 
 const here=path.dirname(fileURLToPath(import.meta.url));
@@ -32,6 +33,11 @@ const stripeKey=process.env.STRIPE_API_KEY||"";
 const webhookSecret=process.env.STRIPE_WEBHOOK_SECRET||"";
 const adminApiToken=process.env.ADMIN_API_TOKEN||"";
 const allowLive=process.env.ALLOW_LIVE_PAYMENTS==="true";
+const ga4MeasurementId=process.env.GA4_MEASUREMENT_ID||"G-0DJKT6VHVL";
+const ga4ApiSecret=process.env.GA4_API_SECRET||"";
+const analyticsDispatchEnabled=process.env.GA4_SERVER_EVENTS_ENABLED!=="false";
+const analyticsValidationMode=process.env.GA4_VALIDATION_MODE==="true";
+const enhancedConversionsEnabled=process.env.ENHANCED_CONVERSIONS_ENABLED==="true";
 const catalog=loadCatalog();
 const shippingRates=loadShippingRates();
 const configuredStripeAccount=process.env.STRIPE_ACCOUNT_ID||"";
@@ -49,7 +55,7 @@ function send(res,status,body,headers={}){
   res.writeHead(status,{"Content-Type":typeof body==="string"?"text/plain; charset=utf-8":"application/json; charset=utf-8","Cache-Control":"no-store",...headers});res.end(payload);
 }
 function readBody(req,limit=1_000_000){return new Promise((resolve,reject)=>{const chunks=[];let size=0;req.on("data",chunk=>{size+=chunk.length;if(size>limit){reject(new Error("Request body is too large."));req.destroy();return}chunks.push(chunk)});req.on("end",()=>resolve(Buffer.concat(chunks)));req.on("error",reject)})}
-async function createOrderIdentity(requestId){return store.mutate(state=>reserveCheckoutIdentity(state,{requestId}))}
+async function createOrderIdentity(requestId,attribution){return store.mutate(state=>reserveCheckoutIdentity(state,{requestId,attribution}))}
 function requireAdmin(req){const token=String(req.headers.authorization||"").replace(/^Bearer\s+/i,"");if(!adminApiToken||token.length!==adminApiToken.length)return false;return crypto.timingSafeEqual(Buffer.from(token),Buffer.from(adminApiToken))}
 function assertStripeKeyMode(){
   if(!stripeKey)throw new Error("Stripe API key is not configured on the checkout server.");
@@ -73,8 +79,9 @@ async function checkout(req,res){
   const fallback=items.length===1?items[0].variant:"/cart-preview.html";
   const returnPath=safeReturnPath(body.returnPath,fallback);
   const requestId=/^[a-zA-Z0-9_-]{8,80}$/.test(body.requestId||"")?body.requestId:`${Date.now()}-${Math.random().toString(36).slice(2)}`;
-  const identity=await createOrderIdentity(requestId);
-  const params=buildCheckoutParams({items,priceBySku:stripeMap.bySku,siteUrl,returnPath,shipping,...identity});
+  const attribution=normaliseAttribution(body.attribution);
+  const identity=await createOrderIdentity(requestId,attribution);
+  const params=buildCheckoutParams({items,priceBySku:stripeMap.bySku,siteUrl,returnPath,shipping,attribution,...identity});
   const session=await stripeRequest("/v1/checkout/sessions",{method:"POST",headers:{"Content-Type":"application/x-www-form-urlencoded","Idempotency-Key":`aura-${requestId}`},body:params});
   send(res,200,{id:session.id,url:session.url,orderNumber:identity.orderNumber,testMode:!session.livemode});
 }
@@ -133,11 +140,46 @@ async function updateFulfilment(req,res){
   if(!order)return send(res,404,{error:"Order not found."});
   send(res,200,orderView(order));
 }
+
+let analyticsFlushActive=false;
+async function claimAnalyticsEntry(){
+  return store.mutate(state=>{
+    const now=Math.floor(Date.now()/1000);
+    for(const entry of Object.values(state.analyticsOutbox||{}))if(entry.status==="sending"&&now-Number(entry.claimedAt||0)>300)entry.status="retry";
+    const entry=Object.values(state.analyticsOutbox||{}).find(item=>["pending","retry"].includes(item.status)&&Number(item.nextAttemptAt||0)<=now);
+    if(!entry)return null;
+    entry.status="sending";entry.claimedAt=now;entry.attempts=Number(entry.attempts||0)+1;
+    return structuredClone(entry);
+  });
+}
+async function completeAnalyticsEntry(key){
+  await store.mutate(state=>{const entry=state.analyticsOutbox?.[key];if(entry){entry.status="sent";entry.sentAt=Math.floor(Date.now()/1000);delete entry.lastError;delete entry.claimedAt}});
+}
+async function retryAnalyticsEntry(key,error){
+  await store.mutate(state=>{const entry=state.analyticsOutbox?.[key];if(!entry)return;const delay=Math.min(3600,30*2**Math.min(Number(entry.attempts||1)-1,7));entry.status=Number(entry.attempts||0)>=12?"failed":"retry";entry.nextAttemptAt=Math.floor(Date.now()/1000)+delay;entry.lastError=String(error?.message||error||"Analytics delivery failed").slice(0,240);delete entry.claimedAt});
+}
+async function flushAnalyticsOutbox(){
+  if(analyticsFlushActive||!analyticsDispatchEnabled||!ga4ApiSecret)return;
+  analyticsFlushActive=true;
+  try{
+    for(let count=0;count<20;count+=1){
+      const entry=await claimAnalyticsEntry();if(!entry)break;
+      try{
+        const endpoint=analyticsValidationMode?"debug/mp/collect":"mp/collect";
+        const response=await fetch(`https://www.google-analytics.com/${endpoint}?measurement_id=${encodeURIComponent(ga4MeasurementId)}&api_secret=${encodeURIComponent(ga4ApiSecret)}`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(measurementPayload(entry)),signal:AbortSignal.timeout(10000)});
+        const result=analyticsValidationMode?await response.json().catch(()=>({})):null;
+        if(!response.ok||result?.validationMessages?.some(message=>message.severity==="ERROR"))throw new Error(`GA4 Measurement Protocol rejected ${entry.eventName}.`);
+        await completeAnalyticsEntry(entry.key);
+      }catch(error){await retryAnalyticsEntry(entry.key,error)}
+    }
+  }finally{analyticsFlushActive=false}
+}
 async function webhook(req,res){
   const raw=await readBody(req);
   if(!verifyStripeSignature(raw.toString("utf8"),req.headers["stripe-signature"],webhookSecret))return send(res,400,{error:"Invalid Stripe webhook signature."});
   const event=JSON.parse(raw.toString("utf8"));
-  await store.mutate(state=>applyStripeEvent(state,event));
+  await store.mutate(state=>{const applied=applyStripeEvent(state,event);if(applied)enqueueStripeAnalytics(state,event,catalog,{enhancedConversionsEnabled});return applied});
+  void flushAnalyticsOutbox().catch(error=>console.error("GA4 outbox flush failed",error));
   send(res,200,{received:true});
 }
 function staticFile(req,res,url){
@@ -156,7 +198,7 @@ function staticFile(req,res,url){
 const server=http.createServer(async(req,res)=>{
   const url=new URL(req.url,siteUrl);
   try{
-    if(req.method==="GET"&&url.pathname==="/api/health")return send(res,200,{ok:true,mode:allowLive?"live-enabled":"sandbox-only",storage:store.kind,stripeConfigured:Boolean(stripeKey),webhookConfigured:Boolean(webhookSecret),adminConfigured:Boolean(adminApiToken),catalogueSkus:catalog.variants.length,mappedStripePrices:stripeMap.bySku.size,stripeAccount:stripeMap.accountId,account:"AURA PADDLE PTY LTD"});
+    if(req.method==="GET"&&url.pathname==="/api/health"){const state=await store.read(),analyticsEntries=Object.values(state.analyticsOutbox||{});return send(res,200,{ok:true,mode:allowLive?"live-enabled":"sandbox-only",storage:store.kind,stripeConfigured:Boolean(stripeKey),webhookConfigured:Boolean(webhookSecret),adminConfigured:Boolean(adminApiToken),catalogueSkus:catalog.variants.length,mappedStripePrices:stripeMap.bySku.size,stripeAccount:stripeMap.accountId,analytics:{serverEventsEnabled:analyticsDispatchEnabled,configured:Boolean(ga4ApiSecret),validationMode:analyticsValidationMode,enhancedConversionsEnabled,pending:analyticsEntries.filter(item=>["pending","retry","sending"].includes(item.status)).length,failed:analyticsEntries.filter(item=>item.status==="failed").length},account:"AURA PADDLE PTY LTD"})}
     if(req.method==="POST"&&url.pathname==="/api/checkout")return await checkout(req,res);
     if(req.method==="GET"&&url.pathname==="/api/checkout-session")return await sessionSummary(req,res,url);
     if(req.method==="GET"&&url.pathname==="/api/order")return await orderStatus(req,res,url);
@@ -170,6 +212,8 @@ const server=http.createServer(async(req,res)=>{
 });
 
 await store.init();
+setInterval(()=>void flushAnalyticsOutbox().catch(error=>console.error("GA4 outbox flush failed",error)),60_000).unref();
+setTimeout(()=>void flushAnalyticsOutbox().catch(error=>console.error("GA4 initial outbox flush failed",error)),2_000).unref();
 server.listen(port,host,()=>{
   console.log(`AURA Stripe review server: ${siteUrl}`);
   console.log(`Stripe mode: ${allowLive?"LIVE ENABLED":"sandbox only"}; key configured: ${Boolean(stripeKey)}; webhook configured: ${Boolean(webhookSecret)}`);

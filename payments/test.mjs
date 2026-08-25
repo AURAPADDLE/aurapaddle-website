@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import crypto from "node:crypto";
 import test from "node:test";
-import {applyStripeEvent,buildCheckoutParams,calculateShipping,campaignProgress,loadCatalog,loadShippingRates,loadStripeMap,normaliseCheckoutItems,normaliseQuantity,reserveCheckoutIdentity,verifyStripeSignature} from "./lib.mjs";
+import {applyStripeEvent,buildCheckoutParams,calculateShipping,campaignProgress,loadCatalog,loadShippingRates,loadStripeMap,normaliseAttribution,normaliseCheckoutItems,normaliseQuantity,reserveCheckoutIdentity,verifyStripeSignature} from "./lib.mjs";
+import {enqueueStripeAnalytics,hashUserData,measurementPayload} from "./analytics.mjs";
 
 const catalog=loadCatalog();
 const shippingRates=loadShippingRates();
@@ -126,6 +127,24 @@ test("Checkout assigns the APO order identity to Stripe metadata",()=>{
   assert.equal(params.get("metadata[aura_tracking_token]"),"secure_tracking_token_48217");
 });
 
+test("checkout attribution is consent-scoped, validated and linked to Stripe metadata",()=>{
+  const attribution=normaliseAttribution({
+    consent:{analytics:true,marketing:true,updatedAt:"2026-08-25T00:00:00.000Z"},
+    first:{source:"google",medium:"cpc",campaign:"launch",landingPath:"/shop/",clickType:"gclid",clickId:"abc_123",capturedAt:"2026-08-25T00:00:00.000Z"},
+    last:{source:"google",medium:"cpc",campaign:"launch",landingPath:"/products/yoga-cruiser.html",clickType:"gclid",clickId:"abc_123",capturedAt:"2026-08-25T00:05:00.000Z"},
+    analyticsClientId:"123456789.987654321",
+    analyticsSessionId:"1787635200"
+  });
+  const items=normaliseCheckoutItems([{sku:"AP734955",quantity:1}],catalog);
+  const params=buildCheckoutParams({items,priceBySku:new Map(),siteUrl:"http://localhost:4242",returnPath:"/cart/",shipping:shippingFor(items),attribution,orderNumber:"APO48217",trackingToken:"secure_tracking_token_48217"});
+  assert.equal(params.get("metadata[aura_attr_source]"),"google");
+  assert.equal(params.get("metadata[aura_click_type]"),"gclid");
+  assert.equal(params.get("metadata[aura_click_id]"),"abc_123");
+  assert.equal(params.get("metadata[aura_ga_client_id]"),"123456789.987654321");
+  const analyticsOnly=normaliseAttribution({...attribution,consent:{analytics:true,marketing:false},last:{...attribution.last,clickType:"gclid",clickId:"should_be_removed"}});
+  assert.equal(analyticsOnly.last.clickId,undefined);
+});
+
 test("checkout retries reuse the same APO identity and Stripe integration identifier",()=>{
   const state={events:{},orders:{},reservations:{},checkoutRequests:{}};
   let integerCalls=0,byteCalls=0;
@@ -138,6 +157,13 @@ test("checkout retries reuse the same APO identity and Stripe integration identi
   assert.match(first.trackingToken,/^[A-Za-z0-9_-]{16,80}$/);
   assert.match(first.integrationIdentifier,/^aura_cart_[a-z]{8}$/);
   assert.equal(integerCalls,1);assert.equal(byteCalls,2);
+});
+
+test("checkout reservation retains attribution for the APO order",()=>{
+  const state={events:{},orders:{},reservations:{},checkoutRequests:{}};
+  reserveCheckoutIdentity(state,{requestId:"attribution-123",attribution:{consent:{analytics:true,marketing:false},first:{source:"newsletter",medium:"email",landingPath:"/shop/"}},randomInt:()=>12345,randomBytes:size=>Buffer.alloc(size,7)});
+  assert.equal(state.checkoutRequests["attribution-123"].orderNumber,"APO12345");
+  assert.equal(state.checkoutRequests["attribution-123"].attribution.first.source,"newsletter");
 });
 
 test("quantity validation rejects tampering",()=>{
@@ -180,4 +206,36 @@ test("Invoice payment does not fulfil an order when the paid amount is zero or m
   const order=state.orders.cs_test_order;
   applyStripeEvent(state,{id:"evt_zero",type:"invoice.paid",created:2,data:{object:{id:"in_expected",amount_paid:0,metadata:{aura_order_number:"APO48218"}}}});
   assert.equal(order.balancePaymentStatus,"payment_review");assert.equal(order.orderStatus,"balance_requested");assert.equal(order.fulfilmentStatus,"awaiting_balance");assert.equal(order.requiresBalancePaymentReview,true);
+});
+
+test("paid Stripe webhook queues one authoritative GA4 purchase",()=>{
+  const attribution={version:1,consent:{analytics:true,marketing:false,updatedAt:"2026-08-25T00:00:00.000Z"},first:{source:"google",medium:"cpc"},last:{source:"google",medium:"cpc"},analyticsClientId:"123456789.987654321",analyticsSessionId:"1787635200"};
+  const state={events:{},orders:{},reservations:{APO48219:1},checkoutRequests:{request_123:{orderNumber:"APO48219",attribution}},analyticsOutbox:{}};
+  const event={id:"evt_purchase",type:"checkout.session.completed",created:1_787_635_200,data:{object:{id:"cs_test_purchase",customer:"cus_test",payment_status:"paid",payment_intent:"pi_test_purchase",amount_total:37450,currency:"aud",customer_details:{email:"MAX@example.com",phone:"+61 400 000 000"},metadata:{aura_items:"AP734955:1",aura_order_number:"APO48219",aura_tracking_token:"secure_tracking_token_48219",aura_order_mode:"preorder",aura_payment_stage:"initial_50_percent"}}}};
+  assert.equal(applyStripeEvent(state,event),true);
+  assert.equal(state.orders.cs_test_purchase.attribution.last.source,"google");
+  assert.equal(enqueueStripeAnalytics(state,event,catalog,{enhancedConversionsEnabled:false}),true);
+  assert.equal(enqueueStripeAnalytics(state,event,catalog,{enhancedConversionsEnabled:false}),false);
+  const entry=state.analyticsOutbox["purchase:APO48219"],payload=measurementPayload(entry);
+  assert.equal(payload.events[0].name,"purchase");
+  assert.equal(payload.events[0].params.transaction_id,"APO48219");
+  assert.equal(payload.events[0].params.value,374.5);
+  assert.equal(payload.events[0].params.session_id,1787635200);
+  assert.equal(payload.user_data,undefined);
+  assert.equal(payload.consent.ad_user_data,"DENIED");
+});
+
+test("enhanced conversion preparation hashes customer data only when enabled and consented",()=>{
+  const hashed=hashUserData({email:" Max.Example@Gmail.com ",phone:"+61 400 000 000",name:"Max Example",address:{line1:"1 Main Street",city:"Gold Coast",state:"QLD",postal_code:"4217",country:"AU"}});
+  assert.match(hashed.sha256_email_address,/^[a-f0-9]{64}$/);
+  assert.notEqual(hashed.sha256_email_address,"maxexample@gmail.com");
+  const attribution={version:1,consent:{analytics:true,marketing:true},analyticsClientId:"123456789.987654321"};
+  const state={events:{},orders:{},checkoutRequests:{request_456:{orderNumber:"APO48220",attribution}},analyticsOutbox:{}};
+  const event={id:"evt_enhanced",type:"checkout.session.completed",created:1_787_635_200,data:{object:{id:"cs_test_enhanced",customer:"cus_test",payment_status:"paid",payment_intent:"pi_test_enhanced",amount_total:37450,currency:"aud",customer_details:{email:"max@example.com",phone:"+61400000000"},metadata:{aura_items:"AP734955:1",aura_order_number:"APO48220",aura_tracking_token:"secure_tracking_token_48220",aura_order_mode:"preorder",aura_payment_stage:"initial_50_percent"}}}};
+  applyStripeEvent(state,event);
+  enqueueStripeAnalytics(state,event,catalog,{enhancedConversionsEnabled:true});
+  const payload=measurementPayload(state.analyticsOutbox["purchase:APO48220"]);
+  assert.match(payload.user_data.sha256_email_address,/^[a-f0-9]{64}$/);
+  assert.equal(payload.user_id,"cus_test");
+  assert.equal(payload.consent.ad_user_data,"GRANTED");
 });
