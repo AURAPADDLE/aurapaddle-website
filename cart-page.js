@@ -119,8 +119,15 @@
     if(!button||!row)return;
     const item=cart.read().find(entry=>entry.sku===row.dataset.sku);
     if(!item)return;
-    if(button.dataset.action==="remove")cart.remove(item.sku);
-    else cart.update(item.sku,item.quantity+(button.dataset.action==="up"?1:-1));
+    const pricing=bundlePricing(cart.read()),unitPrice=pricing.lineTotal(item)/item.quantity/100;
+    if(button.dataset.action==="remove"){
+      track("remove_from_cart",{currency:"AUD",value:unitPrice*item.quantity,items:[analyticsItem(item,unitPrice)]});
+      cart.remove(item.sku);
+    }else{
+      const previousQuantity=item.quantity,nextQuantity=Math.max(1,Math.min(20,item.quantity+(button.dataset.action==="up"?1:-1)));
+      cart.update(item.sku,nextQuantity);
+      if(nextQuantity!==previousQuantity)track("update_cart_quantity",{item_id:item.sku,item_name:item.productName,direction:nextQuantity>previousQuantity?"increase":"decrease",previous_quantity:previousQuantity,quantity:nextQuantity});
+    }
     render();
   });
 
@@ -128,6 +135,10 @@
   regionSelect.addEventListener("change",()=>{
     if(regionSelect.value)sessionStorage.setItem(regionStorageKey,regionSelect.value);
     else sessionStorage.removeItem(regionStorageKey);
+    if(regionSelect.value){
+      const shipping=shippingFor(cart.read(),regionSelect.value);
+      track("select_shipping_region",{shipping_region:regionSelect.value,shipping_type:shipping.pickup?"pickup":shipping.quoteRequired?"quote_required":"published_rate"});
+    }
     render();
   });
 
@@ -139,8 +150,9 @@
     checkout.disabled=true;
     checkout.textContent="Preparing secure checkout…";
     error.style.display="none";
+    let response;
     try{
-      const response=await fetch(config.checkoutEndpoint||"/api/checkout",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({items:items.map(({sku,quantity})=>({sku,quantity})),shippingRegion:regionSelect.value,returnPath:"/cart-preview.html",requestId:globalThis.crypto?.randomUUID?.()||`${Date.now()}-${Math.random().toString(36).slice(2)}`})});
+      response=await fetch(config.checkoutEndpoint||"/api/checkout",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({items:items.map(({sku,quantity})=>({sku,quantity})),shippingRegion:regionSelect.value,returnPath:"/cart-preview.html",requestId:globalThis.crypto?.randomUUID?.()||`${Date.now()}-${Math.random().toString(36).slice(2)}`})});
       const payload=await response.json().catch(()=>({}));
       if(!response.ok||!payload.url)throw new Error(payload.error||"Stripe Checkout could not be prepared.");
       const pricing=bundlePricing(items);
@@ -149,9 +161,12 @@
         return analyticsItem(item,item.orderMode==="preorder"?unitFull/2:unitFull);
       });
       const dueToday=pricedItems.reduce((sum,item)=>sum+item.price*item.quantity,0);
+      const shipping=shippingFor(items,regionSelect.value);
+      track("add_shipping_info",{currency:"AUD",value:dueToday,shipping_tier:regionSelect.value,shipping:Number(shipping.total||0)/100,items:pricedItems});
       track("begin_checkout",{currency:"AUD",value:dueToday,items:pricedItems});
       location.assign(payload.url);
     }catch(reason){
+      track("checkout_error",{checkout_stage:"cart",error_code:window.AURATracking?.errorCode(response)||"request_failed"});
       error.textContent=`Checkout unavailable: ${reason.message||reason}`;
       error.style.display="block";
       checkout.disabled=false;

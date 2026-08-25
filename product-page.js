@@ -66,7 +66,7 @@
     if(images.length){
       strip.innerHTML=images.map((src,index)=>`<button class="thumb${index===0?" active":""}" type="button" data-image="${src}" aria-label="View image ${index+1}"><img src="${src}" alt="${data.name} — ${c.name}, view ${index+1}" width="96" height="96"></button>`).join("");
       main.innerHTML=`<img src="${images[0]}" alt="${data.name} — ${c.name}" width="900" height="900" fetchpriority="high">`;
-      strip.querySelectorAll("button").forEach(btn=>btn.addEventListener("click",()=>{strip.querySelectorAll("button").forEach(x=>x.classList.remove("active"));btn.classList.add("active");main.innerHTML=`<img src="${btn.dataset.image}" alt="${data.name} — ${c.name}" width="900" height="900">`}));
+      strip.querySelectorAll("button").forEach((btn,index)=>btn.addEventListener("click",()=>{strip.querySelectorAll("button").forEach(x=>x.classList.remove("active"));btn.classList.add("active");main.innerHTML=`<img src="${btn.dataset.image}" alt="${data.name} — ${c.name}" width="900" height="900">`;track("view_item_image",{item_id:variant().sku,item_name:data.name,item_variant:[selectedSize,c.name].join(" · "),image_position:index+1})}));
     }else{
       strip.innerHTML=`<button class="thumb active" type="button" aria-label="Photography placeholder"><span class="thumb-placeholder" style="--thumb-bg:${c.swatch}">Photo<br>needed</span></button>`;
       main.innerHTML=`<div class="image-placeholder" style="--placeholder:${c.swatch}"><div class="placeholder-board"></div><strong>${c.name}</strong><span>${data.short} photography is reserved here. The final deck, bottom, detail and on-water images have not yet been supplied.</span></div>`;
@@ -152,11 +152,12 @@
     dialog.addEventListener("click",event=>{if(event.target===dialog)dialog.close()});
     dialog.querySelector("form").addEventListener("submit",event=>{
       event.preventDefault();
-      const form=new FormData(event.currentTarget),recommended=guide.rows[Number(form.get("weight"))]?.[Number(form.get("level"))];
+      const form=new FormData(event.currentTarget),weightIndex=Number(form.get("weight")),levelIndex=Number(form.get("level")),recommended=guide.rows[weightIndex]?.[levelIndex];
       if(!recommended)return;
+      track("size_finder_complete",{item_name:data.name,weight_band:guide.weights[weightIndex],skill_level:["beginner","intermediate","advanced"][levelIndex],recommended_size:recommended});
       const result=dialog.querySelector(".size-finder-result");
       result.hidden=false;result.innerHTML=`<span>Recommended starting size</span><strong>${recommended}</strong><button class="btn btn-coral" type="button">Select this size</button>`;
-      result.querySelector("button").addEventListener("click",()=>{if(data.sizes.includes(recommended)){selectedSize=recommended;renderSelection()}dialog.close();document.querySelector(".product-info")?.scrollIntoView({behavior:"smooth",block:"start"})});
+      result.querySelector("button").addEventListener("click",()=>{if(data.sizes.includes(recommended)){selectedSize=recommended;renderSelection();track("size_finder_select",{item_id:variant().sku,item_name:data.name,recommended_size:recommended})}dialog.close();document.querySelector(".product-info")?.scrollIntoView({behavior:"smooth",block:"start"})});
     });
   }
 
@@ -207,16 +208,18 @@
     if(checkoutInFlight)return;
     const v=variant(),button=$("checkoutButton"),original=button.textContent;
     checkoutInFlight=true;button.disabled=true;button.textContent="Preparing secure checkout…";
+    let response;
     try{
       const endpoint=stripeConfig.checkoutEndpoint||"/api/checkout";
       const requestId=globalThis.crypto?.randomUUID?.()||`${Date.now()}-${Math.random().toString(36).slice(2)}`;
-      const response=await fetch(endpoint,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({sku:v.sku,quantity,returnPath:`${location.pathname}${location.search}`,requestId})});
+      response=await fetch(endpoint,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({sku:v.sku,quantity,returnPath:`${location.pathname}${location.search}`,requestId})});
       const payload=await response.json().catch(()=>({}));
       if(!response.ok||!payload.url)throw new Error(payload.error||"Stripe Checkout could not be prepared.");
       const item=cartItem(),dueToday=isPreorder(v)?Number(item.unitAmount||0)/200:Number(item.unitAmount||0)/100;
       track("begin_checkout",{currency:"AUD",value:dueToday*quantity,items:[{...analyticsItem(item),price:dueToday}]});
       location.assign(payload.url);
     }catch(error){
+      track("checkout_error",{checkout_stage:"product",error_code:window.AURATracking?.errorCode(response)||"request_failed",item_id:v.sku});
       $("checkoutStatus").innerHTML=`<strong>Checkout unavailable:</strong> ${String(error.message||error)} Please try again or contact AURA PADDLE.`;
       button.disabled=false;button.textContent=original;checkoutInFlight=false;
     }
@@ -241,19 +244,23 @@
   async function submitReview(event){
     event.preventDefault();
     const form=event.currentTarget,status=$("reviewStatus"),button=form.querySelector('button[type="submit"]'),original=button.textContent;
+    const reviewData=new FormData(form);
     button.disabled=true;button.textContent="Submitting…";status.classList.remove("error");status.textContent="";
+    let response;
     try{
-      const response=await fetch(form.action,{method:"POST",body:new FormData(form),headers:{Accept:"application/json"}});
+      response=await fetch(form.action,{method:"POST",body:reviewData,headers:{Accept:"application/json"}});
       if(!response.ok)throw new Error("Your review could not be submitted.");
+      track("submit_review",{item_id:variant().sku,item_name:data.name,rating:Number(reviewData.get("rating")||0)});
       form.reset();status.textContent="Thank you. Your review has been received and will be checked before publication.";
     }catch(error){
+      track("form_submit_error",{form_type:"product_review",error_code:window.AURATracking?.errorCode(response)||"request_failed"});
       status.classList.add("error");status.textContent=`${String(error.message||error)} Please try again or email admin@aurapaddle.com.`;
     }finally{button.disabled=false;button.textContent=original}
   }
 
-  document.querySelectorAll("[data-size]").forEach(btn=>btn.addEventListener("click",()=>{selectedSize=btn.dataset.size;renderSelection()}));
-  document.querySelectorAll("[data-colour]").forEach(btn=>btn.addEventListener("click",()=>{selectedColour=btn.dataset.colour;renderSelection()}));
-  $("qtyDown").addEventListener("click",()=>{$("quantity").textContent=quantity=Math.max(1,quantity-1)});$("qtyUp").addEventListener("click",()=>{$("quantity").textContent=quantity=Math.min(20,quantity+1)});
+  document.querySelectorAll("[data-size]").forEach(btn=>btn.addEventListener("click",()=>{selectedSize=btn.dataset.size;renderSelection();track("select_product_option",{item_id:variant().sku,item_name:data.name,option_type:"size",option_value:selectedSize})}));
+  document.querySelectorAll("[data-colour]").forEach(btn=>btn.addEventListener("click",()=>{selectedColour=btn.dataset.colour;renderSelection();track("select_product_option",{item_id:variant().sku,item_name:data.name,option_type:"colour",option_value:colour().name})}));
+  $("qtyDown").addEventListener("click",()=>{const previous=quantity;$("quantity").textContent=quantity=Math.max(1,quantity-1);if(quantity!==previous)track("change_item_quantity",{item_id:variant().sku,item_name:data.name,direction:"decrease",quantity})});$("qtyUp").addEventListener("click",()=>{const previous=quantity;$("quantity").textContent=quantity=Math.min(20,quantity+1);if(quantity!==previous)track("change_item_quantity",{item_id:variant().sku,item_name:data.name,direction:"increase",quantity})});
   document.querySelectorAll(".detail-head").forEach(btn=>btn.addEventListener("click",()=>{const item=btn.parentElement,open=item.classList.toggle("open");btn.setAttribute("aria-expanded",String(open))}));
   document.querySelector(".modal-close").addEventListener("click",()=>$("stripeDialog").close());
   $("checkoutButton").addEventListener("click",beginCheckout);
