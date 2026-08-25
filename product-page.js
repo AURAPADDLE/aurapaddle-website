@@ -212,7 +212,8 @@
     try{
       const endpoint=stripeConfig.checkoutEndpoint||"/api/checkout";
       const requestId=globalThis.crypto?.randomUUID?.()||`${Date.now()}-${Math.random().toString(36).slice(2)}`;
-      response=await fetch(endpoint,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({sku:v.sku,quantity,returnPath:`${location.pathname}${location.search}`,requestId})});
+      const attribution=await window.AURAAttribution?.snapshot?.();
+      response=await fetch(endpoint,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({sku:v.sku,quantity,returnPath:`${location.pathname}${location.search}`,requestId,attribution})});
       const payload=await response.json().catch(()=>({}));
       if(!response.ok||!payload.url)throw new Error(payload.error||"Stripe Checkout could not be prepared.");
       const item=cartItem(),dueToday=isPreorder(v)?Number(item.unitAmount||0)/200:Number(item.unitAmount||0)/100;

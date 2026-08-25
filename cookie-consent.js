@@ -75,7 +75,7 @@
   const getGoogleTagValue=name=>new Promise(resolve=>{
     let finished=false;
     const finish=value=>{if(finished)return;finished=true;clearTimeout(timer);resolve(value)};
-    const timer=setTimeout(()=>finish(""),800);
+    const timer=setTimeout(()=>finish(""),2500);
     try{window.gtag("get",measurementId,name,finish)}catch{finish("")}
   });
   const refreshAnalyticsIds=async preferences=>{
