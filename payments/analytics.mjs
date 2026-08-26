@@ -72,6 +72,7 @@ function orderItems(order,catalog){
 function orderForEvent(state,event){
   const object=event.data?.object||{};
   if(["checkout.session.completed","checkout.session.async_payment_succeeded"].includes(event.type))return state.orders?.[object.id];
+  if(event.type==="checkout.session.expired")return state.abandonedCheckouts?.[object.id];
   if(event.type==="charge.refunded"){
     const paymentIntentId=typeof object.payment_intent==="string"?object.payment_intent:object.payment_intent?.id;
     return Object.values(state.orders||{}).find(order=>order.paymentIntentId===paymentIntentId);
@@ -103,6 +104,10 @@ export function enqueueStripeAnalytics(state,event,catalog,{enhancedConversionsE
     key=`purchase:${order.orderNumber}`;
     eventName="purchase";
     params={transaction_id:order.orderNumber,currency:String(order.currency||"aud").toUpperCase(),value:cents(order.amountTotal),shipping:0,payment_stage:order.paymentStage||"initial_50_percent",items:orderItems(order,catalog)};
+  }else if(event.type==="checkout.session.expired"){
+    key=`checkout_abandoned:${object.id}`;
+    eventName="checkout_abandoned";
+    params={transaction_id:order.orderNumber,currency:String(order.currency||"aud").toUpperCase(),value:cents(order.amountTotal),items:orderItems(order,catalog)};
   }else if(event.type==="charge.refunded"){
     const cumulative=Number(object.amount_refunded||0),previous=Number(order.analyticsRefundQueuedAmount||0),delta=cumulative-previous;
     if(delta<=0)return false;

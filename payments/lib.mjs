@@ -230,7 +230,7 @@ function appendObject(params,prefix,object){
   for(const [key,value] of Object.entries(object))params.set(`${prefix}[${key}]`,String(value));
 }
 
-export function buildCheckoutParams({items,priceBySku,siteUrl,returnPath,shipping,attribution,orderNumber="APO00000",trackingToken="test-tracking-token",integrationIdentifier="aura_cart_abcdefgh"}){
+export function buildCheckoutParams({items,priceBySku,siteUrl,returnPath,shipping,attribution,orderNumber="APO00000",trackingToken="test-tracking-token",integrationIdentifier="aura_cart_abcdefgh",now=Math.floor(Date.now()/1000)}){
   const params=new URLSearchParams();
   if(!shipping?.regionId)throw new Error("Shipping region is required for checkout.");
   if(!/^APO\d{5}$/.test(orderNumber))throw new Error("Invalid AURA order number.");
@@ -260,6 +260,10 @@ export function buildCheckoutParams({items,priceBySku,siteUrl,returnPath,shippin
   if(!shipping.pickup)params.set("shipping_address_collection[allowed_countries][0]","AU");
   params.set("phone_number_collection[enabled]","true");
   params.set("allow_promotion_codes","false");
+  params.set("consent_collection[promotions]","auto");
+  params.set("after_expiration[recovery][enabled]","true");
+  params.set("after_expiration[recovery][allow_promotion_codes]","false");
+  params.set("expires_at",String(now+7200));
   params.set("locale","en");
   params.set("submit_type","pay");
   params.set("payment_intent_data[description]",`AURA PADDLE ${orderNumber} initial payment`);
@@ -317,8 +321,70 @@ function attributionFromMetadata(metadata={}){
   });
 }
 
+function normaliseRecoveryEmail(value){
+  const email=String(value||"").trim().toLowerCase();
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)?email:"";
+}
+
+function pruneRecoveryState(state,now){
+  const cutoff=now-30*86400;
+  for(const [key,item] of Object.entries(state.abandonedCheckouts||{}))if(Number(item?.expiredAt||0)<cutoff)delete state.abandonedCheckouts[key];
+  for(const [key,item] of Object.entries(state.recoveryEmailOutbox||{}))if(["sent","suppressed","failed"].includes(item?.status)&&Number(item?.updatedAt||item?.createdAt||0)<cutoff)delete state.recoveryEmailOutbox[key];
+}
+
+function recordAbandonedCheckout(state,object,event){
+  state.abandonedCheckouts??={};state.recoveryEmailOutbox??={};state.recoverySuppressions??={};
+  const now=Number(event.created||Math.floor(Date.now()/1000));
+  pruneRecoveryState(state,now);
+  const metadata=object.metadata||{},items=parseMetadataItems(metadata),email=normaliseRecoveryEmail(object.customer_details?.email||object.customer_email),recipientHash=email?crypto.createHash("sha256").update(email).digest("hex"):"";
+  const promotionConsent=object.consent?.promotions==="opt_in",recovery=object.after_expiration?.recovery||{},recoveryUrl=String(recovery.url||"");
+  const reservation=Object.values(state.checkoutRequests||{}).find(item=>item?.orderNumber===metadata.aura_order_number);
+  const attribution=reservation?.attribution?normaliseAttribution(reservation.attribution):attributionFromMetadata(metadata);
+  let status=!promotionConsent?"no_consent":!email?"missing_email":!recoveryUrl?"missing_recovery_url":"email_queued";
+  const suppressed=recipientHash&&state.recoverySuppressions[recipientHash];
+  const recent=recipientHash&&Object.values(state.recoveryEmailOutbox).some(entry=>entry.recipientHash===recipientHash&&["pending","retry","sending","sent"].includes(entry.status)&&now-Number(entry.createdAt||0)<7*86400);
+  if(suppressed)status="unsubscribed";
+  else if(recent)status="recent_email_suppressed";
+  const abandonment={
+    sessionId:object.id,orderNumber:metadata.aura_order_number||"",items,amountTotal:Number(object.amount_total||0),currency:object.currency||"aud",customerEmail:email,
+    promotionConsent,recoveryUrl,recoveryExpiresAt:Number(recovery.expires_at||0),createdAt:Number(object.created||0),expiredAt:now,status,attribution
+  };
+  state.abandonedCheckouts[object.id]=abandonment;
+  if(status==="email_queued"){
+    const unsubscribeToken=crypto.randomBytes(24).toString("base64url");
+    state.recoveryEmailOutbox[object.id]={
+      key:object.id,sessionId:object.id,orderNumber:abandonment.orderNumber,items,amountTotal:abandonment.amountTotal,currency:abandonment.currency,
+      recipient:email,recipientHash,recoveryUrl,recoveryExpiresAt:abandonment.recoveryExpiresAt,unsubscribeToken,status:"pending",attempts:0,nextAttemptAt:0,createdAt:now,updatedAt:now
+    };
+  }
+}
+
+export function abandonedCheckoutList(state,catalog){
+  return Object.values(state.abandonedCheckouts||{}).sort((a,b)=>Number(b.expiredAt||0)-Number(a.expiredAt||0)).map(item=>{
+    const emailEntry=state.recoveryEmailOutbox?.[item.sessionId];
+    return {
+      sessionId:item.sessionId,orderNumber:item.orderNumber,email:item.customerEmail||"",items:(item.items||[]).map(entry=>({sku:entry.sku,quantity:entry.quantity,name:catalog?.bySku?.get(entry.sku)?.productName||entry.sku})),
+      amountTotal:item.amountTotal,currency:String(item.currency||"aud").toUpperCase(),createdAt:item.createdAt,expiredAt:item.expiredAt,recoveryExpiresAt:item.recoveryExpiresAt,
+      promotionConsent:item.promotionConsent===true,status:item.status,emailStatus:emailEntry?.status||"not_queued",emailSentAt:emailEntry?.sentAt||null,recoveryUrl:item.recoveryUrl||"",
+      recoveredAt:item.recoveredAt||null,recoveredSessionId:item.recoveredSessionId||"",source:item.attribution?.last?.source||"",campaign:item.attribution?.last?.campaign||""
+    };
+  });
+}
+
+export function unsubscribeRecoveryEmail(state,token,now=Math.floor(Date.now()/1000)){
+  const candidate=String(token||"");
+  if(!/^[A-Za-z0-9_-]{24,80}$/.test(candidate))return false;
+  const tokenHash=crypto.createHash("sha256").update(candidate).digest("hex");
+  const entry=Object.values(state.recoveryEmailOutbox||{}).find(item=>crypto.createHash("sha256").update(String(item.unsubscribeToken||"")).digest("hex")===tokenHash);
+  if(!entry?.recipientHash)return false;
+  state.recoverySuppressions??={};state.recoverySuppressions[entry.recipientHash]={createdAt:now};
+  for(const queued of Object.values(state.recoveryEmailOutbox||{}))if(queued.recipientHash===entry.recipientHash&&["pending","retry","sending"].includes(queued.status)){queued.status="suppressed";queued.updatedAt=now}
+  for(const abandoned of Object.values(state.abandonedCheckouts||{}))if(normaliseRecoveryEmail(abandoned.customerEmail)&&crypto.createHash("sha256").update(normaliseRecoveryEmail(abandoned.customerEmail)).digest("hex")===entry.recipientHash&&!abandoned.recoveredAt)abandoned.status="unsubscribed";
+  return true;
+}
+
 export function applyStripeEvent(state,event){
-  state.events??={};state.orders??={};
+  state.events??={};state.orders??={};state.abandonedCheckouts??={};state.recoveryEmailOutbox??={};state.recoverySuppressions??={};
   if(state.events[event.id])return false;
   const object=event.data?.object||{};
   if(["checkout.session.completed","checkout.session.async_payment_succeeded"].includes(event.type)&&object.payment_status==="paid"){
@@ -355,7 +421,12 @@ export function applyStripeEvent(state,event){
       created:object.created||event.created,
       updated:event.created
     };
+    if(object.recovered_from&&state.abandonedCheckouts[object.recovered_from]){
+      const abandoned=state.abandonedCheckouts[object.recovered_from];
+      abandoned.recoveredAt=event.created;abandoned.recoveredSessionId=object.id;abandoned.status="recovered";
+    }
   }
+  if(event.type==="checkout.session.expired")recordAbandonedCheckout(state,object,event);
   if(event.type==="charge.refunded"){
     const paymentIntentId=typeof object.payment_intent==="string"?object.payment_intent:object.payment_intent?.id;
     const order=Object.values(state.orders).find(item=>item.paymentIntentId===paymentIntentId);

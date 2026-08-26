@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
 import crypto from "node:crypto";
 import test from "node:test";
-import {applyStripeEvent,buildCheckoutParams,calculateShipping,campaignProgress,loadCatalog,loadShippingRates,loadStripeMap,normaliseAttribution,normaliseCheckoutItems,normaliseQuantity,reserveCheckoutIdentity,verifyStripeSignature} from "./lib.mjs";
+import {abandonedCheckoutList,applyStripeEvent,buildCheckoutParams,calculateShipping,campaignProgress,loadCatalog,loadShippingRates,loadStripeMap,normaliseAttribution,normaliseCheckoutItems,normaliseQuantity,reserveCheckoutIdentity,unsubscribeRecoveryEmail,verifyStripeSignature} from "./lib.mjs";
 import {enqueueStripeAnalytics,hashUserData,measurementPayload} from "./analytics.mjs";
+import {recoveryEmailContent} from "./recovery-email.mjs";
 
 const catalog=loadCatalog();
 const shippingRates=loadShippingRates();
@@ -65,6 +66,15 @@ test("checkout trusts the 50% deposit, excludes Afterpay and retains dynamic pay
   assert.equal(params.get("excluded_payment_method_types[0]"),"afterpay_clearpay");
   assert.equal(params.get("integration_identifier"),"aura_cart_abcdefgh");
   assert.equal(params.get("shipping_address_collection[allowed_countries][0]"),"AU");
+  assert.equal(params.get("consent_collection[promotions]"),"auto");
+  assert.equal(params.get("after_expiration[recovery][enabled]"),"true");
+  assert.equal(params.get("after_expiration[recovery][allow_promotion_codes]"),"false");
+});
+
+test("Checkout expires after two hours so Stripe can produce a recovery URL",()=>{
+  const items=normaliseCheckoutItems([{sku:"AP734955",quantity:1}],catalog),now=1_800_000_000;
+  const params=buildCheckoutParams({items,priceBySku:new Map(),siteUrl:"http://localhost:4242",returnPath:"/cart/",shipping:shippingFor(items),now});
+  assert.equal(params.get("expires_at"),String(now+7200));
 });
 
 test("pre-order checkout applies the AUD 50 incentive and collects exactly 50%",()=>{
@@ -238,4 +248,50 @@ test("enhanced conversion preparation hashes customer data only when enabled and
   assert.match(payload.user_data.sha256_email_address,/^[a-f0-9]{64}$/);
   assert.equal(payload.user_id,"cus_test");
   assert.equal(payload.consent.ad_user_data,"GRANTED");
+});
+
+test("expired Checkout records an abandonment and queues one consented recovery email",()=>{
+  const attribution={version:1,consent:{analytics:true,marketing:true},last:{source:"google",medium:"cpc",campaign:"launch"},analyticsClientId:"123456789.987654321",analyticsSessionId:"1787635200"};
+  const state={events:{},orders:{},checkoutRequests:{request_expired:{orderNumber:"APO48221",attribution}},analyticsOutbox:{},abandonedCheckouts:{},recoveryEmailOutbox:{},recoverySuppressions:{}};
+  const event={id:"evt_expired",type:"checkout.session.expired",created:1_787_650_000,data:{object:{id:"cs_test_expired",created:1_787_642_800,amount_total:37450,currency:"aud",customer_details:{email:"buyer@example.com",phone:"+61400000000"},consent:{promotions:"opt_in"},after_expiration:{recovery:{url:"https://buy.stripe.com/r/test_recovery",expires_at:1_790_242_800}},metadata:{aura_items:"AP734955:1",aura_order_number:"APO48221"}}}};
+  assert.equal(applyStripeEvent(state,event),true);
+  const abandoned=state.abandonedCheckouts.cs_test_expired,queued=state.recoveryEmailOutbox.cs_test_expired;
+  assert.equal(abandoned.status,"email_queued");assert.equal(abandoned.customerEmail,"buyer@example.com");assert.equal(abandoned.promotionConsent,true);
+  assert.equal(queued.status,"pending");assert.equal(queued.recipient,"buyer@example.com");assert.equal(queued.phone,undefined);
+  assert.equal(enqueueStripeAnalytics(state,event,catalog),true);
+  assert.equal(measurementPayload(state.analyticsOutbox["checkout_abandoned:cs_test_expired"]).events[0].name,"checkout_abandoned");
+  const list=abandonedCheckoutList(state,catalog);
+  assert.equal(list[0].items[0].name,"AURA PADDLE Yoga Cruiser");assert.equal(list[0].source,"google");
+});
+
+test("recovery email is not queued without Stripe promotional consent",()=>{
+  const state={events:{},orders:{},checkoutRequests:{},abandonedCheckouts:{},recoveryEmailOutbox:{},recoverySuppressions:{}};
+  applyStripeEvent(state,{id:"evt_no_consent",type:"checkout.session.expired",created:1_787_650_100,data:{object:{id:"cs_test_no_consent",amount_total:14950,currency:"aud",customer_details:{email:"private@example.com"},consent:{promotions:"opt_out"},after_expiration:{recovery:{url:"https://buy.stripe.com/r/private"}},metadata:{aura_items:"AP081165:1",aura_order_number:"APO48222"}}}});
+  assert.equal(state.abandonedCheckouts.cs_test_no_consent.status,"no_consent");
+  assert.equal(state.recoveryEmailOutbox.cs_test_no_consent,undefined);
+});
+
+test("recovery unsubscribe suppresses queued email and future sends",()=>{
+  const state={events:{},orders:{},checkoutRequests:{},abandonedCheckouts:{},recoveryEmailOutbox:{},recoverySuppressions:{}};
+  const expired=(id,session,created)=>({id,type:"checkout.session.expired",created,data:{object:{id:session,amount_total:14950,currency:"aud",customer_details:{email:"same@example.com"},consent:{promotions:"opt_in"},after_expiration:{recovery:{url:`https://buy.stripe.com/r/${session}`,expires_at:created+30*86400}},metadata:{aura_items:"AP081165:1",aura_order_number:"APO48223"}}}});
+  applyStripeEvent(state,expired("evt_first","cs_test_first",1_787_650_200));
+  const token=state.recoveryEmailOutbox.cs_test_first.unsubscribeToken;
+  assert.equal(unsubscribeRecoveryEmail(state,token,1_787_650_201),true);
+  assert.equal(state.recoveryEmailOutbox.cs_test_first.status,"suppressed");
+  applyStripeEvent(state,expired("evt_second","cs_test_second",1_787_650_300));
+  assert.equal(state.abandonedCheckouts.cs_test_second.status,"unsubscribed");
+  assert.equal(state.recoveryEmailOutbox.cs_test_second,undefined);
+});
+
+test("successful recovery is linked back to the original abandoned session",()=>{
+  const state={events:{},orders:{},checkoutRequests:{},abandonedCheckouts:{cs_test_old:{sessionId:"cs_test_old",status:"email_sent"}},recoveryEmailOutbox:{},recoverySuppressions:{}};
+  applyStripeEvent(state,{id:"evt_recovered",type:"checkout.session.completed",created:1_787_650_400,data:{object:{id:"cs_test_new",recovered_from:"cs_test_old",payment_status:"paid",payment_intent:"pi_recovered",amount_total:14950,currency:"aud",metadata:{aura_items:"AP081165:1",aura_order_number:"APO48224",aura_tracking_token:"secure_tracking_token_48224"}}}});
+  assert.equal(state.abandonedCheckouts.cs_test_old.status,"recovered");
+  assert.equal(state.abandonedCheckouts.cs_test_old.recoveredSessionId,"cs_test_new");
+});
+
+test("recovery email includes Stripe link, identity and unsubscribe but no SMS action",()=>{
+  const content=recoveryEmailContent({sessionId:"cs_test_mail",orderNumber:"APO48225",items:[{sku:"AP081165",quantity:1}],amountTotal:14950,currency:"aud",recipient:"buyer@example.com",recoveryUrl:"https://buy.stripe.com/r/test_mail",unsubscribeToken:"abcdefghijklmnopqrstuvwxyz123456"},{catalog,siteUrl:"https://www.aurapaddle.com"});
+  assert.match(content.text,/https:\/\/buy\.stripe\.com\/r\/test_mail/);assert.match(content.text,/Aura Paddle Pty Ltd/);assert.match(content.text,/unsubscribe/);
+  assert.doesNotMatch(content.text,/\bSMS\b|text message/i);
 });

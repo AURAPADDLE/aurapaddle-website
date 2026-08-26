@@ -31,6 +31,16 @@ The server also exposes:
 - `GET /api/checkout-session?id=...`
 - `POST /api/stripe-webhook`
 - `GET /api/preorder-progress`
+- `GET /api/admin/abandoned-checkouts` (Bearer `ADMIN_API_TOKEN` required)
+- `GET /api/recovery/unsubscribe?token=...`
+
+## Consented abandoned-checkout recovery
+
+- Stripe Checkout Sessions expire after two hours and have Stripe recovery URLs enabled for 30 days.
+- Stripe collects the customer's promotional-email choice in Checkout. The server queues one recovery email only when that value is `opt_in`, an email is present and Stripe supplied a recovery URL.
+- Recovery sends use a durable outbox, AgentMail idempotency keys, retry backoff, a seven-day same-recipient deduplication window and a one-click suppression link. `AGENTMAIL_AGENTMAIL_API_KEY` is injected by Stripe Projects and never exposed to the browser.
+- The protected internal view is `/admin/abandoned-checkouts/`. Its token is held in `sessionStorage` for the current browser tab only. No SMS provider, SMS queue or SMS action is configured.
+- Abandoned checkout and sent-email operational records are retained for 30 days. Email suppression hashes are retained so an unsubscribe choice continues to be honoured.
 
 ## Consent-aware attribution and GA4
 

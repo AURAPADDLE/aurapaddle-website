@@ -3,8 +3,9 @@ import http from "node:http";
 import path from "node:path";
 import crypto from "node:crypto";
 import {fileURLToPath} from "node:url";
-import {applyStripeEvent,buildCheckoutParams,calculateShipping,campaignProgress,loadCatalog,loadShippingRates,loadStripeMap,normaliseAttribution,normaliseCheckoutItems,normaliseQuantity,reserveCheckoutIdentity,safeReturnPath,verifyStripeSignature} from "./lib.mjs";
+import {abandonedCheckoutList,applyStripeEvent,buildCheckoutParams,calculateShipping,campaignProgress,loadCatalog,loadShippingRates,loadStripeMap,normaliseAttribution,normaliseCheckoutItems,normaliseQuantity,reserveCheckoutIdentity,safeReturnPath,unsubscribeRecoveryEmail,verifyStripeSignature} from "./lib.mjs";
 import {enqueueStripeAnalytics,measurementPayload} from "./analytics.mjs";
+import {ensureRecoveryInbox,sendRecoveryEmail} from "./recovery-email.mjs";
 import {createStateStore} from "./state-store.mjs";
 
 const here=path.dirname(fileURLToPath(import.meta.url));
@@ -38,6 +39,7 @@ const ga4ApiSecret=process.env.GA4_API_SECRET||"";
 const analyticsDispatchEnabled=process.env.GA4_SERVER_EVENTS_ENABLED!=="false";
 const analyticsValidationMode=process.env.GA4_VALIDATION_MODE==="true";
 const enhancedConversionsEnabled=process.env.ENHANCED_CONVERSIONS_ENABLED==="true";
+const agentMailApiKey=process.env.AGENTMAIL_AGENTMAIL_API_KEY||process.env.AGENTMAIL_API_KEY||"";
 const catalog=loadCatalog();
 const shippingRates=loadShippingRates();
 const configuredStripeAccount=process.env.STRIPE_ACCOUNT_ID||"";
@@ -64,7 +66,7 @@ function assertStripeKeyMode(){
 }
 async function stripeRequest(apiPath,options={}){
   assertStripeKeyMode();
-  const response=await fetch(`${stripeApiBase}${apiPath}`,{...options,headers:{Authorization:`Bearer ${stripeKey}`,"Stripe-Version":"2026-06-24.dahlia",...options.headers}});
+  const response=await fetch(`${stripeApiBase}${apiPath}`,{...options,headers:{Authorization:`Bearer ${stripeKey}`,"Stripe-Version":"2026-07-29.dahlia",...options.headers}});
   const payload=await response.json().catch(()=>({}));
   if(!response.ok)throw new Error(payload.error?.message||`Stripe returned HTTP ${response.status}.`);
   return payload;
@@ -141,6 +143,19 @@ async function updateFulfilment(req,res){
   send(res,200,orderView(order));
 }
 
+async function abandonedCheckouts(req,res){
+  if(!requireAdmin(req))return send(res,401,{error:"Admin authorisation required."});
+  send(res,200,{generatedAt:Math.floor(Date.now()/1000),items:abandonedCheckoutList(await store.read(),catalog)});
+}
+
+async function unsubscribeRecovery(req,res,url){
+  const removed=await store.mutate(state=>unsubscribeRecoveryEmail(state,url.searchParams.get("token")));
+  const title=removed?"Email preference updated":"This link is no longer valid";
+  const message=removed?"You will not receive further AURA PADDLE checkout recovery emails.":"The unsubscribe link is invalid or has expired. Contact admin@aurapaddle.com if you need help.";
+  const html=`<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>${title}</title><body style="font-family:Arial,sans-serif;background:#f3f7f8;color:#122936;margin:0"><main style="max-width:620px;margin:80px auto;background:#fff;padding:40px;border-radius:12px"><h1>${title}</h1><p>${message}</p><p><a href="/">Return to AURA PADDLE</a></p></main></body></html>`;
+  res.writeHead(removed?200:404,{"Content-Type":"text/html; charset=utf-8","Cache-Control":"no-store"});res.end(html);
+}
+
 let analyticsFlushActive=false;
 async function claimAnalyticsEntry(){
   return store.mutate(state=>{
@@ -174,12 +189,43 @@ async function flushAnalyticsOutbox(){
     }
   }finally{analyticsFlushActive=false}
 }
+let recoveryFlushActive=false;
+let recoveryEmailReady=false;
+let recoveryEmailInitError="";
+async function claimRecoveryEmail(){
+  return store.mutate(state=>{
+    const now=Math.floor(Date.now()/1000);
+    for(const entry of Object.values(state.recoveryEmailOutbox||{}))if(entry.status==="sending"&&now-Number(entry.claimedAt||0)>300)entry.status="retry";
+    for(const entry of Object.values(state.recoveryEmailOutbox||{}))if(["pending","retry"].includes(entry.status)&&state.recoverySuppressions?.[entry.recipientHash]){entry.status="suppressed";entry.updatedAt=now}
+    const entry=Object.values(state.recoveryEmailOutbox||{}).find(item=>["pending","retry"].includes(item.status)&&Number(item.nextAttemptAt||0)<=now);
+    if(!entry)return null;
+    entry.status="sending";entry.claimedAt=now;entry.attempts=Number(entry.attempts||0)+1;entry.updatedAt=now;
+    return structuredClone(entry);
+  });
+}
+async function completeRecoveryEmail(key,result){
+  await store.mutate(state=>{const entry=state.recoveryEmailOutbox?.[key],abandoned=state.abandonedCheckouts?.[key],now=Math.floor(Date.now()/1000);if(entry){entry.status="sent";entry.sentAt=now;entry.updatedAt=now;entry.messageId=result?.message_id||"";delete entry.lastError;delete entry.claimedAt}if(abandoned&&!abandoned.recoveredAt)abandoned.status="email_sent"});
+}
+async function retryRecoveryEmail(key,error){
+  await store.mutate(state=>{const entry=state.recoveryEmailOutbox?.[key];if(!entry)return;const now=Math.floor(Date.now()/1000),delay=Math.min(3600,30*2**Math.min(Number(entry.attempts||1)-1,7));entry.status=Number(entry.attempts||0)>=12?"failed":"retry";entry.nextAttemptAt=now+delay;entry.updatedAt=now;entry.lastError=String(error?.message||error||"Recovery email delivery failed").slice(0,240);delete entry.claimedAt;const abandoned=state.abandonedCheckouts?.[key];if(abandoned&&entry.status==="failed")abandoned.status="email_failed"});
+}
+async function flushRecoveryEmailOutbox(){
+  if(recoveryFlushActive||!agentMailApiKey)return;
+  recoveryFlushActive=true;
+  try{for(let count=0;count<10;count+=1){const entry=await claimRecoveryEmail();if(!entry)break;try{await completeRecoveryEmail(entry.key,await sendRecoveryEmail(entry,{apiKey:agentMailApiKey,catalog,siteUrl}))}catch(error){await retryRecoveryEmail(entry.key,error)}}}finally{recoveryFlushActive=false}
+}
+async function initialiseRecoveryEmail(){
+  if(!agentMailApiKey)return;
+  try{await ensureRecoveryInbox(agentMailApiKey);recoveryEmailReady=true;recoveryEmailInitError=""}
+  catch(error){recoveryEmailReady=false;recoveryEmailInitError=String(error?.message||error||"Recovery email configuration failed").slice(0,160);console.error("Recovery email configuration failed",error)}
+}
 async function webhook(req,res){
   const raw=await readBody(req);
   if(!verifyStripeSignature(raw.toString("utf8"),req.headers["stripe-signature"],webhookSecret))return send(res,400,{error:"Invalid Stripe webhook signature."});
   const event=JSON.parse(raw.toString("utf8"));
   await store.mutate(state=>{const applied=applyStripeEvent(state,event);if(applied)enqueueStripeAnalytics(state,event,catalog,{enhancedConversionsEnabled});return applied});
   void flushAnalyticsOutbox().catch(error=>console.error("GA4 outbox flush failed",error));
+  void flushRecoveryEmailOutbox().catch(error=>console.error("Recovery email outbox flush failed",error));
   send(res,200,{received:true});
 }
 function staticFile(req,res,url){
@@ -198,12 +244,14 @@ function staticFile(req,res,url){
 const server=http.createServer(async(req,res)=>{
   const url=new URL(req.url,siteUrl);
   try{
-    if(req.method==="GET"&&url.pathname==="/api/health"){const state=await store.read(),analyticsEntries=Object.values(state.analyticsOutbox||{});return send(res,200,{ok:true,mode:allowLive?"live-enabled":"sandbox-only",storage:store.kind,stripeConfigured:Boolean(stripeKey),webhookConfigured:Boolean(webhookSecret),adminConfigured:Boolean(adminApiToken),catalogueSkus:catalog.variants.length,mappedStripePrices:stripeMap.bySku.size,stripeAccount:stripeMap.accountId,analytics:{serverEventsEnabled:analyticsDispatchEnabled,configured:Boolean(ga4ApiSecret),validationMode:analyticsValidationMode,enhancedConversionsEnabled,pending:analyticsEntries.filter(item=>["pending","retry","sending"].includes(item.status)).length,failed:analyticsEntries.filter(item=>item.status==="failed").length},account:"AURA PADDLE PTY LTD"})}
+    if(req.method==="GET"&&url.pathname==="/api/health"){const state=await store.read(),analyticsEntries=Object.values(state.analyticsOutbox||{}),recoveryEntries=Object.values(state.recoveryEmailOutbox||{});return send(res,200,{ok:true,mode:allowLive?"live-enabled":"sandbox-only",storage:store.kind,stripeConfigured:Boolean(stripeKey),webhookConfigured:Boolean(webhookSecret),adminConfigured:Boolean(adminApiToken),catalogueSkus:catalog.variants.length,mappedStripePrices:stripeMap.bySku.size,stripeAccount:stripeMap.accountId,analytics:{serverEventsEnabled:analyticsDispatchEnabled,configured:Boolean(ga4ApiSecret),validationMode:analyticsValidationMode,enhancedConversionsEnabled,pending:analyticsEntries.filter(item=>["pending","retry","sending"].includes(item.status)).length,failed:analyticsEntries.filter(item=>item.status==="failed").length},checkoutRecovery:{enabled:true,emailConfigured:Boolean(agentMailApiKey),emailReady:recoveryEmailReady,configurationError:Boolean(recoveryEmailInitError),smsEnabled:false,pending:recoveryEntries.filter(item=>["pending","retry","sending"].includes(item.status)).length,failed:recoveryEntries.filter(item=>item.status==="failed").length},account:"AURA PADDLE PTY LTD"})}
     if(req.method==="POST"&&url.pathname==="/api/checkout")return await checkout(req,res);
     if(req.method==="GET"&&url.pathname==="/api/checkout-session")return await sessionSummary(req,res,url);
     if(req.method==="GET"&&url.pathname==="/api/order")return await orderStatus(req,res,url);
     if(req.method==="POST"&&url.pathname==="/api/admin/request-balance")return await requestBalance(req,res);
     if(req.method==="POST"&&url.pathname==="/api/admin/order-status")return await updateFulfilment(req,res);
+    if(req.method==="GET"&&url.pathname==="/api/admin/abandoned-checkouts")return await abandonedCheckouts(req,res);
+    if(req.method==="GET"&&url.pathname==="/api/recovery/unsubscribe")return await unsubscribeRecovery(req,res,url);
     if(req.method==="POST"&&url.pathname==="/api/stripe-webhook")return await webhook(req,res);
     if(req.method==="GET"&&url.pathname==="/api/preorder-progress")return send(res,200,{campaigns:campaignProgress(await store.read(),catalog)});
     if(["GET","HEAD"].includes(req.method))return staticFile(req,res,url);
@@ -213,7 +261,9 @@ const server=http.createServer(async(req,res)=>{
 
 await store.init();
 setInterval(()=>void flushAnalyticsOutbox().catch(error=>console.error("GA4 outbox flush failed",error)),60_000).unref();
+setInterval(()=>void flushRecoveryEmailOutbox().catch(error=>console.error("Recovery email outbox flush failed",error)),60_000).unref();
 setTimeout(()=>void flushAnalyticsOutbox().catch(error=>console.error("GA4 initial outbox flush failed",error)),2_000).unref();
+setTimeout(()=>void initialiseRecoveryEmail().then(()=>flushRecoveryEmailOutbox()).catch(error=>console.error("Recovery email initialisation failed",error)),3_000).unref();
 server.listen(port,host,()=>{
   console.log(`AURA Stripe review server: ${siteUrl}`);
   console.log(`Stripe mode: ${allowLive?"LIVE ENABLED":"sandbox only"}; key configured: ${Boolean(stripeKey)}; webhook configured: ${Boolean(webhookSecret)}`);
