@@ -32,8 +32,16 @@
   let selectedColour=new URLSearchParams(location.search).get("colour")||data.colours[0].key;
   let quantity=1;
   let checkoutInFlight=false;
+  let shippingRates=null;
   const stripeConfig=window.AURA_STRIPE||{};
   const cart=window.AURACart;
+  const companyAllocationByCampaign={
+    "paddle-launch-batch-01":20,
+    "gannet-launch-batch":5,
+    "current-launch-batch":5,
+    "meridian-launch-batch":5,
+    "wayfinder-launch-batch":5
+  };
   const surfSizeGuides={
     gannet:{weights:["Under 50 kg","50–60 kg","60–70 kg","70–80 kg","80–90 kg","90–100 kg","100–110 kg"],rows:[["6'0\"","5'8\"","5'8\""],["6'2\"","5'8\"","5'8\""],["6'2\"","5'8\"","5'8\""],["6'2\"","5'8\"","5'8\""],["6'6\"","6'0\"","5'8\""],["6'6\"","6'0\"","6'0\""],["6'6\"","6'2\"","6'0\""]]},
     current:{weights:["Under 50 kg","50–60 kg","60–70 kg","70–80 kg","80–90 kg","90–100 kg","100–110 kg"],rows:[["7'0\"","7'0\"","7'0\""],["7'0\"","7'0\"","7'0\""],["7'6\"","7'0\"","7'0\""],["7'6\"","7'6\"","7'0\""],["8'0\"","7'6\"","7'6\""],["8'0\"","8'0\"","7'6\""],["8'0\"","8'0\"","8'0\""]]},
@@ -48,6 +56,8 @@
   function isPreorder(v=variant()){return v.orderMode==="preorder"}
   function numericPrice(v=variant()){return v.retailAUD?(isPreorder(v)?Number(v.retailAUD)-Number(v.preorder?.discountAUD||0):Number(v.retailAUD)):null}
   function displayPrice(v=variant()){const price=numericPrice(v);return price?`AUD $${price}`:data.price}
+  function moneyFromCents(value){return value===0?"Free":`AUD $${(Number(value||0)/100).toFixed(0)}`}
+  function committedCount(campaign={}){return Math.min(Number(campaign.target||0),Number(companyAllocationByCampaign[campaign.id]||0)+Number(campaign.reserved||0))}
   function cartItem(){
     const v=variant(),c=colour(),unit=numericPrice(v);
     return {sku:v.sku,productName:data.name,shortName:data.short,size:selectedSize,colour:c.name,colourKey:selectedColour,unitAmount:unit*100,retailAmount:Number(v.retailAUD||unit)*100,orderMode:v.orderMode,productUrl:`products/${data.slug}.html?size=${encodeURIComponent(selectedSize)}&colour=${encodeURIComponent(selectedColour)}`,campaign:v.preorder||null,image:(c.images||[])[0]?.replace(/^\.\.\//,"")||""};
@@ -78,9 +88,9 @@
     document.querySelectorAll("[data-colour]").forEach(btn=>{
       const active=btn.dataset.colour===selectedColour;
       btn.classList.toggle("active",active);btn.setAttribute("aria-pressed",String(active));
-      const optionVariant=data.variants.find(v=>v.size===selectedSize&&v.colourKey===btn.dataset.colour),campaign=optionVariant?.preorder||{},target=campaign.target||1,reserved=campaign.reserved||0,percent=Math.min(100,Math.round(reserved/target*100)),available=!!optionVariant?.available,threshold=campaign.thresholdRequired!==false,status=btn.querySelector(".colour-status"),progress=btn.querySelector(".colour-progress");
+      const optionVariant=data.variants.find(v=>v.size===selectedSize&&v.colourKey===btn.dataset.colour),campaign=optionVariant?.preorder||{},target=campaign.target||1,reserved=committedCount(campaign),percent=Math.min(100,Math.round(reserved/target*100)),available=!!optionVariant?.available,threshold=campaign.thresholdRequired!==false,status=btn.querySelector(".colour-status"),progress=btn.querySelector(".colour-progress");
       if(status)status.textContent=available?"Available":threshold?`${campaign.scopeLabel} · ${reserved}/${target}`:"Confirmed pre-order · No minimum";
-      if(progress){progress.hidden=available||!threshold;progress.setAttribute("aria-label",`${campaign.name||colour().name} paid pre-order progress`);progress.setAttribute("aria-valuemax",String(target));progress.setAttribute("aria-valuenow",String(reserved));progress.firstElementChild.style.width=`${percent}%`}
+      if(progress){progress.hidden=available||!threshold;progress.setAttribute("aria-label",`${campaign.name||colour().name} committed production progress`);progress.setAttribute("aria-valuemax",String(target));progress.setAttribute("aria-valuenow",String(reserved));progress.firstElementChild.style.width=`${percent}%`}
     });
     $("selectedSize").textContent=selectedSize;$("selectedColour").textContent=colour().name;
     const v=variant();$("selectedSku").textContent=v.sku;$("selectedVariant").textContent=`${selectedSize} · ${colour().name}`;
@@ -88,13 +98,69 @@
     const selectedSpec=data.sizeGuide?.find(item=>item.size===selectedSize),dimensions=$("selectedDimensions"),volume=$("selectedVolume");
     if(selectedSpec&&dimensions&&volume){dimensions.textContent=`${selectedSpec.size} × ${selectedSpec.width} × ${selectedSpec.thickness}`;volume.textContent=selectedSpec.volume}
     document.querySelectorAll("[data-guide-size]").forEach(row=>row.classList.toggle("selected",row.dataset.guideSize===selectedSize));
-    renderGallery();renderPreorder();renderActions();updateUrl();
+    renderGallery();renderPreorder();renderActions();renderPurchaseClarity();updateUrl();
   }
 
   function enquiryUrl(){const v=variant();return `../redesign-preview.html?interest=${encodeURIComponent(`${data.name} — ${selectedSize} — ${colour().name} — ${v.sku}`)}#contact`}
 
+  function shippingQuoteUrl(){
+    const subject=encodeURIComponent(`Shipping quote — ${data.short} — ${variant().sku}`);
+    const body=encodeURIComponent(`Hello AURA PADDLE,\n\nPlease confirm shipping for:\nProduct: ${data.name}\nSKU: ${variant().sku}\nSize / colour: ${selectedSize} / ${colour().name}\nQuantity: ${quantity}\nDelivery suburb and postcode: \n\nThank you.`);
+    return `mailto:admin@aurapaddle.com?subject=${subject}&body=${body}`;
+  }
+
+  function productShippingClass(){
+    if(!shippingRates)return null;
+    return Object.entries(shippingRates.classes||{}).find(([,slugs])=>slugs.includes(data.slug))?.[0]||"quoteOnly";
+  }
+
+  function renderPurchaseClarity(){
+    const panel=$("purchaseClarity");
+    if(!panel)return;
+    const v=variant(),campaign=v.preorder||{},preorder=isPreorder(v),price=numericPrice(v);
+    $("clarityDueToday").textContent=price?`AUD $${(price*quantity*(preorder?0.5:1)).toFixed(2)}`:"Not charged — waitlist only";
+    $("clarityBalance").textContent=price&&preorder?`AUD $${(price*quantity*.5).toFixed(2)} + shipping`:"Confirmed before payment";
+    $("clarityDispatch").textContent=campaign.estimatedDelivery||"Confirmed after ordering";
+    $("clarityCancellation").textContent=preorder?(campaign.thresholdRequired===false?"Full refund within 48 hours":"Full refund within 48 hours, or until production is confirmed"):"See returns policy";
+
+    const select=$("shippingRegion"),result=$("shippingEstimate"),quote=$("shippingQuote");
+    quote.href=shippingQuoteUrl();
+    if(!shippingRates){result.textContent="Loading current delivery rates…";quote.hidden=true;return}
+    if(!select.options.length){
+      select.innerHTML=`<option value="">Choose delivery region</option>${shippingRates.regions.map(region=>`<option value="${region.id}">${region.label}</option>`).join("")}`;
+    }
+    const region=shippingRates.regions.find(item=>item.id===select.value),shippingClass=productShippingClass();
+    if(!region){result.textContent="Choose a region to see the current GST-inclusive rate.";quote.hidden=true;return}
+    const multiSurfboard=shippingClass==="surfboard"&&quantity>1;
+    const quoteRequired=region.quoteRequired||shippingClass==="quoteOnly"||multiSurfboard;
+    if(quoteRequired){
+      const reason=multiSurfboard?"Orders with two or more hard surfboards are quoted for the complete consignment.":"This product or destination needs an individual freight quote.";
+      result.innerHTML=`<strong>Quote required</strong><span>${reason}</span>`;
+      quote.hidden=false;
+      return;
+    }
+    let amount=Number(region[shippingClass]||0)*quantity;
+    const lengthFeet=Number((selectedSize.match(/^(\d+)/)||[])[1]||0);
+    if(shippingClass==="surfboard"&&lengthFeet>=9)amount+=Number(shippingRates.longboardSurcharge||0)*quantity;
+    result.innerHTML=`<strong>${moneyFromCents(amount)} incl. GST</strong><span>${region.id==="local-pickup"?shippingRates.localPickupNote:"Recorded with your order and paid with the remaining balance before dispatch."}</span>`;
+    quote.hidden=true;
+  }
+
+  function setupPurchaseClarity(){
+    const priceNote=$("priceNote");
+    if(!priceNote)return;
+    const panel=document.createElement("section");
+    panel.id="purchaseClarity";
+    panel.className="purchase-clarity";
+    panel.setAttribute("aria-labelledby","purchaseClarityTitle");
+    panel.innerHTML=`<div class="clarity-heading"><div><p class="section-label">Before you pre-order</p><h2 id="purchaseClarityTitle">What you pay, when it ships, and how delivery works.</h2></div><a href="../preorder-preview.html">Full pre-order guide</a></div><dl class="clarity-facts"><div><dt>Due today</dt><dd id="clarityDueToday">—</dd></div><div><dt>Balance before dispatch</dt><dd id="clarityBalance">—</dd></div><div><dt>Estimated dispatch</dt><dd id="clarityDispatch">—</dd></div><div><dt>Cancellation</dt><dd id="clarityCancellation">—</dd></div></dl><div class="shipping-estimator"><label for="shippingRegion">Check shipping before checkout</label><select id="shippingRegion" aria-describedby="shippingEstimate"></select><div id="shippingEstimate" class="shipping-estimate" aria-live="polite">Loading current delivery rates…</div><a id="shippingQuote" class="btn btn-outline" href="mailto:admin@aurapaddle.com" hidden>Request a shipping quote</a><p>Australia only · Rates include GST · Free Gold Coast pickup is available.</p></div>`;
+    priceNote.insertAdjacentElement("afterend",panel);
+    $("shippingRegion").addEventListener("change",()=>{renderPurchaseClarity();track("view_shipping_rate",{item_id:variant().sku,item_name:data.name,shipping_region:$("shippingRegion").value,quantity})});
+    fetch("../shipping-rates.json",{headers:{Accept:"application/json"}}).then(response=>response.ok?response.json():Promise.reject()).then(payload=>{shippingRates=payload;renderPurchaseClarity()}).catch(()=>{$("shippingEstimate").textContent="Current rates could not be loaded. Please request a shipping quote.";$("shippingQuote").hidden=false});
+  }
+
   function renderPreorder(){
-    const v=variant(),preorder=isPreorder(v),campaign=v.preorder||{},target=campaign.target||1,reserved=campaign.reserved||0,percent=Math.min(100,Math.round(reserved/target*100)),threshold=campaign.thresholdRequired!==false;
+    const v=variant(),preorder=isPreorder(v),campaign=v.preorder||{},target=campaign.target||1,reserved=committedCount(campaign),percent=Math.min(100,Math.round(reserved/target*100)),threshold=campaign.thresholdRequired!==false,remaining=Math.max(0,target-reserved);
     $("availability").classList.toggle("is-preorder",preorder);
     document.querySelector("#availability .status-dot").classList.toggle("preorder",preorder);
     $("availabilityText").textContent=preorder?threshold?`Pre-order · ${campaign.scopeLabel} ${reserved}/${target}`:`Pre-order · Confirmed · ${campaign.scopeLabel}`:"Available now";
@@ -108,9 +174,9 @@
     if(!guideLink){guideLink=document.createElement("a");guideLink.id="preorderGuide";guideLink.className="preorder-guide";guideLink.href="../preorder-preview.html";guideLink.textContent="Understand the complete pre-order process →";$("preorderCopy").insertAdjacentElement("afterend",guideLink)}
     guideLink.hidden=!preorder;
     if(!preorder)return;
-    $("preorderKicker").textContent=campaign.name;$("preorderTitle").textContent=campaign.title;$("preorderCount").hidden=!threshold;$("preorderCount").textContent=threshold?`${reserved} / ${target}`:"";
+    $("preorderKicker").textContent=campaign.name;$("preorderTitle").textContent=threshold&&companyAllocationByCampaign[campaign.id]?(remaining?`${remaining} more to production.`:"Production target reached."):campaign.title;$("preorderCount").hidden=!threshold;$("preorderCount").textContent=threshold?`${reserved} / ${target}`:"";
     $("preorderProgress").style.width=`${percent}%`;
-    const track=$("preorderProgress").parentElement;track.hidden=!threshold;track.setAttribute("aria-label",`${campaign.name} paid pre-order progress`);track.setAttribute("aria-valuemax",String(target));track.setAttribute("aria-valuenow",String(reserved));
+    const track=$("preorderProgress").parentElement;track.hidden=!threshold;track.setAttribute("aria-label",`${campaign.name} committed production progress`);track.setAttribute("aria-valuemax",String(target));track.setAttribute("aria-valuenow",String(reserved));
     $("preorderDeadlineLabel").textContent=threshold?"Closing date":"Production condition";$("preorderDeadline").textContent=threshold?campaign.deadline:"No minimum quantity";$("preorderDelivery").textContent=campaign.estimatedDelivery;$("preorderDiscount").textContent=`AUD $${campaign.discountAUD} off each eligible ${item}`;$("preorderPayment").textContent=campaign.payment;
     $("preorderCopy").textContent=threshold?`${campaign.description} If the target is not reached by ${campaign.deadline}, all affected orders will be cancelled and fully refunded to their original payment method.`:campaign.description;
     const cancellation=threshold?" A change-of-mind cancellation receives a full refund if requested within 48 hours of the successful initial payment, or later while the order remains conditional and before AURA PADDLE confirms production in writing. Once production is confirmed or the order is placed with the manufacturer, change-of-mind cancellation is not available.":" As this is a confirmed pre-order with no minimum quantity, change-of-mind cancellation is available for a full refund only within 48 hours of the successful initial payment.";
@@ -127,7 +193,7 @@
     }else $("purchaseActions").innerHTML=`<a class="btn btn-dark" href="${enquiryUrl()}">Join the pre-order waitlist</a><a class="btn btn-outline" href="${enquiryUrl()}">Request confirmed price</a>`;
     $("purchaseActions").querySelector("[data-add-cart]")?.addEventListener("click",addToCart);
     $("purchaseActions").querySelector("[data-buy-now]")?.addEventListener("click",buyNow);
-    $("stockCopy").textContent=v.available?data.stock:campaign.thresholdRequired===false?`Confirmed pre-order · Estimated dispatch ${campaign.estimatedDelivery}`:`${campaign.scopeLabel} · ${campaign.reserved||0}/${campaign.target} ${campaign.countLabel||"paid boards"}`;
+    $("stockCopy").textContent=v.available?data.stock:campaign.thresholdRequired===false?`Confirmed pre-order · Estimated dispatch ${campaign.estimatedDelivery}`:`${campaign.scopeLabel} · ${committedCount(campaign)}/${campaign.target} committed`;
   }
 
   function renderShippingSupport(){
@@ -261,14 +327,14 @@
 
   document.querySelectorAll("[data-size]").forEach(btn=>btn.addEventListener("click",()=>{selectedSize=btn.dataset.size;renderSelection();track("select_product_option",{item_id:variant().sku,item_name:data.name,option_type:"size",option_value:selectedSize})}));
   document.querySelectorAll("[data-colour]").forEach(btn=>btn.addEventListener("click",()=>{selectedColour=btn.dataset.colour;renderSelection();track("select_product_option",{item_id:variant().sku,item_name:data.name,option_type:"colour",option_value:colour().name})}));
-  $("qtyDown").addEventListener("click",()=>{const previous=quantity;$("quantity").textContent=quantity=Math.max(1,quantity-1);if(quantity!==previous)track("change_item_quantity",{item_id:variant().sku,item_name:data.name,direction:"decrease",quantity})});$("qtyUp").addEventListener("click",()=>{const previous=quantity;$("quantity").textContent=quantity=Math.min(20,quantity+1);if(quantity!==previous)track("change_item_quantity",{item_id:variant().sku,item_name:data.name,direction:"increase",quantity})});
+  $("qtyDown").addEventListener("click",()=>{const previous=quantity;$("quantity").textContent=quantity=Math.max(1,quantity-1);if(quantity!==previous){renderPurchaseClarity();track("change_item_quantity",{item_id:variant().sku,item_name:data.name,direction:"decrease",quantity})}});$("qtyUp").addEventListener("click",()=>{const previous=quantity;$("quantity").textContent=quantity=Math.min(20,quantity+1);if(quantity!==previous){renderPurchaseClarity();track("change_item_quantity",{item_id:variant().sku,item_name:data.name,direction:"increase",quantity})}});
   document.querySelectorAll(".detail-head").forEach(btn=>btn.addEventListener("click",()=>{const item=btn.parentElement,open=item.classList.toggle("open");btn.setAttribute("aria-expanded",String(open))}));
   document.querySelector(".modal-close").addEventListener("click",()=>$("stripeDialog").close());
   $("checkoutButton").addEventListener("click",beginCheckout);
   $("reviewForm")?.addEventListener("submit",submitReview);
   document.querySelectorAll("[data-add-accessory]").forEach(button=>button.addEventListener("click",()=>addAccessory(button.dataset.addAccessory)));
   const menuButton=$("menuButton"),mobileMenu=$("mobileMenu");menuButton.addEventListener("click",()=>{const open=mobileMenu.classList.toggle("open");menuButton.setAttribute("aria-expanded",String(open));document.body.classList.toggle("menu-open",open)});mobileMenu.querySelectorAll("a").forEach(a=>a.addEventListener("click",()=>{mobileMenu.classList.remove("open");document.body.classList.remove("menu-open");menuButton.setAttribute("aria-expanded","false")}));
-  renderShippingSupport();setupSurfSizeFinder();renderSelection();refreshPreorderProgress();
+  renderShippingSupport();setupSurfSizeFinder();setupPurchaseClarity();renderSelection();refreshPreorderProgress();
   const viewedItem=cartItem();
   track("view_item",{currency:"AUD",value:Number(viewedItem.unitAmount||0)/100,items:[analyticsItem(viewedItem,1)]});
 })();
