@@ -59,6 +59,11 @@
     .comparison a{color:var(--ocean);font-weight:600}
   </style>
   <link rel="stylesheet" href="cookie-consent.css">
+  <style>
+    .card-progress{position:absolute;top:3.35rem;left:1rem;width:min(12rem,calc(100% - 2rem));height:4px;border-radius:999px;background:rgba(7,31,45,.16);overflow:hidden}
+    .card-progress>i{display:block;height:100%;width:0;border-radius:inherit;background:var(--coral);transition:width .35s ease}
+    .product-card[data-product-id="yoga"] .card-progress>i{background:linear-gradient(90deg,var(--deep),var(--coral))}
+  </style>
 </head>
 <body>
   <header class="site-header">
@@ -85,7 +90,7 @@
 
     <section class="catalogue" id="products">
       <div class="wrap">
-        <div class="catalogue-head"><div><p class="eyebrow">Explore the range</p><h2>Choose your way on water.</h2></div><p>Open a board to see which production batch it joins. Paid quantities are pooled by the published campaign—not by individual size or colour SKU.</p></div>
+        <div class="catalogue-head"><div><p class="eyebrow">Explore the range</p><h2>Choose your way on water.</h2></div><p>Displayed totals combine AURA's committed production allocation with paid, non-refunded customer pre-orders and update automatically.</p></div>
         <div class="filters" aria-label="Filter products">
           <button class="filter active" type="button" data-filter="all" aria-pressed="true">All boards</button>
           <button class="filter" type="button" data-filter="paddle" aria-pressed="false">Paddle</button>
@@ -146,6 +151,7 @@
     function renderProducts(filter="all"){
       const matches=products.filter(p=>filter==="all"||p.category===filter);
       grid.innerHTML=matches.length?matches.map(p=>`<article class="product-card" tabindex="0" role="link" data-product-url="${p.url}" aria-label="View ${p.name} details"><div class="product-media">${p.image?`<img src="${p.image}" alt="AURA PADDLE ${p.name} product render" loading="lazy" width="900" height="675">`:`<div class="photo-slot"><div class="slot-icon">◇</div><strong>Photography reserved</strong><span>${p.photo}</span></div>`}<span class="status ${p.mode}">${p.status}</span></div><div class="product-body"><span class="product-type">${p.type}</span><h3>${p.name}</h3><p>${p.desc}</p><div class="chips">${p.chips.map(c=>`<span class="chip">${c}</span>`).join("")}</div>${p.colours?`<div class="card-colours" aria-label="${p.colours.length} colourways"><strong>${p.colours.length} colours</strong>${p.colours.map(c=>`<i class="colour-dot" style="--dot:${c.swatch}" title="${c.name}"></i>`).join("")}</div>`:""}<div class="card-actions"><a class="btn btn-outline" href="${p.url}">View details</a><a class="btn btn-dark" href="${p.url}">${p.mode==="available"?"Shop now":p.mode==="mixed"?"View options":"Pre-order details"}</a></div></div></article>`).join(""):`<p class="empty">No products are listed in this category yet.</p>`;
+      window.AURAShopProgress?.apply();
     }
     function setFilter(filter,updateUrl=false){const safe=validFilters.has(filter)?filter:"all";document.querySelectorAll(".filter").forEach(btn=>{const active=btn.dataset.filter===safe;btn.classList.toggle("active",active);btn.setAttribute("aria-pressed",String(active))});renderProducts(safe);if(updateUrl){const url=new URL(location.href);safe==="all"?url.searchParams.delete("category"):url.searchParams.set("category",safe);history.replaceState({},"",url)}}
     const initialFilter=new URLSearchParams(location.search).get("category")||"all";setFilter(initialFilter);
@@ -156,5 +162,5 @@
     document.getElementById("stripePreviewButton").addEventListener("click",()=>stripeDialog.showModal());
     const menuButton=document.getElementById("menuButton"),mobileMenu=document.getElementById("mobileMenu");menuButton.addEventListener("click",()=>{const open=mobileMenu.classList.toggle("open");menuButton.setAttribute("aria-expanded",String(open));document.body.classList.toggle("menu-open",open)});mobileMenu.querySelectorAll("a").forEach(a=>a.addEventListener("click",()=>{mobileMenu.classList.remove("open");document.body.classList.remove("menu-open");menuButton.setAttribute("aria-expanded","false")}));
   </script>
-<script src="cookie-consent.js"></script></body>
+<script src="cookie-consent.js"></script><script src="shop-progress.js?v=20260828-live-progress"></script></body>
 </html>
