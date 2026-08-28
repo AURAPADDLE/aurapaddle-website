@@ -62,6 +62,20 @@
     /* Preserve the existing hero frame while displaying the full 16:9 video. */
     .hero-media{background:#061923;display:flex;align-items:center}
     .hero-media video{width:100%;height:auto;aspect-ratio:16/9;object-fit:contain}
+    /* Preserve the brand promise and prove customer participation beneath it. */
+    .hero-brand-copy strong{color:#fff;font-weight:500}
+    .hero-batch-proof{max-width:44%;margin-top:2.2rem;padding:1rem 1.1rem 1.05rem;border:1px solid rgba(255,255,255,.2);border-radius:1rem;background:rgba(4,21,31,.6);backdrop-filter:blur(10px);box-shadow:0 18px 48px rgba(0,0,0,.18)}
+    .hero-batch-proof__promise{margin:0 0 .85rem;font:600 .88rem/1.25 "Manrope",sans-serif;letter-spacing:-.015em;text-transform:uppercase;color:#fff}
+    .hero-batch-proof__promise span{color:var(--coral)}
+    .hero-batch-proof__head,.hero-batch-proof__foot{display:flex;align-items:center;justify-content:space-between;gap:1rem}
+    .hero-batch-proof__head span{font:600 .66rem/1.2 "Manrope",sans-serif;letter-spacing:.13em;text-transform:uppercase;color:var(--aqua)}
+    .hero-batch-proof__head strong{font:600 1.05rem/1 "Manrope",sans-serif;color:#fff;white-space:nowrap}
+    .hero-batch-proof__track{height:.42rem;margin:.75rem 0 .65rem;border-radius:999px;background:rgba(255,255,255,.14);overflow:hidden}
+    .hero-batch-proof__track span{display:block;width:40%;height:100%;border-radius:inherit;background:linear-gradient(90deg,var(--coral),#ff8b6f);transition:width .45s ease}
+    .hero-batch-proof__foot{font-size:.72rem;line-height:1.35;color:rgba(255,255,255,.65)}
+    .hero-batch-proof__foot strong{font-weight:500;color:#fff}
+    @media(max-width:1000px){.hero-batch-proof{max-width:720px}}
+    @media(max-width:650px){.hero-batch-proof{margin-top:1.6rem}.hero-batch-proof__foot{align-items:flex-start;flex-direction:column;gap:.25rem}}
   </style>
 </head>
 <body>
@@ -83,9 +97,14 @@
       <div class="wrap hero-inner">
         <p class="eyebrow" style="color:var(--aqua)">Paddle · Surf · Foil · Wake</p>
         <h1><span class="hero-lead">Paddle out.</span><span class="hero-tagline">Find your way<br>on the water.</span></h1>
-        <p class="hero-copy">AURA PADDLE makes purpose-built paddleboards, surfboards, foil and wake boards for Australian waters—from still mornings to open-water adventures.</p>
+        <p class="hero-copy hero-brand-copy"><strong>Purpose-built boards for Australian waters</strong>—created for the freedom to explore, the confidence to progress and the courage to try something new.</p>
         <div class="hero-actions"><a class="btn btn-primary" href="shop/">Explore the range</a><a class="btn btn-ghost" href="#finder">Find your board</a></div>
-        <div class="hero-meta"><div><strong>Purpose-built range</strong><span>Paddle, surf, wake and foil</span></div><div><strong>Complete kits</strong><span>Ready from the first moment</span></div><div><strong>Australia-wide</strong><span>Local water, local support</span></div><div><strong>Wholesale ready</strong><span>Dealers, schools and rentals</span></div></div>
+        <div class="hero-batch-proof" data-hero-batch aria-label="Shared Paddle batch committed production progress">
+          <p class="hero-batch-proof__promise">Made <span>with you.</span> Not just for you.</p>
+          <div class="hero-batch-proof__head"><span>Live shared paddle batch</span><strong data-hero-batch-count>20 / 50</strong></div>
+          <div class="hero-batch-proof__track" role="progressbar" aria-label="Shared Paddle batch committed production progress" aria-valuemin="0" aria-valuemax="50" aria-valuenow="20"><span data-hero-batch-bar></span></div>
+          <div class="hero-batch-proof__foot"><strong>Your pre-order moves this batch forward.</strong><span data-hero-batch-remaining>30 more to production.</span></div>
+        </div>
       </div>
     </section>
 
@@ -166,8 +185,9 @@
     const menuButton=document.getElementById("menuButton"),mobileMenu=document.getElementById("mobileMenu");menuButton.addEventListener("click",()=>{const open=mobileMenu.classList.toggle("open");menuButton.setAttribute("aria-expanded",open);document.body.classList.toggle("menu-open",open)});mobileMenu.querySelectorAll("a").forEach(a=>a.addEventListener("click",()=>{mobileMenu.classList.remove("open");document.body.classList.remove("menu-open");menuButton.setAttribute("aria-expanded","false")}));
     window.addEventListener("scroll",()=>document.getElementById("siteHeader").classList.toggle("scrolled",scrollY>30),{passive:true});
     const heroVideo=document.getElementById("heroVideo"),reduceMotion=window.matchMedia("(prefers-reduced-motion: reduce)");if(reduceMotion.matches){heroVideo.removeAttribute("autoplay");heroVideo.pause()}else{heroVideo.play().catch(()=>{})}document.addEventListener("visibilitychange",()=>{if(document.hidden)heroVideo.pause();else if(!reduceMotion.matches)heroVideo.play().catch(()=>{})});
+    const heroBatch=document.querySelector("[data-hero-batch]"),heroBatchTarget=50,heroBatchAllocation=20;const updateHeroBatch=reserved=>{const committed=Math.min(heroBatchTarget,heroBatchAllocation+Math.max(0,Number(reserved)||0)),percent=Math.min(100,Math.round(committed/heroBatchTarget*100)),remaining=Math.max(0,heroBatchTarget-committed);heroBatch.querySelector("[data-hero-batch-count]").textContent=`${committed} / ${heroBatchTarget}`;heroBatch.querySelector("[data-hero-batch-bar]").style.width=`${percent}%`;heroBatch.querySelector("[role=progressbar]").setAttribute("aria-valuenow",String(committed));heroBatch.querySelector("[data-hero-batch-remaining]").textContent=remaining?`${remaining} more to production.`:"Production target reached."};const refreshHeroBatch=async()=>{if(location.protocol==="file:")return;try{const response=await fetch("/api/preorder-progress",{cache:"no-store",headers:{Accept:"application/json"}});if(!response.ok)return;const payload=await response.json(),campaign=(payload.campaigns||[]).find(item=>item.id==="paddle-launch-batch-01");updateHeroBatch(campaign?.reserved)}catch{}};updateHeroBatch(0);refreshHeroBatch();window.setInterval(refreshHeroBatch,60000);
     document.getElementById("newsletterForm").addEventListener("submit",async e=>{e.preventDefault();const form=e.currentTarget,status=document.getElementById("newsletterStatus"),button=form.querySelector("button[type=submit]");status.style.display="block";status.textContent="Joining…";button.disabled=true;let response;try{response=await fetch(form.action,{method:"POST",body:new FormData(form),headers:{Accept:"application/json"}});if(!response.ok)throw new Error();window.AURATracking?.event("sign_up",{method:"newsletter",form_location:"homepage"});status.textContent="Thank you — you are on the AURA PADDLE list.";form.reset()}catch{window.AURATracking?.event("form_submit_error",{form_type:"newsletter",error_code:window.AURATracking?.errorCode(response)||"request_failed"});status.textContent="We could not save your subscription. Please email admin@aurapaddle.com."}finally{button.disabled=false}});
-    const preorderOffer=document.getElementById("preorderOffer"),preorderOfferKey="aura-preorder-offer-seen-v1",promotion={promotion_id:"preorder_aud50",promotion_name:"AUD 50 off every pre-order board",creative_slot:"homepage_modal"};const hasSeenPreorderOffer=()=>{try{return localStorage.getItem(preorderOfferKey)==="true"}catch{return false}};const rememberPreorderOffer=()=>{try{localStorage.setItem(preorderOfferKey,"true")}catch{}};const dismissPreorderOffer=method=>{window.AURATracking?.event("dismiss_promotion",{...promotion,dismiss_method:method});rememberPreorderOffer();if(preorderOffer.open)preorderOffer.close()};preorderOffer.querySelectorAll("[data-preorder-offer-close]").forEach(button=>button.addEventListener("click",()=>dismissPreorderOffer(button.classList.contains("preorder-offer__close")?"close_button":"maybe_later")));preorderOffer.querySelector("[data-preorder-offer-shop]").addEventListener("click",()=>{window.AURATracking?.event("select_promotion",promotion);rememberPreorderOffer()});preorderOffer.addEventListener("cancel",event=>{event.preventDefault();dismissPreorderOffer("escape")});setTimeout(()=>{if(!hasSeenPreorderOffer()&&!document.querySelector("dialog[open]")){preorderOffer.showModal();window.AURATracking?.event("view_promotion",promotion)}},1500);
+    const preorderOffer=document.getElementById("preorderOffer"),preorderOfferKey="aura-preorder-offer-seen-v1",promotion={promotion_id:"preorder_aud50",promotion_name:"AUD 50 off every pre-order board",creative_slot:"homepage_modal"};const hasSeenPreorderOffer=()=>{try{return localStorage.getItem(preorderOfferKey)==="true"}catch{return false}};const rememberPreorderOffer=()=>{try{localStorage.setItem(preorderOfferKey,"true")}catch{}};const dismissPreorderOffer=method=>{window.AURATracking?.event("dismiss_promotion",{...promotion,dismiss_method:method});rememberPreorderOffer();if(preorderOffer.open)preorderOffer.close()};preorderOffer.querySelectorAll("[data-preorder-offer-close]").forEach(button=>button.addEventListener("click",()=>dismissPreorderOffer(button.classList.contains("preorder-offer__close")?"close_button":"maybe_later")));preorderOffer.querySelector("[data-preorder-offer-shop]").addEventListener("click",()=>{window.AURATracking?.event("select_promotion",promotion);rememberPreorderOffer()});preorderOffer.addEventListener("cancel",event=>{event.preventDefault();dismissPreorderOffer("escape")});setTimeout(()=>{if(!hasSeenPreorderOffer()&&!document.querySelector("dialog[open]")){preorderOffer.showModal();window.AURATracking?.event("view_promotion",promotion)}},8000);
   </script>
 </body>
 </html>
