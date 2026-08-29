@@ -10,7 +10,7 @@
         "../assets/products/yoga-cruiser/matte-sandstone/AP505002_yoga-cruiser_11ft_matte-sandstone_side-04.webp",
         "../assets/products/yoga-cruiser/matte-sandstone/AP505002_yoga-cruiser_11ft_matte-sandstone_three-quarter-05.webp",
         "../assets/products/yoga-cruiser/matte-sandstone/AP505002_yoga-cruiser_11ft_matte-sandstone_deck-detail-06.webp",
-        "../assets/products/yoga-cruiser/matte-sandstone/AP505002_yoga-cruiser_11ft_matte-sandstone_full-kit-07.webp",
+        "../assets/products/yoga-cruiser/matte-sandstone/AP505002_yoga-cruiser_11ft_matte-sandstone_full-kit-07.jpg",
         "../assets/products/yoga-cruiser/matte-sandstone/AP505002_yoga-cruiser_11ft_matte-sandstone_yoga-lifestyle-08.webp",
         "../assets/products/yoga-cruiser/matte-sandstone/AP505002_yoga-cruiser_11ft_matte-sandstone_colour-lineup-09.webp"
       ],
@@ -21,7 +21,7 @@
         "../assets/products/yoga-cruiser/coral-white/AP587273_yoga-cruiser_11ft_coral-white_side-04.webp",
         "../assets/products/yoga-cruiser/coral-white/AP587273_yoga-cruiser_11ft_coral-white_three-quarter-05.webp",
         "../assets/products/yoga-cruiser/coral-white/AP587273_yoga-cruiser_11ft_coral-white_deck-detail-06.webp",
-        "../assets/products/yoga-cruiser/coral-white/AP587273_yoga-cruiser_11ft_coral-white_full-kit-07.webp",
+        "../assets/products/yoga-cruiser/coral-white/AP587273_yoga-cruiser_11ft_coral-white_full-kit-07.jpg",
         "../assets/products/yoga-cruiser/coral-white/AP587273_yoga-cruiser_11ft_coral-white_yoga-lifestyle-08.webp",
         "../assets/products/yoga-cruiser/coral-white/AP587273_yoga-cruiser_11ft_coral-white_colour-lineup-09.webp"
       ]
