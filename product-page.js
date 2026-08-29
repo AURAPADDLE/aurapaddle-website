@@ -234,7 +234,7 @@
     track("add_to_cart",{currency:"AUD",value:Number(item.unitAmount||0)*quantity/100,items:[analyticsItem(item)]});
     let toast=document.getElementById("cartToast");
     if(!toast){toast=document.createElement("div");toast.id="cartToast";toast.className="cart-toast";toast.setAttribute("role","status");document.body.append(toast)}
-    toast.innerHTML=`<span><strong>${quantity} × ${data.short}</strong> added to your cart.</span><a href="../cart-preview.html">View cart</a>`;toast.classList.add("show");clearTimeout(addToCart.timer);addToCart.timer=setTimeout(()=>toast.classList.remove("show"),4500);
+    toast.innerHTML=`<span><strong>${quantity} × ${data.short}</strong> added to your cart.</span><a href="../cart/">View cart</a>`;toast.classList.add("show");clearTimeout(addToCart.timer);addToCart.timer=setTimeout(()=>toast.classList.remove("show"),4500);
   }
 
   function buyNow(){
@@ -242,7 +242,7 @@
     const item=cartItem();
     cart.add(item,quantity);
     track("add_to_cart",{currency:"AUD",value:Number(item.unitAmount||0)*quantity/100,items:[analyticsItem(item)]});
-    location.href="../cart-preview.html";
+    location.href="../cart/";
   }
 
   function addAccessory(sku){
@@ -254,7 +254,7 @@
     track("add_to_cart",{currency:"AUD",value:Number(cartAccessory.unitAmount||0)/100,items:[analyticsItem(cartAccessory,1)]});
     let toast=document.getElementById("cartToast");
     if(!toast){toast=document.createElement("div");toast.id="cartToast";toast.className="cart-toast";toast.setAttribute("role","status");document.body.append(toast)}
-    toast.innerHTML=`<span><strong>${item.name}</strong> added. It will be AUD $${item.bundleAUD} when paired with an Angler Fishing board in this cart.</span><a href="../cart-preview.html">View cart</a>`;toast.classList.add("show");clearTimeout(addAccessory.timer);addAccessory.timer=setTimeout(()=>toast.classList.remove("show"),4500);
+    toast.innerHTML=`<span><strong>${item.name}</strong> added. It will be AUD $${item.bundleAUD} when paired with an Angler Fishing board in this cart.</span><a href="../cart/">View cart</a>`;toast.classList.add("show");clearTimeout(addAccessory.timer);addAccessory.timer=setTimeout(()=>toast.classList.remove("show"),4500);
   }
 
   function openCheckout(){

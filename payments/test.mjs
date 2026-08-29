@@ -56,7 +56,7 @@ test("Fishing Rack is AUD 129 alone and AUD 69 per paired Angler board",()=>{
 
 test("checkout trusts the 50% deposit, excludes Afterpay, stays country-safe and retains dynamic payment methods",()=>{
   const variant=catalog.bySku.get("AP734955");
-  const items=[{variant,quantity:2}],params=buildCheckoutParams({items,priceBySku:stripeMap.bySku,siteUrl:"http://localhost:4242",returnPath:"/products/yoga-cruiser.html?colour=glacier",shipping:shippingFor(items),integrationIdentifier:"aura_cart_abcdefgh"});
+  const items=[{variant,quantity:2}],params=buildCheckoutParams({items,priceBySku:stripeMap.bySku,siteUrl:"http://localhost:4242",returnPath:"/products/yoga-cruiser.html?colour=glacier",shipping:shippingFor(items),recoveryEmailConsent:true,integrationIdentifier:"aura_cart_abcdefgh"});
   assert.equal(params.get("line_items[0][price]"),null);
   assert.equal(params.get("line_items[0][price_data][product]"),stripeMap.bySku.get("AP734955").productId);
   assert.equal(params.get("line_items[0][price_data][unit_amount]"),"37450");
@@ -67,6 +67,7 @@ test("checkout trusts the 50% deposit, excludes Afterpay, stays country-safe and
   assert.equal(params.get("integration_identifier"),"aura_cart_abcdefgh");
   assert.equal(params.get("shipping_address_collection[allowed_countries][0]"),"AU");
   assert.equal(params.get("consent_collection[promotions]"),null);
+  assert.equal(params.get("metadata[aura_recovery_email_consent]"),"true");
   assert.equal(params.get("after_expiration[recovery][enabled]"),"true");
   assert.equal(params.get("after_expiration[recovery][allow_promotion_codes]"),"false");
 });
@@ -250,10 +251,10 @@ test("enhanced conversion preparation hashes customer data only when enabled and
   assert.equal(payload.consent.ad_user_data,"GRANTED");
 });
 
-test("expired Checkout records an abandonment and queues one consented recovery email",()=>{
+test("expired Checkout records an abandonment and queues one explicitly consented recovery email",()=>{
   const attribution={version:1,consent:{analytics:true,marketing:true},last:{source:"google",medium:"cpc",campaign:"launch"},analyticsClientId:"123456789.987654321",analyticsSessionId:"1787635200"};
   const state={events:{},orders:{},checkoutRequests:{request_expired:{orderNumber:"APO48221",attribution}},analyticsOutbox:{},abandonedCheckouts:{},recoveryEmailOutbox:{},recoverySuppressions:{}};
-  const event={id:"evt_expired",type:"checkout.session.expired",created:1_787_650_000,data:{object:{id:"cs_test_expired",created:1_787_642_800,amount_total:37450,currency:"aud",customer_details:{email:"buyer@example.com",phone:"+61400000000"},consent:{promotions:"opt_in"},after_expiration:{recovery:{url:"https://buy.stripe.com/r/test_recovery",expires_at:1_790_242_800}},metadata:{aura_items:"AP734955:1",aura_order_number:"APO48221"}}}};
+  const event={id:"evt_expired",type:"checkout.session.expired",created:1_787_650_000,data:{object:{id:"cs_test_expired",created:1_787_642_800,amount_total:37450,currency:"aud",customer_details:{email:"buyer@example.com",phone:"+61400000000"},after_expiration:{recovery:{url:"https://buy.stripe.com/r/test_recovery",expires_at:1_790_242_800}},metadata:{aura_items:"AP734955:1",aura_order_number:"APO48221",aura_recovery_email_consent:"true"}}}};
   assert.equal(applyStripeEvent(state,event),true);
   const abandoned=state.abandonedCheckouts.cs_test_expired,queued=state.recoveryEmailOutbox.cs_test_expired;
   assert.equal(abandoned.status,"email_queued");assert.equal(abandoned.customerEmail,"buyer@example.com");assert.equal(abandoned.promotionConsent,true);
@@ -264,9 +265,9 @@ test("expired Checkout records an abandonment and queues one consented recovery 
   assert.equal(list[0].items[0].name,"AURA PADDLE Yoga Cruiser");assert.equal(list[0].source,"google");
 });
 
-test("recovery email is not queued without Stripe promotional consent",()=>{
+test("recovery email is not queued without explicit website consent",()=>{
   const state={events:{},orders:{},checkoutRequests:{},abandonedCheckouts:{},recoveryEmailOutbox:{},recoverySuppressions:{}};
-  applyStripeEvent(state,{id:"evt_no_consent",type:"checkout.session.expired",created:1_787_650_100,data:{object:{id:"cs_test_no_consent",amount_total:14950,currency:"aud",customer_details:{email:"private@example.com"},consent:{promotions:"opt_out"},after_expiration:{recovery:{url:"https://buy.stripe.com/r/private"}},metadata:{aura_items:"AP081165:1",aura_order_number:"APO48222"}}}});
+  applyStripeEvent(state,{id:"evt_no_consent",type:"checkout.session.expired",created:1_787_650_100,data:{object:{id:"cs_test_no_consent",amount_total:14950,currency:"aud",customer_details:{email:"private@example.com"},after_expiration:{recovery:{url:"https://buy.stripe.com/r/private"}},metadata:{aura_items:"AP081165:1",aura_order_number:"APO48222",aura_recovery_email_consent:"false"}}}});
   assert.equal(state.abandonedCheckouts.cs_test_no_consent.status,"no_consent");
   assert.equal(state.recoveryEmailOutbox.cs_test_no_consent,undefined);
 });

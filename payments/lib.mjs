@@ -189,7 +189,7 @@ export function safeReturnPath(value,fallbackValue="/cart-preview.html"){
   }catch{return fallback}
 }
 
-function orderMetadata(items,shipping,orderNumber,trackingToken,attribution){
+function orderMetadata(items,shipping,orderNumber,trackingToken,attribution,recoveryEmailConsent=false){
   const modes=new Set(items.map(item=>item.variant.orderMode));
   const hasPreorder=items.some(item=>item.variant.orderMode==="preorder");
   const quantities=new Map();for(const item of items)quantities.set(item.variant.sku,(quantities.get(item.variant.sku)||0)+item.quantity);
@@ -207,6 +207,7 @@ function orderMetadata(items,shipping,orderNumber,trackingToken,attribution){
     aura_shipping_stage:"pay_before_dispatch",
     aura_order_number:orderNumber,
     aura_tracking_token:trackingToken,
+    aura_recovery_email_consent:String(recoveryEmailConsent===true),
     aura_attribution_version:"1",
     aura_consent_analytics:String(normalised.consent.analytics),
     aura_consent_marketing:String(normalised.consent.marketing)
@@ -230,12 +231,12 @@ function appendObject(params,prefix,object){
   for(const [key,value] of Object.entries(object))params.set(`${prefix}[${key}]`,String(value));
 }
 
-export function buildCheckoutParams({items,priceBySku,siteUrl,returnPath,shipping,attribution,orderNumber="APO00000",trackingToken="test-tracking-token",integrationIdentifier="aura_cart_abcdefgh",now=Math.floor(Date.now()/1000)}){
+export function buildCheckoutParams({items,priceBySku,siteUrl,returnPath,shipping,attribution,recoveryEmailConsent=false,orderNumber="APO00000",trackingToken="test-tracking-token",integrationIdentifier="aura_cart_abcdefgh",now=Math.floor(Date.now()/1000)}){
   const params=new URLSearchParams();
   if(!shipping?.regionId)throw new Error("Shipping region is required for checkout.");
   if(!/^APO\d{5}$/.test(orderNumber))throw new Error("Invalid AURA order number.");
   if(!/^[A-Za-z0-9_-]{16,80}$/.test(trackingToken))throw new Error("Invalid order tracking token.");
-  const metadata=orderMetadata(items,shipping,orderNumber,trackingToken,attribution);
+  const metadata=orderMetadata(items,shipping,orderNumber,trackingToken,attribution,recoveryEmailConsent);
   const cancelPath=safeReturnPath(returnPath,"/cart-preview.html");
   const cancelUrl=new URL(cancelPath,siteUrl);
   cancelUrl.searchParams.set("checkout","cancelled");
@@ -336,17 +337,17 @@ function recordAbandonedCheckout(state,object,event){
   const now=Number(event.created||Math.floor(Date.now()/1000));
   pruneRecoveryState(state,now);
   const metadata=object.metadata||{},items=parseMetadataItems(metadata),email=normaliseRecoveryEmail(object.customer_details?.email||object.customer_email),recipientHash=email?crypto.createHash("sha256").update(email).digest("hex"):"";
-  const promotionConsent=object.consent?.promotions==="opt_in",recovery=object.after_expiration?.recovery||{},recoveryUrl=String(recovery.url||"");
+  const recoveryEmailConsent=metadata.aura_recovery_email_consent==="true"||object.consent?.promotions==="opt_in",recovery=object.after_expiration?.recovery||{},recoveryUrl=String(recovery.url||"");
   const reservation=Object.values(state.checkoutRequests||{}).find(item=>item?.orderNumber===metadata.aura_order_number);
   const attribution=reservation?.attribution?normaliseAttribution(reservation.attribution):attributionFromMetadata(metadata);
-  let status=!promotionConsent?"no_consent":!email?"missing_email":!recoveryUrl?"missing_recovery_url":"email_queued";
+  let status=!recoveryEmailConsent?"no_consent":!email?"missing_email":!recoveryUrl?"missing_recovery_url":"email_queued";
   const suppressed=recipientHash&&state.recoverySuppressions[recipientHash];
   const recent=recipientHash&&Object.values(state.recoveryEmailOutbox).some(entry=>entry.recipientHash===recipientHash&&["pending","retry","sending","sent"].includes(entry.status)&&now-Number(entry.createdAt||0)<7*86400);
   if(suppressed)status="unsubscribed";
   else if(recent)status="recent_email_suppressed";
   const abandonment={
     sessionId:object.id,orderNumber:metadata.aura_order_number||"",items,amountTotal:Number(object.amount_total||0),currency:object.currency||"aud",customerEmail:email,
-    promotionConsent,recoveryUrl,recoveryExpiresAt:Number(recovery.expires_at||0),createdAt:Number(object.created||0),expiredAt:now,status,attribution
+    promotionConsent:recoveryEmailConsent,recoveryEmailConsent,recoveryUrl,recoveryExpiresAt:Number(recovery.expires_at||0),createdAt:Number(object.created||0),expiredAt:now,status,attribution
   };
   state.abandonedCheckouts[object.id]=abandonment;
   if(status==="email_queued"){
@@ -364,7 +365,7 @@ export function abandonedCheckoutList(state,catalog){
     return {
       sessionId:item.sessionId,orderNumber:item.orderNumber,email:item.customerEmail||"",items:(item.items||[]).map(entry=>({sku:entry.sku,quantity:entry.quantity,name:catalog?.bySku?.get(entry.sku)?.productName||entry.sku})),
       amountTotal:item.amountTotal,currency:String(item.currency||"aud").toUpperCase(),createdAt:item.createdAt,expiredAt:item.expiredAt,recoveryExpiresAt:item.recoveryExpiresAt,
-      promotionConsent:item.promotionConsent===true,status:item.status,emailStatus:emailEntry?.status||"not_queued",emailSentAt:emailEntry?.sentAt||null,recoveryUrl:item.recoveryUrl||"",
+      promotionConsent:item.recoveryEmailConsent===true||item.promotionConsent===true,status:item.status,emailStatus:emailEntry?.status||"not_queued",emailSentAt:emailEntry?.sentAt||null,recoveryUrl:item.recoveryUrl||"",
       recoveredAt:item.recoveredAt||null,recoveredSessionId:item.recoveredSessionId||"",source:item.attribution?.last?.source||"",campaign:item.attribution?.last?.campaign||""
     };
   });

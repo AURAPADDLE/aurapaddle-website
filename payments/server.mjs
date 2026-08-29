@@ -83,7 +83,7 @@ async function checkout(req,res){
   const requestId=/^[a-zA-Z0-9_-]{8,80}$/.test(body.requestId||"")?body.requestId:`${Date.now()}-${Math.random().toString(36).slice(2)}`;
   const attribution=normaliseAttribution(body.attribution);
   const identity=await createOrderIdentity(requestId,attribution);
-  const params=buildCheckoutParams({items,priceBySku:stripeMap.bySku,siteUrl,returnPath,shipping,attribution,...identity});
+  const params=buildCheckoutParams({items,priceBySku:stripeMap.bySku,siteUrl,returnPath,shipping,attribution,recoveryEmailConsent:body.recoveryEmailConsent===true,...identity});
   const session=await stripeRequest("/v1/checkout/sessions",{method:"POST",headers:{"Content-Type":"application/x-www-form-urlencoded","Idempotency-Key":`aura-${requestId}`},body:params});
   send(res,200,{id:session.id,url:session.url,orderNumber:identity.orderNumber,testMode:!session.livemode});
 }
