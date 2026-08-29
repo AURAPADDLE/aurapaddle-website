@@ -260,7 +260,6 @@ export function buildCheckoutParams({items,priceBySku,siteUrl,returnPath,shippin
   if(!shipping.pickup)params.set("shipping_address_collection[allowed_countries][0]","AU");
   params.set("phone_number_collection[enabled]","true");
   params.set("allow_promotion_codes","false");
-  params.set("consent_collection[promotions]","auto");
   params.set("after_expiration[recovery][enabled]","true");
   params.set("after_expiration[recovery][allow_promotion_codes]","false");
   params.set("expires_at",String(now+7200));

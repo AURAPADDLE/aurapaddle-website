@@ -54,7 +54,7 @@ test("Fishing Rack is AUD 129 alone and AUD 69 per paired Angler board",()=>{
   assert.equal(params.get("line_items[2][price_data][unit_amount]"),"6450");
 });
 
-test("checkout trusts the 50% deposit, excludes Afterpay and retains dynamic payment methods",()=>{
+test("checkout trusts the 50% deposit, excludes Afterpay, stays country-safe and retains dynamic payment methods",()=>{
   const variant=catalog.bySku.get("AP734955");
   const items=[{variant,quantity:2}],params=buildCheckoutParams({items,priceBySku:stripeMap.bySku,siteUrl:"http://localhost:4242",returnPath:"/products/yoga-cruiser.html?colour=glacier",shipping:shippingFor(items),integrationIdentifier:"aura_cart_abcdefgh"});
   assert.equal(params.get("line_items[0][price]"),null);
@@ -66,7 +66,7 @@ test("checkout trusts the 50% deposit, excludes Afterpay and retains dynamic pay
   assert.equal(params.get("excluded_payment_method_types[0]"),"afterpay_clearpay");
   assert.equal(params.get("integration_identifier"),"aura_cart_abcdefgh");
   assert.equal(params.get("shipping_address_collection[allowed_countries][0]"),"AU");
-  assert.equal(params.get("consent_collection[promotions]"),"auto");
+  assert.equal(params.get("consent_collection[promotions]"),null);
   assert.equal(params.get("after_expiration[recovery][enabled]"),"true");
   assert.equal(params.get("after_expiration[recovery][allow_promotion_codes]"),"false");
 });
