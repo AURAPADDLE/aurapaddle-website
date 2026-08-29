@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-08-17T10:48:28.227Z",
+  "generatedAt": "2026-08-29T05:56:11.416Z",
   "currency": "aud",
   "variants": [
     {
@@ -412,8 +412,8 @@
       "slug": "inflatable-hydrofoil",
       "productName": "AURA PADDLE Inflatable Hydrofoil Board",
       "shortName": "Inflatable Hydrofoil Board",
-      "description": "A packable 150-litre inflatable platform for riders developing their wing-foil skills or travelling with limited storage space. The compact 5'8\" format keeps transport practical, while the dedicated foil connection provides the foundation for progression once the final system bundle is confirmed.",
-      "size": "5'8\"",
+      "description": "A packable 110-litre inflatable platform for riders developing their wing-foil skills or travelling with limited storage space. The compact 5'7\" format keeps transport practical, while the dedicated foil connection provides the foundation for progression once the final system bundle is confirmed.",
+      "size": "5'7\"",
       "colour": "Carbon & Teal",
       "colourKey": "foil",
       "currency": "aud",
@@ -422,7 +422,7 @@
       "depositAmount": 47450,
       "orderMode": "preorder",
       "available": false,
-      "productUrl": "https://www.aurapaddle.com/products/inflatable-hydrofoil.html?size=5'8%22&colour=foil",
+      "productUrl": "https://www.aurapaddle.com/products/inflatable-hydrofoil.html?size=5'7%22&colour=foil",
       "campaign": {
         "id": "inflatable-hydrofoil-launch-batch",
         "name": "Inflatable Hydrofoil Board Launch Batch",
