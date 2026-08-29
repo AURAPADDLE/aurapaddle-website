@@ -3,9 +3,10 @@ import http from "node:http";
 import path from "node:path";
 import crypto from "node:crypto";
 import {fileURLToPath} from "node:url";
-import {abandonedCheckoutList,applyStripeEvent,buildCheckoutParams,calculateShipping,campaignProgress,loadCatalog,loadShippingRates,loadStripeMap,normaliseAttribution,normaliseCheckoutItems,normaliseQuantity,reserveCheckoutIdentity,safeReturnPath,unsubscribeRecoveryEmail,verifyStripeSignature} from "./lib.mjs";
+import {abandonedCheckoutList,applyStripeEvent,buildCheckoutParams,calculateShipping,campaignProgress,loadCatalog,loadShippingRates,loadStripeMap,normaliseAttribution,normaliseCheckoutItems,normaliseQuantity,queueOrderEmails,reserveCheckoutIdentity,safeReturnPath,unsubscribeRecoveryEmail,verifyStripeSignature} from "./lib.mjs";
 import {enqueueStripeAnalytics,measurementPayload} from "./analytics.mjs";
 import {ensureRecoveryInbox,sendRecoveryEmail} from "./recovery-email.mjs";
+import {sendOrderEmail} from "./order-email.mjs";
 import {createStateStore} from "./state-store.mjs";
 
 const here=path.dirname(fileURLToPath(import.meta.url));
@@ -40,6 +41,7 @@ const analyticsDispatchEnabled=process.env.GA4_SERVER_EVENTS_ENABLED!=="false";
 const analyticsValidationMode=process.env.GA4_VALIDATION_MODE==="true";
 const enhancedConversionsEnabled=process.env.ENHANCED_CONVERSIONS_ENABLED==="true";
 const agentMailApiKey=process.env.AGENTMAIL_AGENTMAIL_API_KEY||process.env.AGENTMAIL_API_KEY||"";
+const orderNotificationEmail=process.env.ORDER_NOTIFICATION_EMAIL||"admin@aurapaddle.com";
 const catalog=loadCatalog();
 const shippingRates=loadShippingRates();
 const configuredStripeAccount=process.env.STRIPE_ACCOUNT_ID||"";
@@ -219,13 +221,36 @@ async function initialiseRecoveryEmail(){
   try{await ensureRecoveryInbox(agentMailApiKey);recoveryEmailReady=true;recoveryEmailInitError=""}
   catch(error){recoveryEmailReady=false;recoveryEmailInitError=String(error?.message||error||"Recovery email configuration failed").slice(0,160);console.error("Recovery email configuration failed",error)}
 }
+let orderEmailFlushActive=false;
+async function claimOrderEmail(){
+  return store.mutate(state=>{
+    const now=Math.floor(Date.now()/1000);
+    for(const entry of Object.values(state.transactionalEmailOutbox||{}))if(entry.status==="sending"&&now-Number(entry.claimedAt||0)>300)entry.status="retry";
+    const entry=Object.values(state.transactionalEmailOutbox||{}).find(item=>["pending","retry"].includes(item.status)&&Number(item.nextAttemptAt||0)<=now);
+    if(!entry)return null;
+    entry.status="sending";entry.claimedAt=now;entry.attempts=Number(entry.attempts||0)+1;entry.updatedAt=now;
+    return structuredClone(entry);
+  });
+}
+async function completeOrderEmail(key,result){
+  await store.mutate(state=>{const entry=state.transactionalEmailOutbox?.[key];if(!entry)return;const now=Math.floor(Date.now()/1000);entry.status="sent";entry.sentAt=now;entry.updatedAt=now;entry.messageId=result?.message_id||"";delete entry.lastError;delete entry.claimedAt});
+}
+async function retryOrderEmail(key,error){
+  await store.mutate(state=>{const entry=state.transactionalEmailOutbox?.[key];if(!entry)return;const now=Math.floor(Date.now()/1000),delay=Math.min(3600,30*2**Math.min(Number(entry.attempts||1)-1,7));entry.status=Number(entry.attempts||0)>=12?"failed":"retry";entry.nextAttemptAt=now+delay;entry.updatedAt=now;entry.lastError=String(error?.message||error||"Order email delivery failed").slice(0,240);delete entry.claimedAt});
+}
+async function flushOrderEmailOutbox(){
+  if(orderEmailFlushActive||!agentMailApiKey)return;
+  orderEmailFlushActive=true;
+  try{for(let count=0;count<10;count+=1){const entry=await claimOrderEmail();if(!entry)break;try{await completeOrderEmail(entry.key,await sendOrderEmail(entry,{apiKey:agentMailApiKey,catalog,siteUrl}))}catch(error){await retryOrderEmail(entry.key,error)}}}finally{orderEmailFlushActive=false}
+}
 async function webhook(req,res){
   const raw=await readBody(req);
   if(!verifyStripeSignature(raw.toString("utf8"),req.headers["stripe-signature"],webhookSecret))return send(res,400,{error:"Invalid Stripe webhook signature."});
   const event=JSON.parse(raw.toString("utf8"));
-  await store.mutate(state=>{const applied=applyStripeEvent(state,event);if(applied)enqueueStripeAnalytics(state,event,catalog,{enhancedConversionsEnabled});return applied});
+  await store.mutate(state=>{const applied=applyStripeEvent(state,event);if(applied)enqueueStripeAnalytics(state,event,catalog,{enhancedConversionsEnabled});queueOrderEmails(state,event,{adminEmail:orderNotificationEmail});return applied});
   void flushAnalyticsOutbox().catch(error=>console.error("GA4 outbox flush failed",error));
   void flushRecoveryEmailOutbox().catch(error=>console.error("Recovery email outbox flush failed",error));
+  void flushOrderEmailOutbox().catch(error=>console.error("Order email outbox flush failed",error));
   send(res,200,{received:true});
 }
 function staticFile(req,res,url){
@@ -244,7 +269,7 @@ function staticFile(req,res,url){
 const server=http.createServer(async(req,res)=>{
   const url=new URL(req.url,siteUrl);
   try{
-    if(req.method==="GET"&&url.pathname==="/api/health"){const state=await store.read(),analyticsEntries=Object.values(state.analyticsOutbox||{}),recoveryEntries=Object.values(state.recoveryEmailOutbox||{});return send(res,200,{ok:true,mode:allowLive?"live-enabled":"sandbox-only",storage:store.kind,stripeConfigured:Boolean(stripeKey),webhookConfigured:Boolean(webhookSecret),adminConfigured:Boolean(adminApiToken),catalogueSkus:catalog.variants.length,mappedStripePrices:stripeMap.bySku.size,stripeAccount:stripeMap.accountId,analytics:{serverEventsEnabled:analyticsDispatchEnabled,configured:Boolean(ga4ApiSecret),validationMode:analyticsValidationMode,enhancedConversionsEnabled,pending:analyticsEntries.filter(item=>["pending","retry","sending"].includes(item.status)).length,failed:analyticsEntries.filter(item=>item.status==="failed").length},checkoutRecovery:{enabled:true,emailConfigured:Boolean(agentMailApiKey),emailReady:recoveryEmailReady,configurationError:Boolean(recoveryEmailInitError),smsEnabled:false,pending:recoveryEntries.filter(item=>["pending","retry","sending"].includes(item.status)).length,failed:recoveryEntries.filter(item=>item.status==="failed").length},account:"AURA PADDLE PTY LTD"})}
+    if(req.method==="GET"&&url.pathname==="/api/health"){const state=await store.read(),analyticsEntries=Object.values(state.analyticsOutbox||{}),recoveryEntries=Object.values(state.recoveryEmailOutbox||{}),orderEmailEntries=Object.values(state.transactionalEmailOutbox||{});return send(res,200,{ok:true,mode:allowLive?"live-enabled":"sandbox-only",storage:store.kind,stripeConfigured:Boolean(stripeKey),webhookConfigured:Boolean(webhookSecret),adminConfigured:Boolean(adminApiToken),catalogueSkus:catalog.variants.length,mappedStripePrices:stripeMap.bySku.size,stripeAccount:stripeMap.accountId,analytics:{serverEventsEnabled:analyticsDispatchEnabled,configured:Boolean(ga4ApiSecret),validationMode:analyticsValidationMode,enhancedConversionsEnabled,pending:analyticsEntries.filter(item=>["pending","retry","sending"].includes(item.status)).length,failed:analyticsEntries.filter(item=>item.status==="failed").length},checkoutRecovery:{enabled:true,emailConfigured:Boolean(agentMailApiKey),emailReady:recoveryEmailReady,configurationError:Boolean(recoveryEmailInitError),smsEnabled:false,pending:recoveryEntries.filter(item=>["pending","retry","sending"].includes(item.status)).length,failed:recoveryEntries.filter(item=>item.status==="failed").length},orderNotifications:{enabled:true,emailConfigured:Boolean(agentMailApiKey),emailReady:recoveryEmailReady,recipient:orderNotificationEmail,pending:orderEmailEntries.filter(item=>["pending","retry","sending"].includes(item.status)).length,failed:orderEmailEntries.filter(item=>item.status==="failed").length},account:"AURA PADDLE PTY LTD"})}
     if(req.method==="POST"&&url.pathname==="/api/checkout")return await checkout(req,res);
     if(req.method==="GET"&&url.pathname==="/api/checkout-session")return await sessionSummary(req,res,url);
     if(req.method==="GET"&&url.pathname==="/api/order")return await orderStatus(req,res,url);
@@ -262,8 +287,9 @@ const server=http.createServer(async(req,res)=>{
 await store.init();
 setInterval(()=>void flushAnalyticsOutbox().catch(error=>console.error("GA4 outbox flush failed",error)),60_000).unref();
 setInterval(()=>void flushRecoveryEmailOutbox().catch(error=>console.error("Recovery email outbox flush failed",error)),60_000).unref();
+setInterval(()=>void flushOrderEmailOutbox().catch(error=>console.error("Order email outbox flush failed",error)),60_000).unref();
 setTimeout(()=>void flushAnalyticsOutbox().catch(error=>console.error("GA4 initial outbox flush failed",error)),2_000).unref();
-setTimeout(()=>void initialiseRecoveryEmail().then(()=>flushRecoveryEmailOutbox()).catch(error=>console.error("Recovery email initialisation failed",error)),3_000).unref();
+setTimeout(()=>void initialiseRecoveryEmail().then(()=>Promise.all([flushRecoveryEmailOutbox(),flushOrderEmailOutbox()])).catch(error=>console.error("Transactional email initialisation failed",error)),3_000).unref();
 server.listen(port,host,()=>{
   console.log(`AURA Stripe review server: ${siteUrl}`);
   console.log(`Stripe mode: ${allowLive?"LIVE ENABLED":"sandbox only"}; key configured: ${Boolean(stripeKey)}; webhook configured: ${Boolean(webhookSecret)}`);

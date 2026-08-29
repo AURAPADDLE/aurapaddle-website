@@ -1,9 +1,10 @@
 import assert from "node:assert/strict";
 import crypto from "node:crypto";
 import test from "node:test";
-import {abandonedCheckoutList,applyStripeEvent,buildCheckoutParams,calculateShipping,campaignProgress,loadCatalog,loadShippingRates,loadStripeMap,normaliseAttribution,normaliseCheckoutItems,normaliseQuantity,reserveCheckoutIdentity,unsubscribeRecoveryEmail,verifyStripeSignature} from "./lib.mjs";
+import {abandonedCheckoutList,applyStripeEvent,buildCheckoutParams,calculateShipping,campaignProgress,loadCatalog,loadShippingRates,loadStripeMap,normaliseAttribution,normaliseCheckoutItems,normaliseQuantity,queueOrderEmails,reserveCheckoutIdentity,unsubscribeRecoveryEmail,verifyStripeSignature} from "./lib.mjs";
 import {enqueueStripeAnalytics,hashUserData,measurementPayload} from "./analytics.mjs";
 import {recoveryEmailContent} from "./recovery-email.mjs";
+import {adminOrderEmailContent,customerOrderEmailContent} from "./order-email.mjs";
 
 const catalog=loadCatalog();
 const shippingRates=loadShippingRates();
@@ -289,6 +290,26 @@ test("successful recovery is linked back to the original abandoned session",()=>
   applyStripeEvent(state,{id:"evt_recovered",type:"checkout.session.completed",created:1_787_650_400,data:{object:{id:"cs_test_new",recovered_from:"cs_test_old",payment_status:"paid",payment_intent:"pi_recovered",amount_total:14950,currency:"aud",metadata:{aura_items:"AP081165:1",aura_order_number:"APO48224",aura_tracking_token:"secure_tracking_token_48224"}}}});
   assert.equal(state.abandonedCheckouts.cs_test_old.status,"recovered");
   assert.equal(state.abandonedCheckouts.cs_test_old.recoveredSessionId,"cs_test_new");
+});
+
+test("paid checkout queues one customer confirmation and one internal order notification",()=>{
+  const state={events:{},orders:{},checkoutRequests:{},transactionalEmailOutbox:{}};
+  const event={id:"evt_order_email",type:"checkout.session.completed",created:1_787_650_500,data:{object:{id:"cs_live_order_email",customer:"cus_live",payment_status:"paid",payment_intent:"pi_live_order_email",amount_total:37450,currency:"aud",customer_details:{email:"Buyer@Example.com",name:"Alex Buyer",phone:"+61400000000"},metadata:{aura_items:"AP734955:1",aura_order_number:"APO48226",aura_tracking_token:"secure_tracking_token_48226",aura_order_mode:"preorder",aura_payment_stage:"initial_50_percent",aura_shipping_region:"local-pickup",aura_shipping_label:"Local pickup — Gold Coast, QLD",aura_shipping_amount:"0"}}}};
+  assert.equal(applyStripeEvent(state,event),true);
+  assert.equal(queueOrderEmails(state,event),true);
+  assert.equal(queueOrderEmails(state,event),false);
+  assert.equal(Object.keys(state.transactionalEmailOutbox).length,2);
+  const customer=state.transactionalEmailOutbox["cs_live_order_email:customer"],admin=state.transactionalEmailOutbox["cs_live_order_email:admin"];
+  assert.equal(customer.recipient,"buyer@example.com");assert.equal(customer.status,"pending");assert.equal(customer.customerName,"Alex Buyer");
+  assert.equal(admin.recipient,"admin@aurapaddle.com");assert.equal(admin.kind,"admin_notification");
+});
+
+test("order emails include payment, dispatch and secure operational links",()=>{
+  const entry={sessionId:"cs_live_mail",kind:"customer_confirmation",recipient:"buyer@example.com",orderNumber:"APO48227",trackingToken:"secure_tracking_token_48227",paymentIntentId:"pi_live_mail",items:[{sku:"AP734955",quantity:1}],amountTotal:37450,currency:"aud",paymentStage:"initial_50_percent",shippingLabel:"Local pickup — Gold Coast, QLD",shippingAmount:0,shippingQuoteRequired:false,customerName:"Alex Buyer",customerEmail:"buyer@example.com",customerPhone:"+61400000000"};
+  const customer=customerOrderEmailContent(entry,{catalog,siteUrl:"https://www.aurapaddle.com"});
+  assert.match(customer.subject,/APO48227/);assert.match(customer.text,/AUD \$374\.50/);assert.match(customer.text,/15 September 2026/);assert.match(customer.text,/order\/\?order=APO48227&token=secure_tracking_token_48227/);assert.match(customer.text,/within 48 hours/);
+  const admin=adminOrderEmailContent({...entry,kind:"admin_notification",recipient:"admin@aurapaddle.com"},{catalog,siteUrl:"https://www.aurapaddle.com"});
+  assert.match(admin.subject,/New order APO48227/);assert.match(admin.text,/Alex Buyer/);assert.match(admin.text,/dashboard\.stripe\.com\/payments\/pi_live_mail/);assert.match(admin.text,/Local pickup/);
 });
 
 test("recovery email includes Stripe link, identity and unsubscribe but no SMS action",()=>{

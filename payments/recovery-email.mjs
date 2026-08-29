@@ -8,6 +8,10 @@ async function agentMailRequest(apiKey,path,{method="GET",body,idempotencyKey}={
   return payload;
 }
 
+export function sendAgentMailMessage(apiKey,inboxId,{body,idempotencyKey}){
+  return agentMailRequest(apiKey,`/v0/inboxes/${encodeURIComponent(inboxId)}/messages/send`,{method:"POST",body,idempotencyKey});
+}
+
 let inboxPromise;
 export function ensureRecoveryInbox(apiKey){
   if(!inboxPromise)inboxPromise=agentMailRequest(apiKey,"/v0/inboxes",{method:"POST",body:{username:"aurapaddle-recovery-2026",display_name:"AURA PADDLE",client_id:"aura-paddle-checkout-recovery-v1",metadata:{purpose:"consented_checkout_recovery"}}}).catch(error=>{inboxPromise=null;throw error});
@@ -25,5 +29,5 @@ export function recoveryEmailContent(entry,{catalog,siteUrl}){
 
 export async function sendRecoveryEmail(entry,{apiKey,catalog,siteUrl}){
   const inbox=await ensureRecoveryInbox(apiKey),content=recoveryEmailContent(entry,{catalog,siteUrl});
-  return agentMailRequest(apiKey,`/v0/inboxes/${encodeURIComponent(inbox.inbox_id)}/messages/send`,{method:"POST",idempotencyKey:`aura-recovery-${entry.sessionId}`,body:{to:[entry.recipient],reply_to:["admin@aurapaddle.com"],subject:content.subject,text:content.text,html:content.html,labels:["checkout-recovery"]}});
+  return sendAgentMailMessage(apiKey,inbox.inbox_id,{idempotencyKey:`aura-recovery-${entry.sessionId}`,body:{to:[entry.recipient],reply_to:["admin@aurapaddle.com"],subject:content.subject,text:content.text,html:content.html,labels:["checkout-recovery"]}});
 }

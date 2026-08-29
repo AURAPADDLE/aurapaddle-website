@@ -384,7 +384,7 @@ export function unsubscribeRecoveryEmail(state,token,now=Math.floor(Date.now()/1
 }
 
 export function applyStripeEvent(state,event){
-  state.events??={};state.orders??={};state.abandonedCheckouts??={};state.recoveryEmailOutbox??={};state.recoverySuppressions??={};
+  state.events??={};state.orders??={};state.abandonedCheckouts??={};state.recoveryEmailOutbox??={};state.recoverySuppressions??={};state.transactionalEmailOutbox??={};
   if(state.events[event.id])return false;
   const object=event.data?.object||{};
   if(["checkout.session.completed","checkout.session.async_payment_succeeded"].includes(event.type)&&object.payment_status==="paid"){
@@ -417,6 +417,8 @@ export function applyStripeEvent(state,event){
       balancePaymentStatus:"not_requested",
       fulfilmentStatus:"preorder_confirmed",
       customerEmail:object.customer_details?.email||object.customer_email||"",
+      customerName:object.customer_details?.name||"",
+      customerPhone:object.customer_details?.phone||"",
       attribution,
       created:object.created||event.created,
       updated:event.created
@@ -461,6 +463,33 @@ export function applyStripeEvent(state,event){
   }
   state.events[event.id]={type:event.type,created:event.created};
   return true;
+}
+
+export function queueOrderEmails(state,event,{adminEmail="admin@aurapaddle.com"}={}){
+  state.transactionalEmailOutbox??={};
+  if(!["checkout.session.completed","checkout.session.async_payment_succeeded"].includes(event.type))return false;
+  const object=event.data?.object||{};
+  if(object.payment_status!=="paid")return false;
+  const order=state.orders?.[object.id];
+  if(!order?.orderNumber)return false;
+  const now=Number(event.created||Math.floor(Date.now()/1000)),customerEmail=normaliseRecoveryEmail(object.customer_details?.email||object.customer_email||order.customerEmail),recipientAdmin=normaliseRecoveryEmail(adminEmail);
+  const shared={
+    sessionId:order.sessionId,orderNumber:order.orderNumber,trackingToken:order.trackingToken,paymentIntentId:order.paymentIntentId,
+    items:structuredClone(order.items||[]),amountTotal:Number(order.amountTotal||0),currency:order.currency||"aud",paymentStage:order.paymentStage||"initial_50_percent",
+    shippingRegion:order.shippingRegion||"",shippingLabel:order.shippingLabel||"",shippingAmount:order.shippingAmount,shippingQuoteRequired:order.shippingQuoteRequired===true,
+    customerName:object.customer_details?.name||order.customerName||"",customerEmail,customerPhone:object.customer_details?.phone||order.customerPhone||"",
+    status:"pending",attempts:0,nextAttemptAt:0,createdAt:now,updatedAt:now
+  };
+  let queued=false;
+  if(customerEmail){
+    const key=`${object.id}:customer`;
+    if(!state.transactionalEmailOutbox[key]){state.transactionalEmailOutbox[key]={...structuredClone(shared),key,kind:"customer_confirmation",recipient:customerEmail};queued=true}
+  }
+  if(recipientAdmin){
+    const key=`${object.id}:admin`;
+    if(!state.transactionalEmailOutbox[key]){state.transactionalEmailOutbox[key]={...structuredClone(shared),key,kind:"admin_notification",recipient:recipientAdmin};queued=true}
+  }
+  return queued;
 }
 
 export function campaignProgress(state,catalog){

@@ -3,11 +3,11 @@ import path from "node:path";
 import pg from "pg";
 
 const {Pool}=pg;
-const emptyState=()=>({events:{},orders:{},reservations:{},checkoutRequests:{},analyticsOutbox:{},abandonedCheckouts:{},recoveryEmailOutbox:{},recoverySuppressions:{}});
+const emptyState=()=>({events:{},orders:{},reservations:{},checkoutRequests:{},analyticsOutbox:{},abandonedCheckouts:{},recoveryEmailOutbox:{},recoverySuppressions:{},transactionalEmailOutbox:{}});
 
 function normaliseState(value){
   const state=value&&typeof value==="object"?value:emptyState();
-  state.events??={};state.orders??={};state.reservations??={};state.checkoutRequests??={};state.analyticsOutbox??={};state.abandonedCheckouts??={};state.recoveryEmailOutbox??={};state.recoverySuppressions??={};
+  state.events??={};state.orders??={};state.reservations??={};state.checkoutRequests??={};state.analyticsOutbox??={};state.abandonedCheckouts??={};state.recoveryEmailOutbox??={};state.recoverySuppressions??={};state.transactionalEmailOutbox??={};
   return state;
 }
 
