@@ -21,9 +21,23 @@ The amount due later is read from the verified initial-payment order record:
 
 The balance invoice amount is `amountTotal + shippingAmount`. No amount is accepted from the browser checkout or customer-facing order page.
 
-## Remaining-balance request
+## Remaining-balance request and dual entry
 
-The normal request window is within six weeks after order confirmation. Max reviews the production position, customer, SKUs, quantities, destination and confirmed freight, then calls the protected `POST /api/admin/request-balance` operation. The server creates and emails a Stripe Invoice with a 14-day due date. Repeating the same request uses Stripe idempotency keys based on the APO order number.
+The normal request window is within six weeks after order confirmation. Max opens `/admin/orders/`, reviews the production position, customer, SKUs, quantities, destination and confirmed freight, then confirms both of the following before the protected operation is available:
+
+- the product is ready to proceed to dispatch after final payment;
+- the delivery region and final shipping charge are correct.
+
+For a published delivery region, the stored server-side freight amount is locked. For an order marked `quote_required`, Max enters the confirmed freight in the internal page. The browser sends the confirmation, but the server still calculates the final amount from the verified order record and the approved freight. The customer-facing page cannot create an invoice or change an amount.
+
+The protected `POST /api/admin/request-balance` operation creates and emails a Stripe Invoice with a 14-day due date. Repeating a completed request returns the existing Stripe invoice instead of creating a second one. Stripe idempotency keys based on the APO order number protect an in-progress retry.
+
+The customer has two routes to the same Stripe-hosted invoice:
+
+1. the invoice email sent by Stripe;
+2. the **Pay remaining balance securely** button on the customer's token-protected `/order/` page.
+
+The second route only appears after Stripe has returned a valid hosted invoice URL. Both routes lead to the same invoice and payment status.
 
 The Stripe `invoice.paid` webhook changes the order from `balance_requested` to `balance_paid` and `preparing_for_dispatch`. Max does not manually mark an invoice paid.
 

@@ -371,6 +371,62 @@ export function abandonedCheckoutList(state,catalog){
   });
 }
 
+export function isStripeHostedInvoiceUrl(value){
+  try{
+    const url=new URL(String(value||""));
+    return url.protocol==="https:"&&["invoice.stripe.com","pay.stripe.com"].includes(url.hostname);
+  }catch{return false}
+}
+
+export function prepareBalanceRequest(order,input={}){
+  if(input.productReady!==true)throw new Error("Confirm that the product is ready to proceed before requesting the balance.");
+  if(input.finalShippingConfirmed!==true)throw new Error("Confirm the final shipping charge before requesting the balance.");
+  const shippingAmount=order.shippingQuoteRequired?Number(input.shippingAmount):order.shippingAmount;
+  if(!Number.isInteger(shippingAmount)||shippingAmount<0)throw new Error("A confirmed shipping amount is required.");
+  const remainingProductBalance=Number(order.amountTotal||0);
+  if(!Number.isInteger(remainingProductBalance)||remainingProductBalance<=0)throw new Error("The remaining product balance is invalid.");
+  return {shippingAmount,dueAmount:remainingProductBalance+shippingAmount};
+}
+
+export function publicOrderView(order){
+  const dispatched=order.dispatchedAt?new Date(order.dispatchedAt*1000):null;
+  const estimatedArrival=dispatched?new Date(dispatched.getTime()+28*86400000):null;
+  const balancePaymentUrl=["requested","payment_failed"].includes(order.balancePaymentStatus)&&isStripeHostedInvoiceUrl(order.balanceInvoiceUrl)?order.balanceInvoiceUrl:"";
+  return {
+    orderNumber:order.orderNumber,items:order.items,quantity:order.quantity,currency:order.currency,
+    initialPaymentAmount:order.amountTotal,initialPaymentStatus:order.initialPaymentStatus,
+    balancePaymentStatus:order.balancePaymentStatus,balanceRequestedAmount:order.balanceRequestedAmount||null,balancePaymentUrl,
+    shippingLabel:order.shippingLabel,shippingAmount:order.shippingAmount,orderStatus:order.orderStatus,fulfilmentStatus:order.fulfilmentStatus,
+    dispatchedAt:dispatched?.toISOString()||null,estimatedArrival:estimatedArrival?.toISOString()||null,updated:order.updated
+  };
+}
+
+export function adminOrderList(state,catalog){
+  return Object.values(state.orders||{}).sort((a,b)=>Number(b.created||0)-Number(a.created||0)).map(order=>({
+    orderNumber:order.orderNumber,
+    customerName:order.customerName||"",
+    customerEmail:order.customerEmail||"",
+    customerPhone:order.customerPhone||"",
+    items:(order.items||[]).map(item=>({sku:item.sku,quantity:Number(item.quantity||0),name:catalog?.bySku?.get(item.sku)?.productName||item.sku})),
+    quantity:Number(order.quantity||0),
+    currency:String(order.currency||"aud").toUpperCase(),
+    initialPaymentAmount:Number(order.amountTotal||0),
+    initialPaymentStatus:order.initialPaymentStatus||"pending",
+    remainingProductBalance:Number(order.amountTotal||0),
+    shippingRegion:order.shippingRegion||"",
+    shippingLabel:order.shippingLabel||"",
+    shippingAmount:Number.isInteger(order.shippingAmount)?order.shippingAmount:null,
+    shippingQuoteRequired:order.shippingQuoteRequired===true,
+    balancePaymentStatus:order.balancePaymentStatus||"not_requested",
+    balanceRequestedAmount:Number.isInteger(order.balanceRequestedAmount)?order.balanceRequestedAmount:null,
+    balanceInvoiceUrl:isStripeHostedInvoiceUrl(order.balanceInvoiceUrl)?order.balanceInvoiceUrl:"",
+    orderStatus:order.orderStatus||"",
+    fulfilmentStatus:order.fulfilmentStatus||"",
+    created:Number(order.created||0),
+    updated:Number(order.updated||0)
+  }));
+}
+
 export function unsubscribeRecoveryEmail(state,token,now=Math.floor(Date.now()/1000)){
   const candidate=String(token||"");
   if(!/^[A-Za-z0-9_-]{24,80}$/.test(candidate))return false;

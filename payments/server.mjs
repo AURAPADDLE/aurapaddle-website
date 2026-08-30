@@ -3,7 +3,7 @@ import http from "node:http";
 import path from "node:path";
 import crypto from "node:crypto";
 import {fileURLToPath} from "node:url";
-import {abandonedCheckoutList,applyStripeEvent,buildCheckoutParams,calculateShipping,campaignProgress,loadCatalog,loadShippingRates,loadStripeMap,normaliseAttribution,normaliseCheckoutItems,normaliseQuantity,queueOrderEmails,reserveCheckoutIdentity,safeReturnPath,unsubscribeRecoveryEmail,verifyStripeSignature} from "./lib.mjs";
+import {abandonedCheckoutList,adminOrderList,applyStripeEvent,buildCheckoutParams,calculateShipping,campaignProgress,isStripeHostedInvoiceUrl,loadCatalog,loadShippingRates,loadStripeMap,normaliseAttribution,normaliseCheckoutItems,normaliseQuantity,prepareBalanceRequest,publicOrderView,queueOrderEmails,reserveCheckoutIdentity,safeReturnPath,unsubscribeRecoveryEmail,verifyStripeSignature} from "./lib.mjs";
 import {enqueueStripeAnalytics,measurementPayload} from "./analytics.mjs";
 import {ensureRecoveryInbox,sendRecoveryEmail} from "./recovery-email.mjs";
 import {sendOrderEmail} from "./order-email.mjs";
@@ -96,16 +96,11 @@ async function sessionSummary(req,res,url){
   const items=String(session.metadata?.aura_items||"").split(",").filter(Boolean).map(entry=>{const [sku,quantity]=entry.split(":");return {sku,quantity:Number(quantity||1)}});
   send(res,200,{id:session.id,orderNumber:session.metadata?.aura_order_number||"",trackingToken:session.metadata?.aura_tracking_token||"",paymentStatus:session.payment_status,status:session.status,amountTotal:session.amount_total,currency:session.currency,customerEmail:session.customer_details?.email||session.customer_email||"",sku:items.length===1?items[0].sku:session.client_reference_id||"",items,orderMode:session.metadata?.aura_order_mode||"",paymentStage:session.metadata?.aura_payment_stage||"",shippingRegion:session.metadata?.aura_shipping_region||"",shippingLabel:session.metadata?.aura_shipping_label||"",shippingAmount:session.metadata?.aura_shipping_amount||"",quantity:items.reduce((sum,item)=>sum+item.quantity,0)||1});
 }
-function orderView(order){
-  const dispatched=order.dispatchedAt?new Date(order.dispatchedAt*1000):null;
-  const estimatedArrival=dispatched?new Date(dispatched.getTime()+28*86400000):null;
-  return {orderNumber:order.orderNumber,items:order.items,quantity:order.quantity,currency:order.currency,initialPaymentAmount:order.amountTotal,initialPaymentStatus:order.initialPaymentStatus,balancePaymentStatus:order.balancePaymentStatus,balanceRequestedAmount:order.balanceRequestedAmount||null,shippingLabel:order.shippingLabel,shippingAmount:order.shippingAmount,orderStatus:order.orderStatus,fulfilmentStatus:order.fulfilmentStatus,dispatchedAt:dispatched?.toISOString()||null,estimatedArrival:estimatedArrival?.toISOString()||null,updated:order.updated};
-}
 async function orderStatus(req,res,url){
   const orderNumber=url.searchParams.get("order")||"",token=url.searchParams.get("token")||"";
   const order=Object.values((await store.read()).orders||{}).find(item=>item.orderNumber===orderNumber);
   if(!order||!token||token!==order.trackingToken)return send(res,404,{error:"Order not found."});
-  send(res,200,orderView(order));
+  send(res,200,publicOrderView(order));
 }
 async function requestBalance(req,res){
   if(!requireAdmin(req))return send(res,401,{error:"Admin authorisation required."});
@@ -113,10 +108,10 @@ async function requestBalance(req,res){
   const state=await store.read(),order=Object.values(state.orders||{}).find(item=>item.orderNumber===body.orderNumber);
   if(!order)return send(res,404,{error:"Order not found."});
   if(order.balancePaymentStatus==="paid")return send(res,409,{error:"The balance is already paid."});
-  const shippingAmount=order.shippingQuoteRequired?Number(body.shippingAmount):order.shippingAmount;
-  if(!Number.isInteger(shippingAmount)||shippingAmount<0)throw new Error("A confirmed shipping amount is required.");
+  if(order.balancePaymentStatus==="requested"&&isStripeHostedInvoiceUrl(order.balanceInvoiceUrl))return send(res,200,{orderNumber:order.orderNumber,status:order.balancePaymentStatus,amount:order.balanceRequestedAmount,invoiceUrl:order.balanceInvoiceUrl,existing:true});
+  if(order.initialPaymentStatus!=="paid"||["cancelled","refunded","dispatched"].includes(order.fulfilmentStatus))return send(res,409,{error:"This order is not eligible for a remaining-balance request."});
+  const {shippingAmount,dueAmount}=prepareBalanceRequest(order,body);
   if(!order.customerId)throw new Error("Stripe customer is missing from the initial payment record.");
-  const dueAmount=order.amountTotal+shippingAmount;
   const customerLocaleParams=new URLSearchParams();
   customerLocaleParams.set("preferred_locales[0]","en");
   await stripeRequest(`/v1/customers/${encodeURIComponent(order.customerId)}`,{method:"POST",headers:{"Content-Type":"application/x-www-form-urlencoded"},body:customerLocaleParams});
@@ -133,7 +128,7 @@ async function requestBalance(req,res){
   let sent;
   try{sent=await stripeRequest(`/v1/invoices/${invoice.id}/send`,{method:"POST",headers:{"Content-Type":"application/x-www-form-urlencoded","Idempotency-Key":`${order.orderNumber}-balance-send`},body:new URLSearchParams()})}
   catch(error){await store.mutate(latest=>{const target=Object.values(latest.orders||{}).find(item=>item.orderNumber===body.orderNumber);if(target){target.balancePaymentStatus="request_failed";target.orderStatus="initial_payment_received";target.updated=Math.floor(Date.now()/1000)}});throw error}
-  const updated=await store.mutate(latest=>{const target=Object.values(latest.orders||{}).find(item=>item.orderNumber===body.orderNumber);if(!target)throw new Error("Order not found.");target.balanceInvoiceUrl=sent.hosted_invoice_url||"";target.updated=Math.floor(Date.now()/1000);return target});
+  const updated=await store.mutate(latest=>{const target=Object.values(latest.orders||{}).find(item=>item.orderNumber===body.orderNumber);if(!target)throw new Error("Order not found.");target.balanceInvoiceUrl=sent.hosted_invoice_url||"";target.fulfilmentStatus="awaiting_balance";target.updated=Math.floor(Date.now()/1000);return target});
   send(res,200,{orderNumber:updated.orderNumber,status:updated.balancePaymentStatus,amount:dueAmount,invoiceUrl:updated.balanceInvoiceUrl});
 }
 async function updateFulfilment(req,res){
@@ -142,7 +137,12 @@ async function updateFulfilment(req,res){
   if(!allowed.has(body.status))throw new Error("Invalid fulfilment status.");
   const order=await store.mutate(state=>{const target=Object.values(state.orders||{}).find(item=>item.orderNumber===body.orderNumber);if(!target)return null;target.fulfilmentStatus=body.status;target.orderStatus=body.status;if(body.status==="dispatched")target.dispatchedAt=Math.floor(Date.now()/1000);target.updated=Math.floor(Date.now()/1000);return target});
   if(!order)return send(res,404,{error:"Order not found."});
-  send(res,200,orderView(order));
+  send(res,200,publicOrderView(order));
+}
+
+async function orders(req,res){
+  if(!requireAdmin(req))return send(res,401,{error:"Admin authorisation required."});
+  send(res,200,{generatedAt:Math.floor(Date.now()/1000),items:adminOrderList(await store.read(),catalog)});
 }
 
 async function abandonedCheckouts(req,res){
@@ -275,6 +275,7 @@ const server=http.createServer(async(req,res)=>{
     if(req.method==="GET"&&url.pathname==="/api/order")return await orderStatus(req,res,url);
     if(req.method==="POST"&&url.pathname==="/api/admin/request-balance")return await requestBalance(req,res);
     if(req.method==="POST"&&url.pathname==="/api/admin/order-status")return await updateFulfilment(req,res);
+    if(req.method==="GET"&&url.pathname==="/api/admin/orders")return await orders(req,res);
     if(req.method==="GET"&&url.pathname==="/api/admin/abandoned-checkouts")return await abandonedCheckouts(req,res);
     if(req.method==="GET"&&url.pathname==="/api/recovery/unsubscribe")return await unsubscribeRecovery(req,res,url);
     if(req.method==="POST"&&url.pathname==="/api/stripe-webhook")return await webhook(req,res);

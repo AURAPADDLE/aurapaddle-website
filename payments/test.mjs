@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import crypto from "node:crypto";
 import test from "node:test";
-import {abandonedCheckoutList,applyStripeEvent,buildCheckoutParams,calculateShipping,campaignProgress,loadCatalog,loadShippingRates,loadStripeMap,normaliseAttribution,normaliseCheckoutItems,normaliseQuantity,queueOrderEmails,reserveCheckoutIdentity,unsubscribeRecoveryEmail,verifyStripeSignature} from "./lib.mjs";
+import {abandonedCheckoutList,adminOrderList,applyStripeEvent,buildCheckoutParams,calculateShipping,campaignProgress,isStripeHostedInvoiceUrl,loadCatalog,loadShippingRates,loadStripeMap,normaliseAttribution,normaliseCheckoutItems,normaliseQuantity,prepareBalanceRequest,publicOrderView,queueOrderEmails,reserveCheckoutIdentity,unsubscribeRecoveryEmail,verifyStripeSignature} from "./lib.mjs";
 import {enqueueStripeAnalytics,hashUserData,measurementPayload} from "./analytics.mjs";
 import {recoveryEmailContent} from "./recovery-email.mjs";
 import {adminOrderEmailContent,customerOrderEmailContent} from "./order-email.mjs";
@@ -218,6 +218,32 @@ test("Invoice payment does not fulfil an order when the paid amount is zero or m
   const order=state.orders.cs_test_order;
   applyStripeEvent(state,{id:"evt_zero",type:"invoice.paid",created:2,data:{object:{id:"in_expected",amount_paid:0,metadata:{aura_order_number:"APO48218"}}}});
   assert.equal(order.balancePaymentStatus,"payment_review");assert.equal(order.orderStatus,"balance_requested");assert.equal(order.fulfilmentStatus,"awaiting_balance");assert.equal(order.requiresBalancePaymentReview,true);
+});
+
+test("dual-entry balance payment exposes only an authentic Stripe-hosted invoice URL",()=>{
+  const base={orderNumber:"APO48218",items:[{sku:"AP734955",quantity:1}],quantity:1,currency:"aud",amountTotal:37450,initialPaymentStatus:"paid",balancePaymentStatus:"requested",balanceRequestedAmount:45350,shippingLabel:"QLD / NSW major cities",shippingAmount:7900,orderStatus:"balance_requested",fulfilmentStatus:"awaiting_balance",updated:2};
+  const valid=publicOrderView({...base,balanceInvoiceUrl:"https://invoice.stripe.com/i/acct_123/test_abc"});
+  assert.equal(valid.balancePaymentUrl,"https://invoice.stripe.com/i/acct_123/test_abc");
+  const malicious=publicOrderView({...base,balanceInvoiceUrl:"https://example.com/fake-invoice"});
+  assert.equal(malicious.balancePaymentUrl,"");
+  assert.equal(isStripeHostedInvoiceUrl("javascript:alert(1)"),false);
+  const paid=publicOrderView({...base,balancePaymentStatus:"paid",balanceInvoiceUrl:"https://invoice.stripe.com/i/acct_123/test_abc"});
+  assert.equal(paid.balancePaymentUrl,"");
+});
+
+test("admin order list contains operational totals without exposing the customer tracking token",()=>{
+  const state={orders:{cs_test:{orderNumber:"APO48218",trackingToken:"must-not-leak",items:[{sku:"AP734955",quantity:1}],quantity:1,currency:"aud",amountTotal:37450,initialPaymentStatus:"paid",balancePaymentStatus:"not_requested",shippingLabel:"QLD / NSW major cities",shippingAmount:7900,shippingQuoteRequired:false,fulfilmentStatus:"preorder_confirmed",customerEmail:"buyer@example.com",created:2,updated:2}}};
+  const [order]=adminOrderList(state,catalog);
+  assert.equal(order.remainingProductBalance,37450);assert.equal(order.shippingAmount,7900);assert.equal(order.items[0].name,"AURA PADDLE Yoga Cruiser");assert.equal("trackingToken" in order,false);
+});
+
+test("final balance approval locks published freight and accepts a confirmed quote only when required",()=>{
+  const fixed={amountTotal:37450,shippingAmount:7900,shippingQuoteRequired:false};
+  assert.deepEqual(prepareBalanceRequest(fixed,{productReady:true,finalShippingConfirmed:true,shippingAmount:1}),{shippingAmount:7900,dueAmount:45350});
+  const quoted={amountTotal:37450,shippingAmount:null,shippingQuoteRequired:true};
+  assert.deepEqual(prepareBalanceRequest(quoted,{productReady:true,finalShippingConfirmed:true,shippingAmount:12900}),{shippingAmount:12900,dueAmount:50350});
+  assert.throws(()=>prepareBalanceRequest(quoted,{productReady:false,finalShippingConfirmed:true,shippingAmount:12900}),/product is ready/);
+  assert.throws(()=>prepareBalanceRequest(quoted,{productReady:true,finalShippingConfirmed:false,shippingAmount:12900}),/shipping charge/);
 });
 
 test("paid Stripe webhook queues one authoritative GA4 purchase",()=>{
