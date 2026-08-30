@@ -44,13 +44,20 @@ The Stripe `invoice.paid` webhook changes the order from `balance_requested` to 
 ## Customer-visible statuses
 
 - `initial_payment_received`: verified 50% initial payment received.
+- `production_confirmed`: AURA PADDLE has confirmed the board for production or stock allocation.
 - `balance_requested`: Stripe Invoice sent; payment pending.
 - `balance_paid`: Stripe confirms the remaining product balance and shipping have been paid.
+- `preparing_for_dispatch`: final payment is verified and the order is being prepared for the carrier.
 - `cancelled`: order cancelled by AURA PADDLE operations.
 - `refunded`: Stripe confirms the initial payment was fully refunded.
-- `dispatched`: Max records dispatch after carrier handover.
+- `dispatched`: Max records the carrier, tracking number and optional secure tracking link after handover.
+- `delivered`: Max records delivery after carrier confirmation.
 
-Customers use `/order/` with the secure order number and tracking token. From the dispatch date, the page displays an allowance of up to four weeks for delivery, depending on destination and carrier. This is a delivery window, not a guaranteed arrival date.
+Customers use `/order/` with the secure order number and tracking token. The page shows the seven-stage progress timeline, AURA's estimated dispatch date and, after handover, the carrier and tracking details. From the dispatch date, the page displays an allowance of up to four weeks for delivery, depending on destination and carrier. This is a delivery window, not a guaranteed arrival date.
+
+The protected `/admin/orders/` page is the source of manual progress updates. It may update the estimated dispatch date, confirm production or stock allocation, record dispatch and mark delivery. Dispatch is blocked until Stripe has verified the final payment; carrier and tracking number are required. Customers cannot edit these fields.
+
+Transactional customer emails are queued at three key events: final balance requested, final balance paid and dispatched. The same event key is sent at most once. Production-date and delivered updates appear on the secure status page but do not send an extra email in this first version.
 
 ## First 12-week manual control
 

@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
 import crypto from "node:crypto";
 import test from "node:test";
-import {abandonedCheckoutList,adminOrderList,applyStripeEvent,buildCheckoutParams,calculateShipping,campaignProgress,isStripeHostedInvoiceUrl,loadCatalog,loadShippingRates,loadStripeMap,normaliseAttribution,normaliseCheckoutItems,normaliseQuantity,prepareBalanceRequest,publicOrderView,queueOrderEmails,reserveCheckoutIdentity,unsubscribeRecoveryEmail,verifyStripeSignature} from "./lib.mjs";
+import {abandonedCheckoutList,adminOrderList,applyStripeEvent,buildCheckoutParams,calculateShipping,campaignProgress,isStripeHostedInvoiceUrl,loadCatalog,loadShippingRates,loadStripeMap,normaliseAttribution,normaliseCheckoutItems,normaliseQuantity,orderProgress,prepareBalanceRequest,publicOrderView,queueOrderEmails,queueOrderMilestoneEmail,reserveCheckoutIdentity,unsubscribeRecoveryEmail,updateOrderProgress,verifyStripeSignature} from "./lib.mjs";
 import {enqueueStripeAnalytics,hashUserData,measurementPayload} from "./analytics.mjs";
 import {recoveryEmailContent} from "./recovery-email.mjs";
-import {adminOrderEmailContent,customerOrderEmailContent} from "./order-email.mjs";
+import {adminOrderEmailContent,customerOrderEmailContent,milestoneOrderEmailContent} from "./order-email.mjs";
 
 const catalog=loadCatalog();
 const shippingRates=loadShippingRates();
@@ -246,6 +246,35 @@ test("final balance approval locks published freight and accepts a confirmed quo
   assert.throws(()=>prepareBalanceRequest(quoted,{productReady:true,finalShippingConfirmed:false,shippingAmount:12900}),/shipping charge/);
 });
 
+test("customer progress is derived from legacy and explicit order milestones",()=>{
+  const initial=orderProgress({initialPaymentStatus:"paid",created:10,balancePaymentStatus:"not_requested",fulfilmentStatus:"preorder_confirmed"});
+  assert.equal(initial.find(item=>item.state==="current").id,"order_confirmed");
+  const paid=orderProgress({initialPaymentStatus:"paid",created:10,balancePaymentStatus:"paid",balanceRequestedAt:20,balancePaidAt:30,fulfilmentStatus:"preparing_for_dispatch"});
+  assert.equal(paid.find(item=>item.state==="current").id,"preparing_for_dispatch");
+  assert.equal(paid.find(item=>item.id==="production_confirmed").state,"complete");
+});
+
+test("manual order progress enforces payment and secure tracking rules",()=>{
+  const order={initialPaymentStatus:"paid",balancePaymentStatus:"not_requested",fulfilmentStatus:"preorder_confirmed",orderStatus:"initial_payment_received",created:10,updated:10};
+  updateOrderProgress(order,{stage:"production_confirmed",estimatedDispatchDate:"2026-11-30"},20);
+  assert.equal(order.fulfilmentStatus,"production_confirmed");assert.equal(order.estimatedDispatchDate,"2026-11-30");
+  assert.throws(()=>updateOrderProgress(order,{stage:"dispatched",carrier:"Mainfreight",trackingNumber:"ABC"},30),/Final payment/);
+  order.balancePaymentStatus="paid";order.fulfilmentStatus="preparing_for_dispatch";
+  assert.throws(()=>updateOrderProgress(order,{stage:"dispatched",carrier:"",trackingNumber:"ABC"},30),/Carrier/);
+  assert.throws(()=>updateOrderProgress(order,{stage:"dispatched",carrier:"Mainfreight",trackingNumber:"ABC",trackingUrl:"http://example.com"},30),/HTTPS/);
+  updateOrderProgress(order,{stage:"dispatched",carrier:"Mainfreight",trackingNumber:"ABC123",trackingUrl:"https://example.com/track/ABC123"},30);
+  assert.equal(order.fulfilmentStatus,"dispatched");assert.equal(order.dispatchedAt,30);
+  updateOrderProgress(order,{stage:"delivered"},40);assert.equal(order.fulfilmentStatus,"delivered");assert.equal(order.deliveredAt,40);
+});
+
+test("milestone notifications are queued once without exposing unsafe tracking links",()=>{
+  const state={transactionalEmailOutbox:{}},order={sessionId:"cs_live_progress",orderNumber:"APO48228",trackingToken:"secure_tracking_token_48228",customerEmail:"Buyer@Example.com",customerName:"Alex Buyer",items:[{sku:"AP734955",quantity:1}],amountTotal:37450,currency:"aud",balanceRequestedAmount:45350,balanceInvoiceUrl:"https://invoice.stripe.com/i/test",trackingUrl:"javascript:alert(1)"};
+  assert.equal(queueOrderMilestoneEmail(state,order,"balance_requested",20),true);
+  assert.equal(queueOrderMilestoneEmail(state,order,"balance_requested",21),false);
+  const queued=state.transactionalEmailOutbox["cs_live_progress:balance_requested"];
+  assert.equal(queued.recipient,"buyer@example.com");assert.equal(queued.trackingUrl,"");
+});
+
 test("paid Stripe webhook queues one authoritative GA4 purchase",()=>{
   const attribution={version:1,consent:{analytics:true,marketing:false,updatedAt:"2026-08-25T00:00:00.000Z"},first:{source:"google",medium:"cpc"},last:{source:"google",medium:"cpc"},analyticsClientId:"123456789.987654321",analyticsSessionId:"1787635200"};
   const state={events:{},orders:{},reservations:{APO48219:1},checkoutRequests:{request_123:{orderNumber:"APO48219",attribution}},analyticsOutbox:{}};
@@ -336,6 +365,8 @@ test("order emails include payment, dispatch and secure operational links",()=>{
   assert.match(customer.subject,/APO48227/);assert.match(customer.text,/AUD \$374\.50/);assert.match(customer.text,/15 September 2026/);assert.match(customer.text,/order\/\?order=APO48227&token=secure_tracking_token_48227/);assert.match(customer.text,/within 48 hours/);
   const admin=adminOrderEmailContent({...entry,kind:"admin_notification",recipient:"admin@aurapaddle.com"},{catalog,siteUrl:"https://www.aurapaddle.com"});
   assert.match(admin.subject,/New order APO48227/);assert.match(admin.text,/Alex Buyer/);assert.match(admin.text,/dashboard\.stripe\.com\/payments\/pi_live_mail/);assert.match(admin.text,/Local pickup/);
+  const milestone=milestoneOrderEmailContent({...entry,kind:"dispatched",carrier:"Mainfreight",trackingNumber:"MF123",trackingUrl:"https://example.com/track/MF123"},{siteUrl:"https://www.aurapaddle.com"});
+  assert.match(milestone.subject,/dispatched/);assert.match(milestone.text,/MF123/);assert.match(milestone.text,/secure_tracking_token_48227/);
 });
 
 test("recovery email includes Stripe link, identity and unsubscribe but no SMS action",()=>{

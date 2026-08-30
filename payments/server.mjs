@@ -3,7 +3,7 @@ import http from "node:http";
 import path from "node:path";
 import crypto from "node:crypto";
 import {fileURLToPath} from "node:url";
-import {abandonedCheckoutList,adminOrderList,applyStripeEvent,buildCheckoutParams,calculateShipping,campaignProgress,isStripeHostedInvoiceUrl,loadCatalog,loadShippingRates,loadStripeMap,normaliseAttribution,normaliseCheckoutItems,normaliseQuantity,prepareBalanceRequest,publicOrderView,queueOrderEmails,reserveCheckoutIdentity,safeReturnPath,unsubscribeRecoveryEmail,verifyStripeSignature} from "./lib.mjs";
+import {abandonedCheckoutList,adminOrderList,applyStripeEvent,buildCheckoutParams,calculateShipping,campaignProgress,isStripeHostedInvoiceUrl,loadCatalog,loadShippingRates,loadStripeMap,normaliseAttribution,normaliseCheckoutItems,normaliseQuantity,prepareBalanceRequest,publicOrderView,queueOrderEmails,queueOrderMilestoneEmail,reserveCheckoutIdentity,safeReturnPath,unsubscribeRecoveryEmail,updateOrderProgress,verifyStripeSignature} from "./lib.mjs";
 import {enqueueStripeAnalytics,measurementPayload} from "./analytics.mjs";
 import {ensureRecoveryInbox,sendRecoveryEmail} from "./recovery-email.mjs";
 import {sendOrderEmail} from "./order-email.mjs";
@@ -128,15 +128,31 @@ async function requestBalance(req,res){
   let sent;
   try{sent=await stripeRequest(`/v1/invoices/${invoice.id}/send`,{method:"POST",headers:{"Content-Type":"application/x-www-form-urlencoded","Idempotency-Key":`${order.orderNumber}-balance-send`},body:new URLSearchParams()})}
   catch(error){await store.mutate(latest=>{const target=Object.values(latest.orders||{}).find(item=>item.orderNumber===body.orderNumber);if(target){target.balancePaymentStatus="request_failed";target.orderStatus="initial_payment_received";target.updated=Math.floor(Date.now()/1000)}});throw error}
-  const updated=await store.mutate(latest=>{const target=Object.values(latest.orders||{}).find(item=>item.orderNumber===body.orderNumber);if(!target)throw new Error("Order not found.");target.balanceInvoiceUrl=sent.hosted_invoice_url||"";target.fulfilmentStatus="awaiting_balance";target.updated=Math.floor(Date.now()/1000);return target});
+  const updated=await store.mutate(latest=>{const target=Object.values(latest.orders||{}).find(item=>item.orderNumber===body.orderNumber);if(!target)throw new Error("Order not found.");target.balanceInvoiceUrl=sent.hosted_invoice_url||"";target.fulfilmentStatus="awaiting_balance";target.updated=Math.floor(Date.now()/1000);queueOrderMilestoneEmail(latest,target,"balance_requested",target.updated);return target});
+  void flushOrderEmailOutbox().catch(error=>console.error("Balance-request email flush failed",error));
   send(res,200,{orderNumber:updated.orderNumber,status:updated.balancePaymentStatus,amount:dueAmount,invoiceUrl:updated.balanceInvoiceUrl});
 }
 async function updateFulfilment(req,res){
   if(!requireAdmin(req))return send(res,401,{error:"Admin authorisation required."});
-  const body=JSON.parse((await readBody(req)).toString("utf8")||"{}"),allowed=new Set(["cancelled","dispatched"]);
-  if(!allowed.has(body.status))throw new Error("Invalid fulfilment status.");
-  const order=await store.mutate(state=>{const target=Object.values(state.orders||{}).find(item=>item.orderNumber===body.orderNumber);if(!target)return null;target.fulfilmentStatus=body.status;target.orderStatus=body.status;if(body.status==="dispatched")target.dispatchedAt=Math.floor(Date.now()/1000);target.updated=Math.floor(Date.now()/1000);return target});
+  const body=JSON.parse((await readBody(req)).toString("utf8")||"{}");
+  if(body.status!=="cancelled")throw new Error("Use the customer progress action for dispatch updates.");
+  const order=await store.mutate(state=>{const target=Object.values(state.orders||{}).find(item=>item.orderNumber===body.orderNumber);if(!target)return null;target.fulfilmentStatus="cancelled";target.orderStatus="cancelled";target.updated=Math.floor(Date.now()/1000);return target});
   if(!order)return send(res,404,{error:"Order not found."});
+  send(res,200,publicOrderView(order));
+}
+
+async function updateProgress(req,res){
+  if(!requireAdmin(req))return send(res,401,{error:"Admin authorisation required."});
+  const body=JSON.parse((await readBody(req)).toString("utf8")||"{}");
+  const order=await store.mutate(state=>{
+    const target=Object.values(state.orders||{}).find(item=>item.orderNumber===body.orderNumber);
+    if(!target)return null;
+    updateOrderProgress(target,body);
+    if(body.stage==="dispatched")queueOrderMilestoneEmail(state,target,"dispatched",target.updated);
+    return target;
+  });
+  if(!order)return send(res,404,{error:"Order not found."});
+  if(body.stage==="dispatched")void flushOrderEmailOutbox().catch(error=>console.error("Dispatch email flush failed",error));
   send(res,200,publicOrderView(order));
 }
 
@@ -247,7 +263,7 @@ async function webhook(req,res){
   const raw=await readBody(req);
   if(!verifyStripeSignature(raw.toString("utf8"),req.headers["stripe-signature"],webhookSecret))return send(res,400,{error:"Invalid Stripe webhook signature."});
   const event=JSON.parse(raw.toString("utf8"));
-  await store.mutate(state=>{const applied=applyStripeEvent(state,event);if(applied)enqueueStripeAnalytics(state,event,catalog,{enhancedConversionsEnabled});queueOrderEmails(state,event,{adminEmail:orderNotificationEmail});return applied});
+  await store.mutate(state=>{const applied=applyStripeEvent(state,event);if(applied)enqueueStripeAnalytics(state,event,catalog,{enhancedConversionsEnabled});queueOrderEmails(state,event,{adminEmail:orderNotificationEmail});if(applied&&event.type==="invoice.paid"){const target=Object.values(state.orders||{}).find(item=>item.orderNumber===event.data?.object?.metadata?.aura_order_number);if(target?.balancePaymentStatus==="paid")queueOrderMilestoneEmail(state,target,"balance_paid",event.created)}return applied});
   void flushAnalyticsOutbox().catch(error=>console.error("GA4 outbox flush failed",error));
   void flushRecoveryEmailOutbox().catch(error=>console.error("Recovery email outbox flush failed",error));
   void flushOrderEmailOutbox().catch(error=>console.error("Order email outbox flush failed",error));
@@ -274,6 +290,7 @@ const server=http.createServer(async(req,res)=>{
     if(req.method==="GET"&&url.pathname==="/api/checkout-session")return await sessionSummary(req,res,url);
     if(req.method==="GET"&&url.pathname==="/api/order")return await orderStatus(req,res,url);
     if(req.method==="POST"&&url.pathname==="/api/admin/request-balance")return await requestBalance(req,res);
+    if(req.method==="POST"&&url.pathname==="/api/admin/order-progress")return await updateProgress(req,res);
     if(req.method==="POST"&&url.pathname==="/api/admin/order-status")return await updateFulfilment(req,res);
     if(req.method==="GET"&&url.pathname==="/api/admin/orders")return await orders(req,res);
     if(req.method==="GET"&&url.pathname==="/api/admin/abandoned-checkouts")return await abandonedCheckouts(req,res);

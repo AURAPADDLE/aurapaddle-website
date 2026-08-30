@@ -388,6 +388,77 @@ export function prepareBalanceRequest(order,input={}){
   return {shippingAmount,dueAmount:remainingProductBalance+shippingAmount};
 }
 
+const ORDER_PROGRESS_DEFINITIONS=[
+  {id:"order_confirmed",label:"Order confirmed",description:"Your initial 50% payment has been received."},
+  {id:"production_confirmed",label:"Production / stock confirmed",description:"AURA PADDLE has confirmed your board for production or stock allocation."},
+  {id:"balance_requested",label:"Ready for final payment",description:"Your final balance and confirmed shipping charge are ready."},
+  {id:"balance_paid",label:"Final payment received",description:"Your remaining balance has been securely received."},
+  {id:"preparing_for_dispatch",label:"Preparing for dispatch",description:"Your order is being prepared for the carrier."},
+  {id:"dispatched",label:"Dispatched",description:"Your order has left AURA PADDLE."},
+  {id:"delivered",label:"Delivered",description:"Your order has been marked as delivered."}
+];
+
+function safeTrackingUrl(value){
+  try{const url=new URL(String(value||""));return url.protocol==="https:"?url.toString():""}catch{return ""}
+}
+
+function progressAchievements(order){
+  const fulfilment=String(order.fulfilmentStatus||""),balance=String(order.balancePaymentStatus||"");
+  const delivered=Boolean(order.deliveredAt)||fulfilment==="delivered";
+  const dispatched=Boolean(order.dispatchedAt)||["dispatched","delivered"].includes(fulfilment);
+  const preparing=Boolean(order.preparingForDispatchAt)||["preparing_for_dispatch","dispatched","delivered"].includes(fulfilment);
+  const balancePaid=Boolean(order.balancePaidAt)||balance==="paid"||preparing||dispatched||delivered;
+  const balanceRequested=Boolean(order.balanceRequestedAt)||["requested","payment_failed","payment_review","paid"].includes(balance)||balancePaid;
+  const production=Boolean(order.productionConfirmedAt)||balanceRequested||balancePaid||dispatched||delivered;
+  return [
+    {done:order.initialPaymentStatus==="paid",at:Number(order.orderConfirmedAt||order.created||0)},
+    {done:production,at:Number(order.productionConfirmedAt||order.balanceRequestedAt||order.balancePaidAt||order.dispatchedAt||order.deliveredAt||0)},
+    {done:balanceRequested,at:Number(order.balanceRequestedAt||order.balancePaidAt||order.dispatchedAt||order.deliveredAt||0)},
+    {done:balancePaid,at:Number(order.balancePaidAt||order.preparingForDispatchAt||order.dispatchedAt||order.deliveredAt||0)},
+    {done:preparing,at:Number(order.preparingForDispatchAt||order.balancePaidAt||order.dispatchedAt||order.deliveredAt||0)},
+    {done:dispatched,at:Number(order.dispatchedAt||order.deliveredAt||0)},
+    {done:delivered,at:Number(order.deliveredAt||0)}
+  ];
+}
+
+export function orderProgress(order){
+  const achieved=progressAchievements(order),latest=achieved.reduce((index,item,current)=>item.done?current:index,-1);
+  return ORDER_PROGRESS_DEFINITIONS.map((definition,index)=>({
+    ...definition,
+    state:index<latest?"complete":index===latest?"current":"upcoming",
+    completedAt:achieved[index].done&&achieved[index].at?achieved[index].at:null
+  }));
+}
+
+export function updateOrderProgress(order,input={},now=Math.floor(Date.now()/1000)){
+  const stage=String(input.stage||""),allowed=new Set(["update_estimate","production_confirmed","dispatched","delivered"]);
+  if(!allowed.has(stage))throw new Error("Select a valid order progress update.");
+  if(order.initialPaymentStatus!=="paid"||["cancelled","refunded"].includes(order.fulfilmentStatus))throw new Error("This order cannot be progressed.");
+  const estimatedDispatchDate=String(input.estimatedDispatchDate||"").trim();
+  if(estimatedDispatchDate){
+    const parsedDate=new Date(`${estimatedDispatchDate}T00:00:00Z`);
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(estimatedDispatchDate)||Number.isNaN(parsedDate.getTime())||parsedDate.toISOString().slice(0,10)!==estimatedDispatchDate)throw new Error("Enter a valid estimated dispatch date.");
+    order.estimatedDispatchDate=estimatedDispatchDate;
+  }
+  if(stage==="production_confirmed"){
+    order.productionConfirmedAt=Number(order.productionConfirmedAt||now);
+    if(!["awaiting_balance","preparing_for_dispatch","dispatched","delivered"].includes(order.fulfilmentStatus)){order.fulfilmentStatus="production_confirmed";order.orderStatus="production_confirmed"}
+  }
+  if(stage==="dispatched"){
+    if(order.balancePaymentStatus!=="paid")throw new Error("Final payment must be received before dispatch.");
+    const carrier=String(input.carrier||"").trim().slice(0,80),trackingNumber=String(input.trackingNumber||"").trim().slice(0,100),trackingUrl=String(input.trackingUrl||"").trim();
+    if(!carrier||!trackingNumber)throw new Error("Carrier and tracking number are required for dispatch.");
+    if(trackingUrl&&!safeTrackingUrl(trackingUrl))throw new Error("Tracking link must be a secure HTTPS URL.");
+    order.carrier=carrier;order.trackingNumber=trackingNumber;order.trackingUrl=safeTrackingUrl(trackingUrl);order.dispatchedAt=Number(order.dispatchedAt||now);order.fulfilmentStatus="dispatched";order.orderStatus="dispatched";
+  }
+  if(stage==="delivered"){
+    if(!order.dispatchedAt&&order.fulfilmentStatus!=="dispatched")throw new Error("Mark the order as dispatched before delivered.");
+    order.deliveredAt=Number(order.deliveredAt||now);order.fulfilmentStatus="delivered";order.orderStatus="delivered";
+  }
+  order.updated=now;
+  return order;
+}
+
 export function publicOrderView(order){
   const dispatched=order.dispatchedAt?new Date(order.dispatchedAt*1000):null;
   const estimatedArrival=dispatched?new Date(dispatched.getTime()+28*86400000):null;
@@ -397,6 +468,7 @@ export function publicOrderView(order){
     initialPaymentAmount:order.amountTotal,initialPaymentStatus:order.initialPaymentStatus,
     balancePaymentStatus:order.balancePaymentStatus,balanceRequestedAmount:order.balanceRequestedAmount||null,balancePaymentUrl,
     shippingLabel:order.shippingLabel,shippingAmount:order.shippingAmount,orderStatus:order.orderStatus,fulfilmentStatus:order.fulfilmentStatus,
+    progress:orderProgress(order),estimatedDispatchDate:order.estimatedDispatchDate||"",carrier:order.carrier||"",trackingNumber:order.trackingNumber||"",trackingUrl:safeTrackingUrl(order.trackingUrl),
     dispatchedAt:dispatched?.toISOString()||null,estimatedArrival:estimatedArrival?.toISOString()||null,updated:order.updated
   };
 }
@@ -422,6 +494,14 @@ export function adminOrderList(state,catalog){
     balanceInvoiceUrl:isStripeHostedInvoiceUrl(order.balanceInvoiceUrl)?order.balanceInvoiceUrl:"",
     orderStatus:order.orderStatus||"",
     fulfilmentStatus:order.fulfilmentStatus||"",
+    progress:orderProgress(order),
+    estimatedDispatchDate:order.estimatedDispatchDate||"",
+    productionConfirmedAt:Number(order.productionConfirmedAt||0),
+    dispatchedAt:Number(order.dispatchedAt||0),
+    deliveredAt:Number(order.deliveredAt||0),
+    carrier:order.carrier||"",
+    trackingNumber:order.trackingNumber||"",
+    trackingUrl:safeTrackingUrl(order.trackingUrl),
     created:Number(order.created||0),
     updated:Number(order.updated||0)
   }));
@@ -476,6 +556,7 @@ export function applyStripeEvent(state,event){
       customerName:object.customer_details?.name||"",
       customerPhone:object.customer_details?.phone||"",
       attribution,
+      orderConfirmedAt:object.created||event.created,
       created:object.created||event.created,
       updated:event.created
     };
@@ -504,7 +585,7 @@ export function applyStripeEvent(state,event){
     if(order){
       const paidAmount=Number(object.amount_paid||0),expectedAmount=Number(order.balanceRequestedAmount||0),invoiceMatches=!order.balanceInvoiceId||order.balanceInvoiceId===object.id;
       order.balancePaidAmount=paidAmount;
-      if(expectedAmount>0&&paidAmount===expectedAmount&&invoiceMatches){order.balancePaymentStatus="paid";order.balanceInvoiceId=object.id;order.orderStatus="balance_paid";order.fulfilmentStatus="preparing_for_dispatch";delete order.requiresBalancePaymentReview}
+      if(expectedAmount>0&&paidAmount===expectedAmount&&invoiceMatches){order.balancePaymentStatus="paid";order.balanceInvoiceId=object.id;order.balancePaidAt=event.created;order.preparingForDispatchAt=event.created;order.orderStatus="balance_paid";order.fulfilmentStatus="preparing_for_dispatch";delete order.requiresBalancePaymentReview}
       else{order.balancePaymentStatus="payment_review";order.requiresBalancePaymentReview=true}
       order.updated=event.created;
     }
@@ -546,6 +627,25 @@ export function queueOrderEmails(state,event,{adminEmail="admin@aurapaddle.com"}
     if(!state.transactionalEmailOutbox[key]){state.transactionalEmailOutbox[key]={...structuredClone(shared),key,kind:"admin_notification",recipient:recipientAdmin};queued=true}
   }
   return queued;
+}
+
+export function queueOrderMilestoneEmail(state,order,kind,now=Math.floor(Date.now()/1000)){
+  if(!["balance_requested","balance_paid","dispatched"].includes(kind)||!order?.sessionId||!order?.orderNumber)return false;
+  const recipient=normaliseRecoveryEmail(order.customerEmail);
+  if(!recipient)return false;
+  state.transactionalEmailOutbox??={};
+  const key=`${order.sessionId}:${kind}`;
+  if(state.transactionalEmailOutbox[key])return false;
+  state.transactionalEmailOutbox[key]={
+    key,kind,recipient,sessionId:order.sessionId,orderNumber:order.orderNumber,trackingToken:order.trackingToken||"",paymentIntentId:order.paymentIntentId||"",
+    items:structuredClone(order.items||[]),amountTotal:Number(order.amountTotal||0),currency:order.currency||"aud",paymentStage:order.paymentStage||"initial_50_percent",
+    shippingRegion:order.shippingRegion||"",shippingLabel:order.shippingLabel||"",shippingAmount:order.shippingAmount,shippingQuoteRequired:order.shippingQuoteRequired===true,
+    balanceRequestedAmount:Number(order.balanceRequestedAmount||0),balancePaidAmount:Number(order.balancePaidAmount||0),balanceInvoiceUrl:isStripeHostedInvoiceUrl(order.balanceInvoiceUrl)?order.balanceInvoiceUrl:"",
+    customerName:order.customerName||"",customerEmail:recipient,customerPhone:order.customerPhone||"",estimatedDispatchDate:order.estimatedDispatchDate||"",
+    carrier:order.carrier||"",trackingNumber:order.trackingNumber||"",trackingUrl:safeTrackingUrl(order.trackingUrl),
+    status:"pending",attempts:0,nextAttemptAt:0,createdAt:now,updatedAt:now
+  };
+  return true;
 }
 
 export function campaignProgress(state,catalog){

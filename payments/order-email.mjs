@@ -19,7 +19,7 @@ function orderDetails(entry,catalog){
 }
 
 function shippingCopy(entry){
-  if(entry.shippingQuoteRequired)return `${entry.shippingLabel||"Selected delivery region"} — shipping will be confirmed by AURA PADDLE before dispatch.`;
+  if(entry.shippingQuoteRequired&&!Number.isInteger(entry.shippingAmount))return `${entry.shippingLabel||"Selected delivery region"} — shipping will be confirmed by AURA PADDLE before dispatch.`;
   if(Number(entry.shippingAmount||0)===0)return `${entry.shippingLabel||"Local pickup"} — free.`;
   return `${entry.shippingLabel||"Selected delivery region"} — ${money(entry.shippingAmount,entry.currency)}, payable with the remaining product balance before dispatch.`;
 }
@@ -60,8 +60,34 @@ export function adminOrderEmailContent(entry,{catalog,siteUrl}){
   return {subject,text,html:emailFrame(`New order ${entry.orderNumber}`,body)};
 }
 
+export function milestoneOrderEmailContent(entry,{siteUrl}){
+  const statusUrl=new URL(`/order/?order=${encodeURIComponent(entry.orderNumber)}&token=${encodeURIComponent(entry.trackingToken)}`,siteUrl).toString();
+  const name=firstName(entry.customerName),amount=money(entry.balanceRequestedAmount||entry.balancePaidAmount,entry.currency),shipping=shippingCopy(entry);
+  let subject,title,paragraph,lines,detailHtml,primaryLabel="View order progress",primaryUrl=statusUrl;
+  if(entry.kind==="balance_requested"){
+    subject=`Final payment ready — ${entry.orderNumber} | AURA PADDLE`;title="Your final payment is ready";
+    paragraph=`A secure Stripe invoice for ${amount} has been issued for your remaining product balance and confirmed shipping.`;
+    lines=[`Amount due: ${amount}`,`Delivery: ${shipping}`,"You can pay from the Stripe invoice email or your secure AURA PADDLE order page."];
+    detailHtml=`<p><strong>Amount due:</strong> ${escapeHtml(amount)}</p><p><strong>Delivery:</strong> ${escapeHtml(shipping)}</p><p>You can pay from the Stripe invoice email or your secure AURA PADDLE order page.</p>`;
+  }else if(entry.kind==="balance_paid"){
+    subject=`Final payment received — ${entry.orderNumber} | AURA PADDLE`;title="Final payment received";
+    paragraph=`We have received the final payment for order ${entry.orderNumber}. Your order is now being prepared for dispatch.`;
+    lines=[`Final payment received: ${amount}`,entry.estimatedDispatchDate?`Estimated dispatch: ${entry.estimatedDispatchDate}`:"Dispatch timing will be shown on your order page."];
+    detailHtml=`<p><strong>Final payment received:</strong> ${escapeHtml(amount)}</p><p>${entry.estimatedDispatchDate?`<strong>Estimated dispatch:</strong> ${escapeHtml(entry.estimatedDispatchDate)}`:"Dispatch timing will be shown on your order page."}</p>`;
+  }else{
+    subject=`Your order has been dispatched — ${entry.orderNumber} | AURA PADDLE`;title="Your board is on the way";
+    paragraph=`Order ${entry.orderNumber} has been handed to ${entry.carrier||"the carrier"}.`;
+    lines=[`Carrier: ${entry.carrier||"Confirmed by AURA PADDLE"}`,`Tracking number: ${entry.trackingNumber||"See your order page"}`];
+    detailHtml=`<p><strong>Carrier:</strong> ${escapeHtml(entry.carrier||"Confirmed by AURA PADDLE")}</p><p><strong>Tracking number:</strong> ${escapeHtml(entry.trackingNumber||"See your order page")}</p>`;
+    if(entry.trackingUrl){primaryLabel="Track shipment";primaryUrl=entry.trackingUrl;lines.push(`Track shipment: ${entry.trackingUrl}`)}
+  }
+  const text=[`Hi ${name},`,"",paragraph,"",...lines,"",`Secure order progress: ${statusUrl}`,"","Aura Paddle Pty Ltd · ABN 46 697 865 759 · Australia"].join("\n");
+  const body=`<p>Hi ${escapeHtml(name)},</p><p>${escapeHtml(paragraph)}</p><div style="background:#eef5f5;padding:18px 20px;border-radius:8px;margin:22px 0"><strong>${escapeHtml(entry.orderNumber)}</strong>${detailHtml}</div><p style="margin:26px 0"><a href="${escapeHtml(primaryUrl)}" style="display:inline-block;background:#f15b45;color:#fff;text-decoration:none;padding:14px 22px;border-radius:6px;font-weight:700">${escapeHtml(primaryLabel)}</a></p>${primaryUrl!==statusUrl?`<p><a href="${escapeHtml(statusUrl)}" style="color:#102b38;font-weight:700">View complete order progress</a></p>`:""}`;
+  return {subject,text,html:emailFrame(title,body)};
+}
+
 export async function sendOrderEmail(entry,{apiKey,catalog,siteUrl}){
   const inbox=await ensureRecoveryInbox(apiKey);
-  const content=entry.kind==="admin_notification"?adminOrderEmailContent(entry,{catalog,siteUrl}):customerOrderEmailContent(entry,{catalog,siteUrl});
+  const content=entry.kind==="admin_notification"?adminOrderEmailContent(entry,{catalog,siteUrl}):entry.kind==="customer_confirmation"?customerOrderEmailContent(entry,{catalog,siteUrl}):milestoneOrderEmailContent(entry,{catalog,siteUrl});
   return sendAgentMailMessage(apiKey,inbox.inbox_id,{idempotencyKey:`aura-order-${entry.sessionId}-${entry.kind}`,body:{to:[entry.recipient],reply_to:["admin@aurapaddle.com"],subject:content.subject,text:content.text,html:content.html,labels:[entry.kind]}});
 }
