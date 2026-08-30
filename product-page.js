@@ -89,7 +89,7 @@
       const active=btn.dataset.colour===selectedColour;
       btn.classList.toggle("active",active);btn.setAttribute("aria-pressed",String(active));
       const optionVariant=data.variants.find(v=>v.size===selectedSize&&v.colourKey===btn.dataset.colour),campaign=optionVariant?.preorder||{},target=campaign.target||1,reserved=committedCount(campaign),percent=Math.min(100,Math.round(reserved/target*100)),available=!!optionVariant?.available,threshold=campaign.thresholdRequired!==false,status=btn.querySelector(".colour-status"),progress=btn.querySelector(".colour-progress");
-      if(status)status.textContent=available?"Available":threshold?`${campaign.scopeLabel} · ${reserved}/${target}`:"Confirmed pre-order · No minimum";
+      if(status)status.textContent=available?"Available":campaign.inventoryIncoming?"Stock arriving next week":threshold?`${campaign.scopeLabel} · ${reserved}/${target}`:"In production · No minimum";
       if(progress){progress.hidden=available||!threshold;progress.setAttribute("aria-label",`${campaign.name||colour().name} committed production progress`);progress.setAttribute("aria-valuemax",String(target));progress.setAttribute("aria-valuenow",String(reserved));progress.firstElementChild.style.width=`${percent}%`}
     });
     $("selectedSize").textContent=selectedSize;$("selectedColour").textContent=colour().name;
@@ -98,7 +98,7 @@
     const selectedSpec=data.sizeGuide?.find(item=>item.size===selectedSize),dimensions=$("selectedDimensions"),volume=$("selectedVolume");
     if(selectedSpec&&dimensions&&volume){dimensions.textContent=`${selectedSpec.size} × ${selectedSpec.width} × ${selectedSpec.thickness}`;volume.textContent=selectedSpec.volume}
     document.querySelectorAll("[data-guide-size]").forEach(row=>row.classList.toggle("selected",row.dataset.guideSize===selectedSize));
-    renderGallery();renderPreorder();renderActions();renderPurchaseClarity();updateUrl();
+    renderGallery();renderPreorder();renderActions();renderPurchaseClarity();renderMobilePurchaseBar();updateUrl();
   }
 
   function enquiryUrl(){const v=variant();return `../redesign-preview.html?interest=${encodeURIComponent(`${data.name} — ${selectedSize} — ${colour().name} — ${v.sku}`)}#contact`}
@@ -154,7 +154,7 @@
     panel.className="purchase-clarity";
     panel.setAttribute("aria-labelledby","purchaseClarityTitle");
     panel.innerHTML=`<div class="clarity-heading"><div><p class="section-label">Before you pre-order</p><h2 id="purchaseClarityTitle">What you pay, when it ships, and how delivery works.</h2></div><a href="../preorder-preview.html">Full pre-order guide</a></div><dl class="clarity-facts"><div><dt>Due today</dt><dd id="clarityDueToday">—</dd></div><div><dt>Balance before dispatch</dt><dd id="clarityBalance">—</dd></div><div><dt>Estimated dispatch</dt><dd id="clarityDispatch">—</dd></div><div><dt>Cancellation</dt><dd id="clarityCancellation">—</dd></div></dl><div class="shipping-estimator"><label for="shippingRegion">Check shipping before checkout</label><select id="shippingRegion" aria-describedby="shippingEstimate"></select><div id="shippingEstimate" class="shipping-estimate" aria-live="polite">Loading current delivery rates…</div><a id="shippingQuote" class="btn btn-outline" href="mailto:admin@aurapaddle.com" hidden>Request a shipping quote</a><p>Australia only · Rates include GST · Free Gold Coast pickup is available.</p></div>`;
-    priceNote.insertAdjacentElement("afterend",panel);
+    $("purchaseActions").insertAdjacentElement("afterend",panel);
     $("shippingRegion").addEventListener("change",()=>{renderPurchaseClarity();track("view_shipping_rate",{item_id:variant().sku,item_name:data.name,shipping_region:$("shippingRegion").value,quantity})});
     fetch("../shipping-rates.json",{headers:{Accept:"application/json"}}).then(response=>response.ok?response.json():Promise.reject()).then(payload=>{shippingRates=payload;renderPurchaseClarity()}).catch(()=>{$("shippingEstimate").textContent="Current rates could not be loaded. Please request a shipping quote.";$("shippingQuote").hidden=false});
   }
@@ -163,12 +163,12 @@
     const v=variant(),preorder=isPreorder(v),campaign=v.preorder||{},target=campaign.target||1,reserved=committedCount(campaign),percent=Math.min(100,Math.round(reserved/target*100)),threshold=campaign.thresholdRequired!==false,remaining=Math.max(0,target-reserved);
     $("availability").classList.toggle("is-preorder",preorder);
     document.querySelector("#availability .status-dot").classList.toggle("preorder",preorder);
-    $("availabilityText").textContent=preorder?threshold?`Pre-order · ${campaign.scopeLabel} ${reserved}/${target}`:`Pre-order · Confirmed · ${campaign.scopeLabel}`:"Available now";
+    $("availabilityText").textContent=preorder?threshold?`Pre-order · ${campaign.scopeLabel} ${reserved}/${target}`:campaign.inventoryIncoming?"Stock arriving next week · Reserve now":`Pre-order · Confirmed · ${campaign.scopeLabel}`:"Available now";
     $("productPrice").textContent=displayPrice(v);
     const showOriginal=preorder&&!!v.retailAUD;
     $("originalPrice").hidden=!showOriginal;$("originalPrice").textContent=showOriginal?`Standard AUD $${v.retailAUD}`:"";
     const item=campaign.itemLabel||"board";
-    $("priceNote").textContent=preorder?(v.retailAUD?`Eligible ${item} offer · AUD $${campaign.discountAUD} incentive included · 50% due today (AUD $${(numericPrice(v)/2).toFixed(2)})`:`Eligible ${item}s receive an AUD $${campaign.discountAUD} pre-order incentive after the standard retail price is confirmed · 50% initial payment required`):"Australia-only range · Shipping calculated separately · See policy terms";
+    $("priceNote").textContent=preorder?(v.retailAUD?`${campaign.inventoryIncoming?"Reserve incoming stock":"Eligible "+item+" offer"} · AUD $${campaign.discountAUD} incentive included · 50% due today (AUD $${(numericPrice(v)/2).toFixed(2)})`:`Eligible ${item}s receive an AUD $${campaign.discountAUD} pre-order incentive after the standard retail price is confirmed · 50% initial payment required`):"Australia-only range · Shipping calculated separately · See policy terms";
     $("preorderPanel").hidden=!preorder;
     let guideLink=$("preorderGuide");
     if(!guideLink){guideLink=document.createElement("a");guideLink.id="preorderGuide";guideLink.className="preorder-guide";guideLink.href="../preorder-preview.html";guideLink.textContent="Understand the complete pre-order process →";$("preorderCopy").insertAdjacentElement("afterend",guideLink)}
@@ -177,10 +177,10 @@
     $("preorderKicker").textContent=campaign.name;$("preorderTitle").textContent=threshold&&companyAllocationByCampaign[campaign.id]?(remaining?`${remaining} more to production.`:"Production target reached."):campaign.title;$("preorderCount").hidden=!threshold;$("preorderCount").textContent=threshold?`${reserved} / ${target}`:"";
     $("preorderProgress").style.width=`${percent}%`;
     const track=$("preorderProgress").parentElement;track.hidden=!threshold;track.setAttribute("aria-label",`${campaign.name} committed production progress`);track.setAttribute("aria-valuemax",String(target));track.setAttribute("aria-valuenow",String(reserved));
-    $("preorderDeadlineLabel").textContent=threshold?"Closing date":"Production condition";$("preorderDeadline").textContent=threshold?campaign.deadline:"No minimum quantity";$("preorderDelivery").textContent=campaign.estimatedDelivery;$("preorderDiscount").textContent=`AUD $${campaign.discountAUD} off each eligible ${item}`;$("preorderPayment").textContent=campaign.payment;
+    $("preorderDeadlineLabel").textContent=threshold?"Closing date":campaign.inventoryIncoming?"Stock status":"Production condition";$("preorderDeadline").textContent=threshold?campaign.deadline:campaign.inventoryIncoming?"Incoming stock · No production target":"No minimum quantity";$("preorderDelivery").textContent=campaign.estimatedDelivery;$("preorderDiscount").textContent=`AUD $${campaign.discountAUD} off each eligible ${item}`;$("preorderPayment").textContent=campaign.payment;
     $("preorderCopy").textContent=threshold?`${campaign.description} If the target is not reached by ${campaign.deadline}, all affected orders will be cancelled and fully refunded to their original payment method.`:campaign.description;
-    const cancellation=threshold?" A change-of-mind cancellation receives a full refund if requested within 48 hours of the successful initial payment, or later while the order remains conditional and before AURA PADDLE confirms production in writing. Once production is confirmed or the order is placed with the manufacturer, change-of-mind cancellation is not available.":" As this is a confirmed pre-order with no minimum quantity, change-of-mind cancellation is available for a full refund only within 48 hours of the successful initial payment.";
-    const productionTiming=`Once production is confirmed in writing, estimated dispatch is approximately six weeks later. The published date of ${campaign.estimatedDelivery} is the current estimate and may be updated as production and freight progress.`;
+    const cancellation=threshold?" A change-of-mind cancellation receives a full refund if requested within 48 hours of the successful initial payment, or later while the order remains conditional and before AURA PADDLE confirms production in writing. Once production is confirmed or the order is placed with the manufacturer, change-of-mind cancellation is not available.":campaign.inventoryIncoming?" This reservation is allocated against incoming stock. A change-of-mind cancellation receives a full refund if requested within 48 hours of the successful initial payment.":" As this board is already in production and has no minimum quantity condition, change-of-mind cancellation is available for a full refund only within 48 hours of the successful initial payment.";
+    const productionTiming=campaign.inventoryIncoming?`The published estimated dispatch date is ${campaign.estimatedDelivery} and may be updated as inbound freight and receiving progress.`:`Once production is confirmed in writing, estimated dispatch is approximately six weeks later. The published date of ${campaign.estimatedDelivery} is the current estimate and may be updated as production and freight progress.`;
     const terms=$("preorderTermsBody");if(terms)terms.textContent=threshold?`${campaign.description} A 50% initial payment reserves the ${item} and counts it towards the target once successfully paid. The remaining 50%, together with the shipping amount selected in the cart or separately quoted where required, is requested through a secure payment link before dispatch. The campaign closes on ${campaign.deadline}. ${productionTiming} Each eligible pre-ordered ${item} receives an AUD $${campaign.discountAUD} incentive. If the target is not reached, affected orders will be cancelled and the initial payment fully refunded.${cancellation} Australian Consumer Law rights are not excluded.`:`${campaign.description} A 50% initial payment reserves the ${item}. The remaining 50%, together with the shipping amount selected in the cart or separately quoted where required, is requested through a secure payment link before dispatch. ${productionTiming} Each eligible pre-ordered ${item} receives an AUD $${campaign.discountAUD} incentive. This order does not depend on a production target.${cancellation} Australian Consumer Law rights are not excluded.`;
   }
 
@@ -189,11 +189,31 @@
     if(v.available){
       $("purchaseActions").innerHTML=`<button class="btn btn-dark" type="button" data-add-cart>Add to cart</button><button class="btn btn-coral" type="button" data-buy-now>Buy now — ${displayPrice(v)}</button>`;
     }else if(v.retailAUD){
-      $("purchaseActions").innerHTML=`<button class="btn btn-dark" type="button" data-add-cart>Add pre-order to cart</button><button class="btn btn-coral" type="button" data-buy-now>Buy now — ${displayPrice(v)}</button><a class="btn btn-outline" href="${enquiryUrl()}">Ask about this pre-order</a>`;
+      $("purchaseActions").innerHTML=`<button class="btn btn-dark" type="button" data-add-cart>${campaign.inventoryIncoming?"Reserve in cart":"Add pre-order to cart"}</button><button class="btn btn-coral" type="button" data-buy-now>${campaign.inventoryIncoming?"Reserve incoming stock":"Pre-order"} — pay AUD $${(numericPrice(v)/2).toFixed(2)} today</button><a class="btn btn-outline" href="${enquiryUrl()}">Ask about this ${campaign.inventoryIncoming?"incoming stock":"pre-order"}</a>`;
     }else $("purchaseActions").innerHTML=`<a class="btn btn-dark" href="${enquiryUrl()}">Join the pre-order waitlist</a><a class="btn btn-outline" href="${enquiryUrl()}">Request confirmed price</a>`;
     $("purchaseActions").querySelector("[data-add-cart]")?.addEventListener("click",addToCart);
     $("purchaseActions").querySelector("[data-buy-now]")?.addEventListener("click",buyNow);
-    $("stockCopy").textContent=v.available?data.stock:campaign.thresholdRequired===false?`Confirmed pre-order · Estimated dispatch ${campaign.estimatedDelivery}`:`${campaign.scopeLabel} · ${committedCount(campaign)}/${campaign.target} committed`;
+    $("stockCopy").textContent=v.available?data.stock:campaign.inventoryIncoming?`Incoming stock · Estimated dispatch ${campaign.estimatedDelivery}`:campaign.thresholdRequired===false?`In production · No minimum · Estimated dispatch ${campaign.estimatedDelivery}`:`${campaign.scopeLabel} · ${committedCount(campaign)}/${campaign.target} committed`;
+  }
+
+  function renderMobilePurchaseBar(){
+    const bar=$("mobilePurchaseBar");
+    if(!bar)return;
+    const v=variant(),campaign=v.preorder||{},price=numericPrice(v),preorder=isPreorder(v),button=bar.querySelector("button");
+    bar.querySelector("strong").textContent=price?(preorder?`AUD $${(price*quantity/2).toFixed(2)} today`:`AUD $${(price*quantity).toFixed(2)}`):"Price on request";
+    bar.querySelector("small").textContent=campaign.estimatedDelivery?`Est. dispatch ${campaign.estimatedDelivery}`:"Secure checkout";
+    button.hidden=!price;
+    button.textContent=preorder?(campaign.inventoryIncoming?"Reserve":"Pre-order"):"Buy now";
+  }
+
+  function setupMobilePurchaseBar(){
+    const bar=document.createElement("aside");
+    bar.id="mobilePurchaseBar";
+    bar.className="mobile-purchase-bar";
+    bar.setAttribute("aria-label","Mobile purchase action");
+    bar.innerHTML=`<span><strong>—</strong><small>Secure checkout</small></span><button class="btn btn-coral" type="button">Pre-order</button>`;
+    document.body.append(bar);
+    bar.querySelector("button").addEventListener("click",()=>{track("mobile_purchase_click",{item_id:variant().sku,item_name:data.name,item_variant:[selectedSize,colour().name].join(" · ")});buyNow()});
   }
 
   function renderShippingSupport(){
@@ -259,12 +279,12 @@
 
   function openCheckout(){
     const v=variant(),preorder=isPreorder(v),campaign=v.preorder||{},unit=numericPrice(v),total=unit?unit*quantity:null;
-    $("checkoutEyebrow").textContent=preorder?(campaign.thresholdRequired===false?"Confirmed pre-order · secure checkout":"Conditional pre-order · secure checkout"):"Secure Stripe checkout";
+    $("checkoutEyebrow").textContent=preorder?(campaign.inventoryIncoming?"Incoming stock reservation · secure checkout":campaign.thresholdRequired===false?"In-production pre-order · secure checkout":"Conditional pre-order · secure checkout"):"Secure Stripe checkout";
     $("checkoutTitle").textContent=preorder?"Review your 50% pre-order payment":"Review your order";
     $("checkoutSummary").textContent=`${data.name} · ${selectedSize} · ${colour().name} · ${v.sku} · Quantity ${quantity} · ${total?`AUD $${total} pre-order total · AUD $${preorder?(total/2).toFixed(2):total} due today`:displayPrice(v)}.`;
     const offline=location.protocol==="file:"||stripeConfig.enabled===false;
     const item=campaign.itemLabel||"board",items=item==="set"?"sets":"boards";
-    $("checkoutStatus").innerHTML=offline?`<strong>Checkout scheduled:</strong> secure payments open after the production Stripe readiness gate is approved and the launch time is reached.`:preorder?(campaign.thresholdRequired===false?`<strong>Secure Stripe checkout:</strong> the pre-order price is AUD $${unit} per ${item} and today's 50% initial payment is AUD $${(total/2).toFixed(2)}. Production is confirmed with no minimum order condition. The remaining 50% and confirmed shipping are payable before dispatch.`:`<strong>Secure Stripe checkout:</strong> today's 50% initial payment is AUD $${(total/2).toFixed(2)}. Once paid, ${quantity===1?`this ${item}`:`these ${quantity} ${items}`} counts toward ${campaign.name}'s ${campaign.target}-${item} target. If the target is not reached, the initial payment is fully refunded. The remaining 50% and confirmed shipping are payable before dispatch.`):`<strong>Secure Stripe checkout:</strong> the checkout service validates ${v.sku} at AUD $${unit} per product before redirecting to Stripe.`;
+    $("checkoutStatus").innerHTML=offline?`<strong>Checkout scheduled:</strong> secure payments open after the production Stripe readiness gate is approved and the launch time is reached.`:preorder?(campaign.inventoryIncoming?`<strong>Secure Stripe checkout:</strong> the reservation price is AUD $${unit} per ${item} and today's 50% initial payment is AUD $${(total/2).toFixed(2)}. This reserves incoming stock; there is no production target. The remaining 50% and confirmed shipping are payable before dispatch.`:campaign.thresholdRequired===false?`<strong>Secure Stripe checkout:</strong> the pre-order price is AUD $${unit} per ${item} and today's 50% initial payment is AUD $${(total/2).toFixed(2)}. Production is underway with no minimum order condition. The remaining 50% and confirmed shipping are payable before dispatch.`:`<strong>Secure Stripe checkout:</strong> today's 50% initial payment is AUD $${(total/2).toFixed(2)}. Once paid, ${quantity===1?`this ${item}`:`these ${quantity} ${items}`} counts toward ${campaign.name}'s ${campaign.target}-${item} target. If the target is not reached, the initial payment is fully refunded. The remaining 50% and confirmed shipping are payable before dispatch.`):`<strong>Secure Stripe checkout:</strong> the checkout service validates ${v.sku} at AUD $${unit} per product before redirecting to Stripe.`;
     $("checkoutButton").disabled=offline||!unit;
     $("checkoutButton").textContent=preorder?"Pay 50% securely":"Continue to secure checkout";
     $("stripeDialog").showModal();
@@ -327,14 +347,14 @@
 
   document.querySelectorAll("[data-size]").forEach(btn=>btn.addEventListener("click",()=>{selectedSize=btn.dataset.size;renderSelection();track("select_product_option",{item_id:variant().sku,item_name:data.name,option_type:"size",option_value:selectedSize})}));
   document.querySelectorAll("[data-colour]").forEach(btn=>btn.addEventListener("click",()=>{selectedColour=btn.dataset.colour;renderSelection();track("select_product_option",{item_id:variant().sku,item_name:data.name,option_type:"colour",option_value:colour().name})}));
-  $("qtyDown").addEventListener("click",()=>{const previous=quantity;$("quantity").textContent=quantity=Math.max(1,quantity-1);if(quantity!==previous){renderPurchaseClarity();track("change_item_quantity",{item_id:variant().sku,item_name:data.name,direction:"decrease",quantity})}});$("qtyUp").addEventListener("click",()=>{const previous=quantity;$("quantity").textContent=quantity=Math.min(20,quantity+1);if(quantity!==previous){renderPurchaseClarity();track("change_item_quantity",{item_id:variant().sku,item_name:data.name,direction:"increase",quantity})}});
+  $("qtyDown").addEventListener("click",()=>{const previous=quantity;$("quantity").textContent=quantity=Math.max(1,quantity-1);if(quantity!==previous){renderPurchaseClarity();renderMobilePurchaseBar();track("change_item_quantity",{item_id:variant().sku,item_name:data.name,direction:"decrease",quantity})}});$("qtyUp").addEventListener("click",()=>{const previous=quantity;$("quantity").textContent=quantity=Math.min(20,quantity+1);if(quantity!==previous){renderPurchaseClarity();renderMobilePurchaseBar();track("change_item_quantity",{item_id:variant().sku,item_name:data.name,direction:"increase",quantity})}});
   document.querySelectorAll(".detail-head").forEach(btn=>btn.addEventListener("click",()=>{const item=btn.parentElement,open=item.classList.toggle("open");btn.setAttribute("aria-expanded",String(open))}));
   document.querySelector(".modal-close").addEventListener("click",()=>$("stripeDialog").close());
   $("checkoutButton").addEventListener("click",beginCheckout);
   $("reviewForm")?.addEventListener("submit",submitReview);
   document.querySelectorAll("[data-add-accessory]").forEach(button=>button.addEventListener("click",()=>addAccessory(button.dataset.addAccessory)));
   const menuButton=$("menuButton"),mobileMenu=$("mobileMenu");menuButton.addEventListener("click",()=>{const open=mobileMenu.classList.toggle("open");menuButton.setAttribute("aria-expanded",String(open));document.body.classList.toggle("menu-open",open)});mobileMenu.querySelectorAll("a").forEach(a=>a.addEventListener("click",()=>{mobileMenu.classList.remove("open");document.body.classList.remove("menu-open");menuButton.setAttribute("aria-expanded","false")}));
-  renderShippingSupport();setupSurfSizeFinder();setupPurchaseClarity();renderSelection();refreshPreorderProgress();
+  renderShippingSupport();setupSurfSizeFinder();setupPurchaseClarity();setupMobilePurchaseBar();renderSelection();renderMobilePurchaseBar();refreshPreorderProgress();
   const viewedItem=cartItem();
   track("view_item",{currency:"AUD",value:Number(viewedItem.unitAmount||0)/100,items:[analyticsItem(viewedItem,1)]});
 })();

@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-08-29T05:56:11.416Z",
+  "generatedAt": "2026-08-30T03:31:34.599Z",
   "currency": "aud",
   "variants": [
     {
@@ -20,7 +20,7 @@
       "productUrl": "https://www.aurapaddle.com/products/yoga-cruiser.html?size=11'0%22&colour=glacier",
       "campaign": {
         "id": "yoga-glacier-confirmed-preorder",
-        "name": "Confirmed Pre-order",
+        "name": "Incoming Stock Reservation",
         "target": 0,
         "thresholdRequired": false,
         "deadline": "Not applicable",
@@ -344,7 +344,7 @@
       "productUrl": "https://www.aurapaddle.com/products/coast-go.html?size=10'6%22&colour=blueorange",
       "campaign": {
         "id": "coastgo-confirmed-preorder",
-        "name": "Confirmed Pre-order",
+        "name": "Confirmed Production Pre-order",
         "target": 0,
         "thresholdRequired": false,
         "deadline": "Not applicable",
@@ -371,7 +371,7 @@
       "productUrl": "https://www.aurapaddle.com/products/coast-go.html?size=10'6%22&colour=mintgrey",
       "campaign": {
         "id": "coastgo-confirmed-preorder",
-        "name": "Confirmed Pre-order",
+        "name": "Confirmed Production Pre-order",
         "target": 0,
         "thresholdRequired": false,
         "deadline": "Not applicable",
@@ -398,7 +398,7 @@
       "productUrl": "https://www.aurapaddle.com/products/coast-go.html?size=10'6%22&colour=bluecoral",
       "campaign": {
         "id": "coastgo-confirmed-preorder",
-        "name": "Confirmed Pre-order",
+        "name": "Confirmed Production Pre-order",
         "target": 0,
         "thresholdRequired": false,
         "deadline": "Not applicable",
@@ -412,7 +412,7 @@
       "slug": "inflatable-hydrofoil",
       "productName": "AURA PADDLE Inflatable Hydrofoil Board",
       "shortName": "Inflatable Hydrofoil Board",
-      "description": "A packable 110-litre inflatable platform for riders developing their wing-foil skills or travelling with limited storage space. The compact 5'7\" format keeps transport practical, while the dedicated foil connection provides the foundation for progression once the final system bundle is confirmed.",
+      "description": "A packable 110-litre inflatable platform for riders developing their wing-foil skills or travelling with limited storage space. The compact 5'7\" format keeps transport practical, while reinforced rails, a high-density EVA deck and a dedicated foil connection support confident progression.",
       "size": "5'7\"",
       "colour": "Carbon & Teal",
       "colourKey": "foil",
@@ -439,7 +439,7 @@
       "slug": "hydrofoil-set",
       "productName": "AURA PADDLE Hydrofoil Kit Set",
       "shortName": "Hydrofoil Kit Set",
-      "description": "A lightweight and durable hydrofoil kit built with carbon-fibre components to reduce overall weight while maintaining strength and responsive performance. The aluminium-alloy fuselage provides a strong, dependable connection through the centre of the foil system. Supplied as a complete set with mast, fuselage, front wing, rear wing, mast top plate and screw sets for compatible foil-board setups.",
+      "description": "A modular hydrofoil kit combining carbon-fibre wings and mast components with a durable aluminium-alloy fuselage for efficient lift, controlled carving and repeatable setup.",
       "size": "Set",
       "colour": "Standard Set",
       "colourKey": "standard",
