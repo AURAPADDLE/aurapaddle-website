@@ -89,13 +89,13 @@ function queueEntry(state,key,entry){
 
 export function enqueueStripeAnalytics(state,event,catalog,{enhancedConversionsEnabled=false}={}){
   const object=event.data?.object||{},order=orderForEvent(state,event),consent=order?.attribution?.consent||{};
-  if(!order||consent.analytics!==true||!order.attribution?.analyticsClientId)return false;
+  if(!order||(consent.analytics!==true&&consent.marketing!==true)||!order.attribution?.analyticsClientId)return false;
   const base={
     stripeEventId:event.id,
     orderNumber:order.orderNumber,
     clientId:order.attribution.analyticsClientId,
     sessionId:order.attribution.analyticsSessionId||"",
-    consent:{analytics:true,marketing:consent.marketing===true},
+    consent:{analytics:consent.analytics===true,marketing:consent.marketing===true},
     timestampMicros:Number(event.created||Math.floor(Date.now()/1000))*1_000_000,
     createdAt:Math.floor(Date.now()/1000)
   };

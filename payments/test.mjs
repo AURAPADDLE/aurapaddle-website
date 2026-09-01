@@ -157,6 +157,18 @@ test("checkout attribution is consent-scoped, validated and linked to Stripe met
   assert.equal(analyticsOnly.last.clickId,undefined);
 });
 
+test("marketing consent preserves measurement identifiers for advertising conversion reporting",()=>{
+  const attribution=normaliseAttribution({
+    consent:{analytics:false,marketing:true},
+    last:{clickType:"gclid",clickId:"ad_click_123"},
+    analyticsClientId:"123456789.987654321",
+    analyticsSessionId:"1787635200"
+  });
+  assert.equal(attribution.analyticsClientId,"123456789.987654321");
+  assert.equal(attribution.analyticsSessionId,"1787635200");
+  assert.equal(attribution.last.clickId,"ad_click_123");
+});
+
 test("checkout retries reuse the same APO identity and Stripe integration identifier",()=>{
   const state={events:{},orders:{},reservations:{},checkoutRequests:{}};
   let integerCalls=0,byteCalls=0;
@@ -290,6 +302,26 @@ test("paid Stripe webhook queues one authoritative GA4 purchase",()=>{
   assert.equal(payload.events[0].params.session_id,1787635200);
   assert.equal(payload.user_data,undefined);
   assert.equal(payload.consent.ad_user_data,"DENIED");
+});
+
+test("marketing-consented purchase is queued once even when analytics consent is off",()=>{
+  const attribution={version:1,consent:{analytics:false,marketing:true},analyticsClientId:"123456789.987654321",analyticsSessionId:"1787635200",last:{clickType:"gclid",clickId:"ad_click_123"}};
+  const state={events:{},orders:{},checkoutRequests:{request_marketing:{orderNumber:"APO48229",attribution}},analyticsOutbox:{}};
+  const event={id:"evt_marketing_purchase",type:"checkout.session.completed",created:1_787_635_200,data:{object:{id:"cs_test_marketing_purchase",customer:"cus_test",payment_status:"paid",payment_intent:"pi_test_marketing_purchase",amount_total:37450,currency:"aud",metadata:{aura_items:"AP734955:1",aura_order_number:"APO48229",aura_tracking_token:"secure_tracking_token_48229",aura_order_mode:"preorder",aura_payment_stage:"initial_50_percent"}}}};
+  assert.equal(applyStripeEvent(state,event),true);
+  assert.equal(enqueueStripeAnalytics(state,event,catalog),true);
+  assert.equal(enqueueStripeAnalytics(state,event,catalog),false);
+  const payload=measurementPayload(state.analyticsOutbox["purchase:APO48229"]);
+  assert.equal(payload.events[0].name,"purchase");
+  assert.equal(payload.events[0].params.transaction_id,"APO48229");
+  assert.equal(payload.consent.ad_user_data,"GRANTED");
+});
+
+test("purchase remains unqueued when neither analytics nor marketing measurement is allowed",()=>{
+  const state={orders:{cs_test_private:{orderNumber:"APO48230",amountTotal:37450,currency:"aud",items:[{sku:"AP734955",quantity:1}],attribution:{consent:{analytics:false,marketing:false},analyticsClientId:"123456789.987654321"}}},analyticsOutbox:{}};
+  const event={id:"evt_private_purchase",type:"checkout.session.completed",created:1_787_635_200,data:{object:{id:"cs_test_private",payment_status:"paid"}}};
+  assert.equal(enqueueStripeAnalytics(state,event,catalog),false);
+  assert.deepEqual(state.analyticsOutbox,{});
 });
 
 test("enhanced conversion preparation hashes customer data only when enabled and consented",()=>{

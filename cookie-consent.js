@@ -47,7 +47,7 @@
     current.last=explicitCampaign||!current.last?touch:trimTouch(current.last,preferences);
     if(explicitCampaign)current.expiresAt=new Date(Date.now()+attributionMaxAge).toISOString();
     current.consent={analytics,marketing,updatedAt:preferences.updatedAt||new Date().toISOString()};
-    if(!analytics){delete current.analyticsClientId;delete current.analyticsSessionId}
+    if(!analytics&&!marketing){delete current.analyticsClientId;delete current.analyticsSessionId}
     writeAttribution(current);
     return current;
   };
@@ -78,13 +78,21 @@
     const timer=setTimeout(()=>finish(""),2500);
     try{window.gtag("get",measurementId,name,finish)}catch{finish("")}
   });
+  const fallbackClientId=()=>{
+    const values=new Uint32Array(2);
+    if(window.crypto?.getRandomValues)window.crypto.getRandomValues(values);
+    else{values[0]=Math.floor(Math.random()*4_294_967_295);values[1]=Math.floor(Math.random()*4_294_967_295)}
+    return `${values[0]||1}.${values[1]||1}`;
+  };
   const refreshAnalyticsIds=async preferences=>{
-    if(!preferences.analytics)return captureAttribution(preferences);
+    if(!preferences.analytics&&!preferences.marketing)return captureAttribution(preferences);
     loadGoogleTag();
     const [clientId,sessionId]=await Promise.all([getGoogleTagValue("client_id"),getGoogleTagValue("session_id")]);
-    const current=captureAttribution(preferences)||{version:1,consent:{analytics:true,marketing:Boolean(preferences.marketing)}};
-    if(/^\d+\.\d+$/.test(String(clientId||"")))current.analyticsClientId=String(clientId);
-    if(/^\d+$/.test(String(sessionId||"")))current.analyticsSessionId=String(sessionId);
+    const current=captureAttribution(preferences)||{version:1,consent:{analytics:Boolean(preferences.analytics),marketing:Boolean(preferences.marketing)}};
+    const resolvedClientId=/^\d+\.\d+$/.test(String(clientId||""))?String(clientId):/^\d+\.\d+$/.test(String(current.analyticsClientId||""))?String(current.analyticsClientId):fallbackClientId();
+    const resolvedSessionId=/^\d+$/.test(String(sessionId||""))?String(sessionId):/^\d+$/.test(String(current.analyticsSessionId||""))?String(current.analyticsSessionId):String(Math.floor(Date.now()/1000));
+    current.analyticsClientId=resolvedClientId;
+    current.analyticsSessionId=resolvedSessionId;
     writeAttribution(current);
     return current;
   };

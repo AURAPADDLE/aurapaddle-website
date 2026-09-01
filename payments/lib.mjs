@@ -121,7 +121,7 @@ export function normaliseAttribution(value){
   const attribution={version:1,consent};
   attribution.first=normaliseAttributionTouch(raw.first,consent);
   attribution.last=normaliseAttributionTouch(raw.last,consent);
-  if(consent.analytics){
+  if(consent.analytics||consent.marketing){
     const clientId=attributionText(raw.analyticsClientId,80);
     const sessionId=attributionText(String(raw.analyticsSessionId||""),32);
     if(/^\d+\.\d+$/.test(clientId))attribution.analyticsClientId=clientId;

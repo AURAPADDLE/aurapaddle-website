@@ -56,6 +56,8 @@ The server also exposes:
 - Attribution expires after 90 days, is attached to the reserved APO order, and is copied into Stripe metadata so the webhook can reconcile the order without trusting browser-supplied prices.
 - Stripe webhooks are authoritative for `purchase`, `refund`, remaining-balance payment and balance failure/void events. The browser success page emits only `payment_confirmation_view` to avoid duplicate purchases.
 - Server events are queued in the durable order store before delivery to GA4 and retried with backoff. `/api/health` reports whether GA4 is configured and the pending/failed outbox counts without exposing the API secret.
+- Analytics or advertising-measurement consent preserves a first-party GA client/session reference for the verified payment event. If the Google tag is blocked after consent, checkout creates an anonymous fallback reference so the paid order is not silently dropped.
+- Replayed Stripe webhooks repair a missing analytics outbox entry while the `purchase:{APO order}` key prevents duplicate purchase delivery.
 - Configure `GA4_MEASUREMENT_ID`, `GA4_API_SECRET` and `GA4_SERVER_EVENTS_ENABLED=true` in the host secret manager. Keep `GA4_VALIDATION_MODE=false` in production.
 - `ENHANCED_CONVERSIONS_ENABLED` must remain `false` until a separately approved launch. No contact detail is hashed or sent while it is disabled.
 
