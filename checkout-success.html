@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en-AU">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="robots" content="noindex,nofollow">
+  <title>Initial payment received | AURA PADDLE</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&amp;family=Manrope:wght@500;600;700&amp;display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="stripe-checkout.css">
+  <link rel="stylesheet" href="cookie-consent.css">
+</head>
+<body>
+  <main class="checkout-shell">
+    <section class="checkout-card">
+      <div class="brand">AURA PADDLE</div>
+      <p class="eyebrow">Secure payment confirmation</p>
+      <h1>Initial payment received.</h1>
+      <p id="statusCopy">We are securely checking the Checkout Session before displaying the order summary.</p>
+      <div class="order-summary" id="orderSummary" hidden>
+        <strong id="orderNumber"></strong>
+        <span id="orderSku"></span>
+        <span id="orderDetails"></span>
+      </div>
+      <p>AURA PADDLE will send a separate secure Stripe invoice for the remaining 50% and confirmed shipping charge, normally within six weeks of order confirmation. The balance must be paid before dispatch.</p>
+      <div class="actions">
+        <a class="btn btn-primary" id="orderStatusLink" href="order/" hidden>View order status</a>
+        <a class="btn btn-secondary" href="shop/">Return to the range</a>
+        <a class="btn btn-secondary" href="/">Back to home</a>
+      </div>
+    </section>
+  </main>
+  <script src="cart.js"></script>
+  <script src="cookie-consent.js?v=20260902-consent-form-noise"></script>
+  <script src="site-analytics.js?v=20260825-key-events"></script>
+  <script>
+  (async()=>{
+    const id=new URLSearchParams(location.search).get("session_id");
+    if(!id){document.getElementById("statusCopy").textContent="The Checkout Session reference is missing.";return}
+    try{
+      const response=await fetch(`/api/checkout-session?id=${encodeURIComponent(id)}`),session=await response.json();
+      if(!response.ok)throw new Error(session.error||"Unable to verify this checkout.");
+      const paid=session.paymentStatus==="paid",items=session.items||[];
+      document.getElementById("statusCopy").textContent=paid?"Stripe confirms that the 50% initial payment succeeded and the pre-order is reserved.":`Stripe payment status: ${session.paymentStatus}.`;
+      document.getElementById("orderNumber").textContent=`Order ${session.orderNumber}`;
+      document.getElementById("orderSku").textContent=items.length>1?`${items.length} SKUs · ${session.quantity} items`:items.length?`${items[0].sku} · Quantity ${items[0].quantity}`:`${session.sku} · Quantity ${session.quantity}`;
+      document.getElementById("orderDetails").textContent=`AUD $${(session.amountTotal/100).toFixed(2)} initial payment · ${session.orderMode==="preorder"?"Pre-order reserved":session.orderMode==="mixed"?"Mixed order":"Available product"} · ${session.customerEmail}`;
+      const orderLink=document.getElementById("orderStatusLink");
+      if(session.orderNumber&&session.trackingToken){orderLink.href=`order/?order=${encodeURIComponent(session.orderNumber)}&token=${encodeURIComponent(session.trackingToken)}`;orderLink.hidden=false}
+      document.getElementById("orderSummary").hidden=false;
+      if(paid){
+        window.AURACart?.clear();
+        window.AURAAnalytics?.event("payment_confirmation_view",{value:Number(session.amountTotal||0)/100,currency:String(session.currency||"AUD").toUpperCase(),payment_stage:session.paymentStage||"initial_50_percent",order_mode:session.orderMode||"preorder"});
+      }
+    }catch(error){document.getElementById("statusCopy").textContent=error.message}
+  })();
+  </script>
+</body>
+</html>

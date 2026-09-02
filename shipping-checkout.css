@@ -1,0 +1,28 @@
+.shipping-choice {
+  padding: 1rem 0;
+  border-bottom: 1px solid rgba(255, 255, 255, .12);
+}
+
+.shipping-choice label {
+  display: block;
+  margin-bottom: .5rem;
+  font-size: .75rem;
+  font-weight: 700;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+
+.shipping-choice select {
+  width: 100%;
+  min-height: 46px;
+  padding: .7rem .8rem;
+  border: 1px solid rgba(255, 255, 255, .24);
+  border-radius: .65rem;
+  background: #fff;
+  color: var(--navy);
+  font: 500 .82rem "DM Sans", sans-serif;
+}
+
+.shipping-choice p {
+  margin: .55rem 0 0;
+}
