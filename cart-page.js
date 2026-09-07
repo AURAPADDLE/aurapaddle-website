@@ -13,6 +13,8 @@
   const regionSelect=document.getElementById("shippingRegion");
   const recoveryEmailConsent=document.getElementById("recoveryEmailConsent");
   const regionStorageKey="aura-shipping-region-v1";
+  const totalRow=document.createElement("div");totalRow.className="summary-row order-total";totalRow.innerHTML='<span>Total including shipping</span><strong id="orderTotal">Select region</strong>';
+  document.getElementById("beforeDispatch").parentElement.after(totalRow);
   const regions={
     "local-pickup":{label:"Local pickup — Gold Coast, QLD",isup:0,surfboard:0},
     "gold-coast-brisbane":{label:"Gold Coast / Brisbane Metro",isup:4900,surfboard:7900},
@@ -87,6 +89,7 @@
     const subtotal=items.reduce((sum,item)=>sum+pricing.lineTotal(item),0);
     document.getElementById("itemCount").textContent=String(cart.count(items));
     document.getElementById("subtotal").textContent=money(subtotal);
+    document.getElementById("orderTotal").textContent=!shipping.selected?`${money(subtotal)} + shipping`:shipping.quoteRequired?`${money(subtotal)} + freight quote`:money(subtotal+Number(shipping.total||0));
     document.getElementById("dueToday").textContent=money(dueToday);
     document.getElementById("remainingBalance").textContent=money(remaining);
     document.getElementById("mixedNotice").hidden=!(hasPreorder&&hasAvailable);
@@ -132,10 +135,10 @@
     render();
   });
 
-  regionSelect.value=regions[sessionStorage.getItem(regionStorageKey)]?sessionStorage.getItem(regionStorageKey):"";
+  try{const saved=sessionStorage.getItem(regionStorageKey);regionSelect.value=regions[saved]?saved:""}catch{regionSelect.value=""}
   regionSelect.addEventListener("change",()=>{
-    if(regionSelect.value)sessionStorage.setItem(regionStorageKey,regionSelect.value);
-    else sessionStorage.removeItem(regionStorageKey);
+    try{if(regionSelect.value)sessionStorage.setItem(regionStorageKey,regionSelect.value);
+    else sessionStorage.removeItem(regionStorageKey)}catch{}
     if(regionSelect.value){
       const shipping=shippingFor(cart.read(),regionSelect.value);
       track("select_shipping_region",{shipping_region:regionSelect.value,shipping_type:shipping.pickup?"pickup":shipping.quoteRequired?"quote_required":"published_rate"});

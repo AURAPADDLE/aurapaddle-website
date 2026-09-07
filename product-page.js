@@ -33,6 +33,7 @@
   let quantity=1;
   let checkoutInFlight=false;
   let shippingRates=null;
+  const shippingRegionKey="aura-shipping-region-v1";
   const stripeConfig=window.AURA_STRIPE||{};
   const cart=window.AURACart;
   const companyAllocationByCampaign={
@@ -56,7 +57,7 @@
   function isPreorder(v=variant()){return v.orderMode==="preorder"}
   function numericPrice(v=variant()){return v.retailAUD?(isPreorder(v)?Number(v.retailAUD)-Number(v.preorder?.discountAUD||0):Number(v.retailAUD)):null}
   function displayPrice(v=variant()){const price=numericPrice(v);return price?`AUD $${price}`:data.price}
-  function moneyFromCents(value){return value===0?"Free":`AUD $${(Number(value||0)/100).toFixed(0)}`}
+  function moneyFromCents(value){return value===0?"Free":`AUD $${(Number(value||0)/100).toLocaleString("en-AU",{minimumFractionDigits:2,maximumFractionDigits:2})}`}
   function committedCount(campaign={}){return Math.min(Number(campaign.target||0),Number(companyAllocationByCampaign[campaign.id]||0)+Number(campaign.reserved||0))}
   function cartItem(){
     const v=variant(),c=colour(),unit=numericPrice(v);
@@ -89,7 +90,7 @@
       const active=btn.dataset.colour===selectedColour;
       btn.classList.toggle("active",active);btn.setAttribute("aria-pressed",String(active));
       const optionVariant=data.variants.find(v=>v.size===selectedSize&&v.colourKey===btn.dataset.colour),campaign=optionVariant?.preorder||{},target=campaign.target||1,reserved=committedCount(campaign),percent=Math.min(100,Math.round(reserved/target*100)),available=!!optionVariant?.available,threshold=campaign.thresholdRequired!==false,status=btn.querySelector(".colour-status"),progress=btn.querySelector(".colour-progress");
-      if(status)status.textContent=available?"Available":campaign.inventoryIncoming?"Stock arriving next week":threshold?`${campaign.scopeLabel} · ${reserved}/${target}`:"In production · No minimum";
+      if(status)status.textContent=available?"Available":campaign.inventoryIncoming?"Incoming · No minimum":threshold?`Conditional pre-order · ${reserved}/${target}`:"In production · No minimum";
       if(progress){progress.hidden=available||!threshold;progress.setAttribute("aria-label",`${campaign.name||colour().name} committed production progress`);progress.setAttribute("aria-valuemax",String(target));progress.setAttribute("aria-valuenow",String(reserved));progress.firstElementChild.style.width=`${percent}%`}
     });
     $("selectedSize").textContent=selectedSize;$("selectedColour").textContent=colour().name;
@@ -98,10 +99,11 @@
     const selectedSpec=data.sizeGuide?.find(item=>item.size===selectedSize),dimensions=$("selectedDimensions"),volume=$("selectedVolume");
     if(selectedSpec&&dimensions&&volume){dimensions.textContent=`${selectedSpec.size} × ${selectedSpec.width} × ${selectedSpec.thickness}`;volume.textContent=selectedSpec.volume}
     document.querySelectorAll("[data-guide-size]").forEach(row=>row.classList.toggle("selected",row.dataset.guideSize===selectedSize));
+    if($("colourSummary"))$("colourSummary").textContent=`Colour: ${colour().name} · Change`;
     renderGallery();renderPreorder();renderActions();renderPurchaseClarity();renderMobilePurchaseBar();updateUrl();
   }
 
-  function enquiryUrl(){const v=variant();return `../redesign-preview.html?interest=${encodeURIComponent(`${data.name} — ${selectedSize} — ${colour().name} — ${v.sku}`)}#contact`}
+  function enquiryUrl(){const v=variant();return `../contact/?interest=${encodeURIComponent(`${data.name} — ${selectedSize} — ${colour().name} — ${v.sku}`)}#contactForm`}
 
   function shippingQuoteUrl(){
     const subject=encodeURIComponent(`Shipping quote — ${data.short} — ${variant().sku}`);
@@ -128,9 +130,10 @@
     if(!shippingRates){result.textContent="Loading current delivery rates…";quote.hidden=true;return}
     if(!select.options.length){
       select.innerHTML=`<option value="">Choose delivery region</option>${shippingRates.regions.map(region=>`<option value="${region.id}">${region.label}</option>`).join("")}`;
+      try{const saved=sessionStorage.getItem(shippingRegionKey);if(shippingRates.regions.some(region=>region.id===saved))select.value=saved}catch{}
     }
     const region=shippingRates.regions.find(item=>item.id===select.value),shippingClass=productShippingClass();
-    if(!region){result.textContent="Choose a region to see the current GST-inclusive rate.";quote.hidden=true;return}
+    if(!region){result.textContent="Shipping is additional. Choose a region to see your total before payment.";quote.hidden=true;return}
     const multiSurfboard=shippingClass==="surfboard"&&quantity>1;
     const quoteRequired=region.quoteRequired||shippingClass==="quoteOnly"||multiSurfboard;
     if(quoteRequired){
@@ -142,7 +145,7 @@
     let amount=Number(region[shippingClass]||0)*quantity;
     const lengthFeet=Number((selectedSize.match(/^(\d+)/)||[])[1]||0);
     if(shippingClass==="surfboard"&&lengthFeet>=9)amount+=Number(shippingRates.longboardSurcharge||0)*quantity;
-    result.innerHTML=`<strong>${moneyFromCents(amount)} incl. GST</strong><span>${region.id==="local-pickup"?shippingRates.localPickupNote:"Recorded with your order and paid with the remaining balance before dispatch."}</span>`;
+    result.innerHTML=`<strong>Shipping: ${moneyFromCents(amount)} incl. GST</strong><span>Total including shipping: ${moneyFromCents(price*quantity*100+amount)} · ${moneyFromCents(price*quantity*100*(preorder ? 0.5 : 0)+amount)} payable before dispatch${preorder?" after today's initial payment":""}.</span><span>${region.id==="local-pickup"?shippingRates.localPickupNote:"Confirm that this region matches your delivery address in the cart."}</span>`;
     quote.hidden=true;
   }
 
@@ -153,9 +156,9 @@
     panel.id="purchaseClarity";
     panel.className="purchase-clarity";
     panel.setAttribute("aria-labelledby","purchaseClarityTitle");
-    panel.innerHTML=`<div class="clarity-heading"><div><p class="section-label">Before you pre-order</p><h2 id="purchaseClarityTitle">What you pay, when it ships, and how delivery works.</h2></div><a href="../preorder-preview.html">Full pre-order guide</a></div><dl class="clarity-facts"><div><dt>Due today</dt><dd id="clarityDueToday">—</dd></div><div><dt>Balance before dispatch</dt><dd id="clarityBalance">—</dd></div><div><dt>Estimated dispatch</dt><dd id="clarityDispatch">—</dd></div><div><dt>Cancellation</dt><dd id="clarityCancellation">—</dd></div></dl><div class="shipping-estimator"><label for="shippingRegion">Check shipping before checkout</label><select id="shippingRegion" aria-describedby="shippingEstimate"></select><div id="shippingEstimate" class="shipping-estimate" aria-live="polite">Loading current delivery rates…</div><a id="shippingQuote" class="btn btn-outline" href="mailto:admin@aurapaddle.com" hidden>Request a shipping quote</a><p>Australia only · Rates include GST · Free Gold Coast pickup is available.</p></div>`;
-    $("purchaseActions").insertAdjacentElement("afterend",panel);
-    $("shippingRegion").addEventListener("change",()=>{renderPurchaseClarity();track("view_shipping_rate",{item_id:variant().sku,item_name:data.name,shipping_region:$("shippingRegion").value,quantity})});
+    panel.innerHTML=`<div class="clarity-heading"><div><p class="section-label">Before you pre-order</p><h2 id="purchaseClarityTitle">What you pay, when it ships, and how delivery works.</h2></div><a href="../pre-order/">Full pre-order guide</a></div><dl class="clarity-facts"><div><dt>Due today</dt><dd id="clarityDueToday">—</dd></div><div><dt>Balance before dispatch</dt><dd id="clarityBalance">—</dd></div><div><dt>Estimated dispatch</dt><dd id="clarityDispatch">—</dd></div><div><dt>Cancellation</dt><dd id="clarityCancellation">—</dd></div></dl><div class="shipping-estimator"><label for="shippingRegion">Check shipping before checkout</label><select id="shippingRegion" aria-describedby="shippingEstimate"></select><div id="shippingEstimate" class="shipping-estimate" aria-live="polite">Loading current delivery rates…</div><a id="shippingQuote" class="btn btn-outline" href="mailto:admin@aurapaddle.com" hidden>Request a shipping quote</a><p>Australia only · Rates include GST · Free Gold Coast pickup is available.</p></div>`;
+    $("purchaseActions").insertAdjacentElement("beforebegin",panel);
+    $("shippingRegion").addEventListener("change",()=>{try{if($("shippingRegion").value)sessionStorage.setItem(shippingRegionKey,$("shippingRegion").value);else sessionStorage.removeItem(shippingRegionKey)}catch{}renderPurchaseClarity();track("view_shipping_rate",{item_id:variant().sku,item_name:data.name,shipping_region:$("shippingRegion").value,quantity})});
     fetch("../shipping-rates.json",{headers:{Accept:"application/json"}}).then(response=>response.ok?response.json():Promise.reject()).then(payload=>{shippingRates=payload;renderPurchaseClarity()}).catch(()=>{$("shippingEstimate").textContent="Current rates could not be loaded. Please request a shipping quote.";$("shippingQuote").hidden=false});
   }
 
@@ -163,22 +166,24 @@
     const v=variant(),preorder=isPreorder(v),campaign=v.preorder||{},target=campaign.target||1,reserved=committedCount(campaign),percent=Math.min(100,Math.round(reserved/target*100)),threshold=campaign.thresholdRequired!==false,remaining=Math.max(0,target-reserved);
     $("availability").classList.toggle("is-preorder",preorder);
     document.querySelector("#availability .status-dot").classList.toggle("preorder",preorder);
-    $("availabilityText").textContent=preorder?threshold?`Pre-order · ${campaign.scopeLabel} ${reserved}/${target}`:campaign.inventoryIncoming?"Stock arriving next week · Reserve now":`Pre-order · Confirmed · ${campaign.scopeLabel}`:"Available now";
+    $("availabilityText").textContent=preorder?threshold?`Conditional pre-order · ${reserved}/${target} committed`:campaign.inventoryIncoming?"Incoming stock · No minimum-order target":`In production · No minimum-order target`:"Available now";
+    if($("introDispatch"))$("introDispatch").textContent=`Estimated dispatch: ${campaign.estimatedDelivery||"Confirmed with order"}${threshold?" · Subject to production target":""}`;
     $("productPrice").textContent=displayPrice(v);
     const showOriginal=preorder&&!!v.retailAUD;
     $("originalPrice").hidden=!showOriginal;$("originalPrice").textContent=showOriginal?`Standard AUD $${v.retailAUD}`:"";
     const item=campaign.itemLabel||"board";
-    $("priceNote").textContent=preorder?(v.retailAUD?`${campaign.inventoryIncoming?"Reserve incoming stock":"Eligible "+item+" offer"} · AUD $${campaign.discountAUD} incentive included · 50% due today (AUD $${(numericPrice(v)/2).toFixed(2)})`:`Eligible ${item}s receive an AUD $${campaign.discountAUD} pre-order incentive after the standard retail price is confirmed · 50% initial payment required`):"Australia-only range · Shipping calculated separately · See policy terms";
+    $("priceNote").textContent=preorder?(v.retailAUD?`AUD $${(numericPrice(v)/2).toFixed(2)} today per ${item} · 50% initial payment. AUD $${campaign.discountAUD} incentive included in the full price.`:`Eligible ${item}s receive an AUD $${campaign.discountAUD} pre-order incentive after the standard retail price is confirmed · 50% initial payment required`):"Australia-only range · Shipping calculated separately · See policy terms";
     $("preorderPanel").hidden=!preorder;
     let guideLink=$("preorderGuide");
-    if(!guideLink){guideLink=document.createElement("a");guideLink.id="preorderGuide";guideLink.className="preorder-guide";guideLink.href="../preorder-preview.html";guideLink.textContent="Understand the complete pre-order process →";$("preorderCopy").insertAdjacentElement("afterend",guideLink)}
+    if(!guideLink){guideLink=document.createElement("a");guideLink.id="preorderGuide";guideLink.className="preorder-guide";guideLink.href="../pre-order/";guideLink.textContent="Understand the complete pre-order process →";$("preorderCopy").insertAdjacentElement("afterend",guideLink)}
     guideLink.hidden=!preorder;
     if(!preorder)return;
-    $("preorderKicker").textContent=campaign.name;$("preorderTitle").textContent=threshold&&companyAllocationByCampaign[campaign.id]?(remaining?`${remaining} more to production.`:"Production target reached."):campaign.title;$("preorderCount").hidden=!threshold;$("preorderCount").textContent=threshold?`${reserved} / ${target}`:"";
+    $("preorderKicker").textContent=campaign.name;$("preorderTitle").textContent=threshold&&companyAllocationByCampaign[campaign.id]?(remaining?`${remaining} more to production.`:"Production target reached."):campaign.inventoryIncoming?"Glacier Blue is allocated from incoming stock.":campaign.title;$("preorderCount").hidden=!threshold;$("preorderCount").textContent=threshold?`${reserved} / ${target}`:"";
     $("preorderProgress").style.width=`${percent}%`;
     const track=$("preorderProgress").parentElement;track.hidden=!threshold;track.setAttribute("aria-label",`${campaign.name} committed production progress`);track.setAttribute("aria-valuemax",String(target));track.setAttribute("aria-valuenow",String(reserved));
     $("preorderDeadlineLabel").textContent=threshold?"Closing date":campaign.inventoryIncoming?"Stock status":"Production condition";$("preorderDeadline").textContent=threshold?campaign.deadline:campaign.inventoryIncoming?"Incoming stock · No production target":"No minimum quantity";$("preorderDelivery").textContent=campaign.estimatedDelivery;$("preorderDiscount").textContent=`AUD $${campaign.discountAUD} off each eligible ${item}`;$("preorderPayment").textContent=campaign.payment;
     $("preorderCopy").textContent=threshold?`${campaign.description} If the target is not reached by ${campaign.deadline}, all affected orders will be cancelled and fully refunded to their original payment method.`:campaign.description;
+    if(threshold)$("preorderCopy").textContent+=` The counter includes ${companyAllocationByCampaign[campaign.id]||0} units committed by AURA plus paid, non-refunded customer units; it is not a customer count.`;
     const cancellation=threshold?" A change-of-mind cancellation receives a full refund if requested within 48 hours of the successful initial payment, or later while the order remains conditional and before AURA PADDLE confirms production in writing. Once production is confirmed or the order is placed with the manufacturer, change-of-mind cancellation is not available.":campaign.inventoryIncoming?" This reservation is allocated against incoming stock. A change-of-mind cancellation receives a full refund if requested within 48 hours of the successful initial payment.":" As this board is already in production and has no minimum quantity condition, change-of-mind cancellation is available for a full refund only within 48 hours of the successful initial payment.";
     const productionTiming=campaign.inventoryIncoming?`The published estimated dispatch date is ${campaign.estimatedDelivery} and may be updated as inbound freight and receiving progress.`:`Once production is confirmed in writing, estimated dispatch is approximately six weeks later. The published date of ${campaign.estimatedDelivery} is the current estimate and may be updated as production and freight progress.`;
     const terms=$("preorderTermsBody");if(terms)terms.textContent=threshold?`${campaign.description} A 50% initial payment reserves the ${item} and counts it towards the target once successfully paid. The remaining 50%, together with the shipping amount selected in the cart or separately quoted where required, is requested through a secure payment link before dispatch. The campaign closes on ${campaign.deadline}. ${productionTiming} Each eligible pre-ordered ${item} receives an AUD $${campaign.discountAUD} incentive. If the target is not reached, affected orders will be cancelled and the initial payment fully refunded.${cancellation} Australian Consumer Law rights are not excluded.`:`${campaign.description} A 50% initial payment reserves the ${item}. The remaining 50%, together with the shipping amount selected in the cart or separately quoted where required, is requested through a secure payment link before dispatch. ${productionTiming} Each eligible pre-ordered ${item} receives an AUD $${campaign.discountAUD} incentive. This order does not depend on a production target.${cancellation} Australian Consumer Law rights are not excluded.`;
@@ -191,6 +196,9 @@
     }else if(v.retailAUD){
       $("purchaseActions").innerHTML=`<button class="btn btn-dark" type="button" data-add-cart>${campaign.inventoryIncoming?"Reserve in cart":"Add pre-order to cart"}</button><button class="btn btn-coral" type="button" data-buy-now>${campaign.inventoryIncoming?"Reserve incoming stock":"Pre-order"} — pay AUD $${(numericPrice(v)/2).toFixed(2)} today</button><a class="btn btn-outline" href="${enquiryUrl()}">Ask about this ${campaign.inventoryIncoming?"incoming stock":"pre-order"}</a>`;
     }else $("purchaseActions").innerHTML=`<a class="btn btn-dark" href="${enquiryUrl()}">Join the pre-order waitlist</a><a class="btn btn-outline" href="${enquiryUrl()}">Request confirmed price</a>`;
+    if(data.slug==="yoga-cruiser"&&v.retailAUD){
+      $("purchaseActions").innerHTML=`<button class="btn btn-coral" type="button" data-buy-now>${campaign.inventoryIncoming?"Reserve Glacier Blue":"Pre-order "+colour().name}</button><a class="purchase-question" href="${enquiryUrl()}">Ask about this board →</a>`;
+    }
     $("purchaseActions").querySelector("[data-add-cart]")?.addEventListener("click",addToCart);
     $("purchaseActions").querySelector("[data-buy-now]")?.addEventListener("click",buyNow);
     $("stockCopy").textContent=v.available?data.stock:campaign.inventoryIncoming?`Incoming stock · Estimated dispatch ${campaign.estimatedDelivery}`:campaign.thresholdRequired===false?`In production · No minimum · Estimated dispatch ${campaign.estimatedDelivery}`:`${campaign.scopeLabel} · ${committedCount(campaign)}/${campaign.target} committed`;
@@ -216,10 +224,44 @@
     bar.querySelector("button").addEventListener("click",()=>{track("mobile_purchase_click",{item_id:variant().sku,item_name:data.name,item_variant:[selectedSize,colour().name].join(" · ")});buyNow()});
   }
 
+  function setupConversionLayout(){
+    if(data.slug!=="yoga-cruiser")return;
+    document.body.classList.add("yoga-conversion");
+    const layout=document.querySelector(".product-layout"),info=document.querySelector(".product-info"),intro=document.createElement("div");
+    intro.className="product-intro";
+    for(const selector of [".breadcrumb",".eyebrow","h1",".subtitle","#availability",".price-row","#priceNote"]){const el=info.querySelector(selector);if(el)intro.append(el)}
+    intro.querySelector("h1").textContent="Yoga Cruiser";
+    intro.querySelector(".subtitle").textContent="A spacious 36-inch platform for SUP yoga and relaxed paddling.";
+    const kit=document.createElement("p");kit.className="kit-summary";kit.textContent="Electric pump · Wheeled carry bag · Adjustable paddle included";intro.append(kit);
+    const dispatch=document.createElement("p");dispatch.id="introDispatch";dispatch.className="dispatch-summary";intro.append(dispatch);
+    layout.prepend(intro);
+    const size=$("selectedSize").closest(".selector");if(data.sizes.length===1){size.querySelector(".option-row").hidden=true;size.classList.add("single-size");}
+    const colours=$("selectedColour").closest(".selector"),choice=document.createElement("details");choice.className="colour-choice";choice.innerHTML='<summary id="colourSummary">Choose colour</summary><p>Glacier Blue: incoming stock, no minimum. Other colours: conditional shared production batch.</p>';colours.before(choice);choice.append(colours);
+    const terms=document.createElement("details");terms.className="reservation-details";terms.innerHTML='<summary>Reservation conditions &amp; production details</summary>';
+    $("purchaseActions").after(terms);terms.append($("preorderPanel"));terms.append(document.querySelector(".sku-box"));
+    terms.append($("purchaseClarity").querySelector(".clarity-facts"));terms.append(size);
+    const assurance=document.createElement("p");assurance.className="purchase-assurance";assurance.textContent="50% today; remaining 50% + shipping before dispatch. Full refund within 48 hours. Conditions apply.";$("purchaseActions").after(assurance);
+    $("purchaseClarityTitle").textContent="Delivery & total";
+    $("purchaseClarity").querySelector(".section-label").textContent="Know before you reserve";
+    $("purchaseClarity").querySelector("a").href="../pre-order/";
+    const included=[...document.querySelectorAll(".detail-head")].find(el=>el.textContent.includes("What's included"));
+    if(included){included.parentElement.classList.add("open");included.setAttribute("aria-expanded","true")}
+    // Keep all image assets, bringing kit and usage context forward. The hero stays first.
+    for(const option of data.colours){const images=option.images||[];option.images=[...images.filter((src,i)=>i===0),...images.filter(src=>src.includes("full-kit")).map(src=>src.replace(/\.jpg$/,".webp")),...images.filter(src=>src.includes("lifestyle")),...images.filter((src,i)=>i!==0&&!src.includes("full-kit")&&!src.includes("lifestyle"))]}
+    const glacier=data.colours.find(option=>option.key==="glacier");
+    if(glacier)glacier.images.splice(2,0,"../assets/products/yoga-cruiser/glacier-blue/yoga-on-water-1200.jpg");
+    const demo=document.createElement("section");demo.className="yoga-demo";demo.innerHTML='<div class="wrap"><div><p class="eyebrow">See the board in use</p><h2>From the kit to the water.</h2><p>Watch our existing Yoga Cruiser demonstration, then explore the full kit and board details above.</p><p><a href="../our-story/">Meet AURA PADDLE →</a> · <a href="../contact/">Ask our Australian team →</a></p><p class="demo-note">Demonstration footage is not a safety guide. Follow local conditions and the care &amp; safety guidance.</p></div><video controls playsinline preload="none" poster="../assets/products/yoga-cruiser/glacier-blue/yoga-on-water-1200.jpg" aria-label="Yoga Cruiser product and on-water demonstration"><source src="../assets/products/yoga-cruiser/glacier-blue/yoga-demo-20260902.mp4" type="video/mp4"></video></div>';
+    document.querySelector(".answer-grid").before(demo);
+    const reviews=document.querySelector(".reviews-grid"),reviewIntro=document.querySelector(".reviews-head");
+    if(reviews&&reviewIntro){const fold=document.createElement("details");fold.className="review-disclosure";fold.innerHTML='<summary>Used a Yoga Cruiser? Share your experience</summary>';reviews.before(fold);fold.append(reviews);reviewIntro.querySelector("h2").textContent="Real experiences, as our community grows.";reviews.querySelector(".reviews-stars")?.remove();}
+    const compare=document.createElement("section");compare.className="yoga-comparison";compare.innerHTML=`<div class="wrap"><p class="eyebrow">Choose for your paddling</p><h2>More room, or a lighter starting price?</h2><div class="comparison-scroll"><table><caption>Yoga Cruiser and CoastGo at a glance</caption><thead><tr><th scope="col">Your priority</th><th scope="col">Yoga Cruiser</th><th scope="col">CoastGo</th></tr></thead><tbody><tr><th scope="row">Best suited to</th><td>SUP yoga &amp; relaxed paddling with more deck space</td><td>First paddles &amp; easy all-round outings</td></tr><tr><th scope="row">Board width</th><td>36 inches</td><td>33 inches</td></tr><tr><th scope="row">Stated maximum capacity</th><td>180 kg</td><td>120 kg</td></tr><tr><th scope="row">Pre-order price, excluding shipping</th><td>AUD $749</td><td>AUD $299</td></tr><tr><th scope="row">Explore</th><td>Your selected board above</td><td><a href="../products/coast-go.html">View CoastGo →</a></td></tr></tbody></table></div><p>Choose for your activity and experience, not capacity alone. Each model and colour has its own dispatch schedule. <a href="../support/isup-care-safety/">Read the care &amp; safety guide</a>.</p></div>`;
+    document.querySelector(".answer-grid").after(compare);
+  }
+
   function renderShippingSupport(){
     const heading=[...document.querySelectorAll(".detail-head")].find(button=>button.textContent.includes("Shipping and support"));
     const body=heading?.parentElement?.querySelector(".detail-body");
-    if(body)body.innerHTML=`Choose your delivery region in the cart to see the published iSUP or hard-surfboard rate. Free local pickup is available in Gold Coast, QLD; the exact pickup address is provided after order confirmation. Regional, remote, island, multi-surfboard and other quote-required orders are confirmed individually. Shipping is paid with the remaining product balance before dispatch. See the <a href="../policy-preview.html#shipping">Shipping Policy</a>, <a href="../policy-preview.html#returns">Returns &amp; Refunds</a> and warranty conditions.`;
+    if(body)body.innerHTML=`Choose your delivery region in the cart to see the published iSUP or hard-surfboard rate. Free local pickup is available in Gold Coast, QLD; the exact pickup address is provided after order confirmation. Regional, remote, island, multi-surfboard and other quote-required orders are confirmed individually. Shipping is paid with the remaining product balance before dispatch. See the <a href="../policies/#shipping">Shipping Policy</a>, <a href="../policies/#returns">Returns &amp; Refunds</a> and warranty conditions.`;
   }
 
   function setupSurfSizeFinder(){
@@ -354,7 +396,7 @@
   $("reviewForm")?.addEventListener("submit",submitReview);
   document.querySelectorAll("[data-add-accessory]").forEach(button=>button.addEventListener("click",()=>addAccessory(button.dataset.addAccessory)));
   const menuButton=$("menuButton"),mobileMenu=$("mobileMenu");menuButton.addEventListener("click",()=>{const open=mobileMenu.classList.toggle("open");menuButton.setAttribute("aria-expanded",String(open));document.body.classList.toggle("menu-open",open)});mobileMenu.querySelectorAll("a").forEach(a=>a.addEventListener("click",()=>{mobileMenu.classList.remove("open");document.body.classList.remove("menu-open");menuButton.setAttribute("aria-expanded","false")}));
-  renderShippingSupport();setupSurfSizeFinder();setupPurchaseClarity();setupMobilePurchaseBar();renderSelection();renderMobilePurchaseBar();refreshPreorderProgress();
+  renderShippingSupport();setupSurfSizeFinder();setupPurchaseClarity();setupMobilePurchaseBar();setupConversionLayout();renderSelection();renderMobilePurchaseBar();refreshPreorderProgress();
   const viewedItem=cartItem();
   track("view_item",{currency:"AUD",value:Number(viewedItem.unitAmount||0)/100,items:[analyticsItem(viewedItem,1)]});
 })();

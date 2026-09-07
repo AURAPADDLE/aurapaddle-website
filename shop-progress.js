@@ -46,6 +46,14 @@
       const productId=card.dataset.productId||productIdByPath[card.dataset.productUrl];
       if(productId&&!card.dataset.productId)card.dataset.productId=productId;
       const state=stateFor(productId),media=card.querySelector(".product-media"),status=card.querySelector(".status");
+      if(productId==="yoga"&&media&&status){
+        status.textContent="Glacier Blue · Incoming · No minimum";
+        media.querySelector(".card-progress")?.remove();
+        let note=card.querySelector(".variant-availability-note");
+        if(!note){note=document.createElement("p");note.className="variant-availability-note";card.querySelector(".product-body").append(note)}
+        note.textContent="Glacier Blue: estimated dispatch 15 September 2026. Other colours: conditional pre-order, estimated dispatch 30 November 2026.";
+        return;
+      }
       if(!state||!media||!status)return;
       status.textContent=`${state.label} · ${state.committed}/${state.target}`;
       let track=media.querySelector(".card-progress");

@@ -64,7 +64,7 @@
     .card-progress>i{display:block;height:100%;width:0;border-radius:inherit;background:var(--coral);transition:width .35s ease}
     .product-card[data-product-id="yoga"] .card-progress>i{background:linear-gradient(90deg,var(--deep),var(--coral))}
   </style>
-</head>
+<link rel="stylesheet" href="conversion-review.css?v=20260907"></head>
 <body>
   <header class="site-header">
     <div class="wrap nav">
@@ -138,7 +138,7 @@
     // Reserved Stripe integration contract. Never place secret keys in this file.
     window.AURA_STRIPE={publishableKey:"",checkoutEndpoint:"",priceIds:{}};
     const products=[
-      {id:"yoga",url:"products/yoga-cruiser.html",name:"Yoga Cruiser",type:"Paddle · Yoga & family",category:"paddle",mode:"mixed",status:"Glacier stock arriving next week · 3 colours join shared 50",image:"assets/products/yoga-cruiser/glacier-blue/AP734955_yoga-cruiser_11ft_glacier-blue_hero-01.jpg",desc:"An extra-wide iSUP built for yoga, shared paddles and calm-water family time.",chips:["11'0\" × 36\" × 6\"","180 kg · 285 L","AUD $50 pre-order incentive"],colours:[{name:"Glacier Blue",swatch:"#58b8d0"},{name:"Matte Sandstone",swatch:"#c7aa87"},{name:"Eucalyptus Green",swatch:"#4f7b60"},{name:"Coral White",swatch:"#efe2cf"}]},
+      {id:"yoga",url:"products/yoga-cruiser.html",name:"Yoga Cruiser",type:"Paddle · Yoga & family",category:"paddle",mode:"mixed",status:"Glacier Blue · Incoming stock · No minimum",image:"assets/products/yoga-cruiser/glacier-blue/AP734955_yoga-cruiser_11ft_glacier-blue_hero-01.jpg",desc:"An extra-wide iSUP built for yoga, shared paddles and calm-water family time.",chips:["11'0\" × 36\" × 6\"","180 kg · 285 L","AUD $50 pre-order incentive"],colours:[{name:"Glacier Blue",swatch:"#58b8d0"},{name:"Matte Sandstone",swatch:"#c7aa87"},{name:"Eucalyptus Green",swatch:"#4f7b60"},{name:"Coral White",swatch:"#efe2cf"}]},
       {id:"angler",url:"products/angler-fishing.html",name:"Angler Fishing",type:"Paddle · Fishing",category:"paddle",mode:"preorder",status:"Paddle batch · 0/50",image:"assets/products/angler-fishing/coral-white/AP912342_angler-fishing_12ft_coral-white_hero-01.jpg",desc:"A stable 12-foot fishing platform with dedicated rod and rack mounting points.",chips:["12'0\" × 34\" × 6\"","220 kg · 293.7 L","AUD $50 pre-order incentive"],colours:[{name:"Glacier Blue",swatch:"#58b8d0"},{name:"Matte Sandstone",swatch:"#c7aa87"},{name:"Eucalyptus Green",swatch:"#4f7b60"},{name:"Coral White",swatch:"#efe2cf"}]},
       {id:"touring",url:"products/touring-performance.html",name:"Touring Performance",type:"Paddle · Touring",category:"paddle",mode:"preorder",status:"Paddle batch · 0/50",image:"assets/products/touring-performance/matte-sandstone/AP804412_touring-performance_14ft_matte-sandstone_hero-01.jpg",desc:"A streamlined touring iSUP shaped for tracking, distance and efficient glide.",chips:["14'0\" × 30\" × 5.5\"","150 kg · 302.4 L","AUD $50 pre-order incentive"],colours:[{name:"Glacier Blue",swatch:"#58b8d0"},{name:"Matte Sandstone",swatch:"#c7aa87"},{name:"Eucalyptus Green",swatch:"#4f7b60"},{name:"Coral White",swatch:"#efe2cf"}]},
       {id:"coast",url:"products/coast-go.html",name:"CoastGo",type:"Paddle · All-round",category:"paddle",mode:"preorder",status:"In production · no minimum",image:"assets/products/coast-go/blue-orange/AP081165_coast-go-isup_10ft6in_blue-orange_hero-01.webp",desc:"An approachable all-round iSUP package for first paddles, weekends and easy transport.",chips:["10'6\" × 33\" × 6\"","120 kg · 249 L","AUD $50 pre-order incentive"],colours:[{name:"Blue Orange",swatch:"#176b8c"},{name:"Mint Grey",swatch:"#83bdb5"},{name:"Blue Coral",swatch:"#5aa9bd"}]},
@@ -169,6 +169,6 @@
     document.querySelectorAll("dialog .modal-close").forEach(btn=>btn.addEventListener("click",()=>btn.closest("dialog").close()));
     document.getElementById("stripePreviewButton").addEventListener("click",()=>stripeDialog.showModal());
     const menuButton=document.getElementById("menuButton"),mobileMenu=document.getElementById("mobileMenu");menuButton.addEventListener("click",()=>{const open=mobileMenu.classList.toggle("open");menuButton.setAttribute("aria-expanded",String(open));document.body.classList.toggle("menu-open",open)});mobileMenu.querySelectorAll("a").forEach(a=>a.addEventListener("click",()=>{mobileMenu.classList.remove("open");document.body.classList.remove("menu-open");menuButton.setAttribute("aria-expanded","false")}));
-  </script><script src="shop-progress.js?v=20260828-live-progress"></script>
+  </script><script src="shop-progress.js?v=20260907-conversion-review"></script>
 </body>
 </html>
