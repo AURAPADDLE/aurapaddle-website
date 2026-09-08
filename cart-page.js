@@ -12,6 +12,10 @@
   const error=document.getElementById("checkoutError");
   const regionSelect=document.getElementById("shippingRegion");
   const recoveryEmailConsent=document.getElementById("recoveryEmailConsent");
+  if(recoveryEmailConsent){
+    recoveryEmailConsent.defaultChecked=true;
+    recoveryEmailConsent.checked=true;
+  }
   const regionStorageKey="aura-shipping-region-v1";
   const totalRow=document.createElement("div");totalRow.className="summary-row order-total";totalRow.innerHTML='<span>Total including shipping</span><strong id="orderTotal">Select region</strong>';
   document.getElementById("beforeDispatch").parentElement.after(totalRow);
