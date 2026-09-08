@@ -26,3 +26,37 @@
 .shipping-choice p {
   margin: .55rem 0 0;
 }
+
+.checkout-email {
+  margin: 1rem 0 .75rem;
+}
+
+.checkout-email label {
+  display: block;
+  margin-bottom: .5rem;
+  font-size: .75rem;
+  font-weight: 700;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+
+.checkout-email input {
+  width: 100%;
+  min-height: 46px;
+  padding: .7rem .8rem;
+  border: 1px solid rgba(255, 255, 255, .24);
+  border-radius: .65rem;
+  background: #fff;
+  color: var(--navy);
+  font: 500 .88rem "DM Sans", sans-serif;
+}
+
+.checkout-email input:focus {
+  outline: 3px solid rgba(97, 197, 201, .28);
+  border-color: #61c5c9;
+}
+
+.checkout-email p {
+  margin: .5rem 0 0;
+  font-size: .78rem;
+}

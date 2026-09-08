@@ -37,9 +37,10 @@ The server also exposes:
 ## Consented abandoned-checkout recovery
 
 - Stripe Checkout Sessions expire after two hours and have Stripe recovery URLs enabled for 30 days.
-- The cart offers a default-off recovery-email checkbox before redirecting to Stripe. The server copies that explicit choice into Checkout metadata and queues one recovery email only when the customer selected it, an email is present and Stripe supplied a recovery URL.
+- The cart requires a valid email before creating a Stripe Checkout Session, securely retains it with the checkout reservation and passes it through Stripe's standard `customer_email` field so Checkout is pre-filled. The address is never placed in a URL or Stripe metadata.
+- The cart offers a default-on recovery-email checkbox before redirecting to Stripe. The server copies that explicit choice into Checkout metadata and queues one recovery email only when the customer kept it selected, an email is present and Stripe supplied a recovery URL.
 - Recovery sends use a durable outbox, AgentMail idempotency keys, retry backoff, a seven-day same-recipient deduplication window and a one-click suppression link. `AGENTMAIL_AGENTMAIL_API_KEY` is injected by Stripe Projects and never exposed to the browser.
-- The protected internal view is `/admin/abandoned-checkouts/`. Its token is held in `sessionStorage` for the current browser tab only. No SMS provider, SMS queue or SMS action is configured.
+- The protected internal view is `/admin/abandoned-checkouts/`. Its token is held in `sessionStorage` for the current browser tab only. Contactable, anonymous and internal-test records are labelled separately; internal tests are excluded from the customer-record count. No SMS provider, SMS queue or SMS action is configured.
 - Abandoned checkout and sent-email operational records are retained for 30 days. Email suppression hashes are retained so an unsubscribe choice continues to be honoured.
 
 ## Paid-order email confirmation and internal notification

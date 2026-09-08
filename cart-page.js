@@ -12,6 +12,23 @@
   const error=document.getElementById("checkoutError");
   const regionSelect=document.getElementById("shippingRegion");
   const recoveryEmailConsent=document.getElementById("recoveryEmailConsent");
+  const checkoutEmail=document.createElement("input");
+  checkoutEmail.id="checkoutEmail";
+  checkoutEmail.name="email";
+  checkoutEmail.type="email";
+  checkoutEmail.autocomplete="email";
+  checkoutEmail.inputMode="email";
+  checkoutEmail.maxLength=254;
+  checkoutEmail.placeholder="name@example.com";
+  checkoutEmail.required=true;
+  checkoutEmail.setAttribute("aria-describedby","checkoutEmailHelp");
+  const checkoutEmailBlock=document.createElement("div");
+  checkoutEmailBlock.className="checkout-email";
+  checkoutEmailBlock.innerHTML='<label for="checkoutEmail">Email address</label><p id="checkoutEmailHelp">Used for your payment receipt, order updates and secure checkout recovery.</p>';
+  checkoutEmailBlock.querySelector("label").after(checkoutEmail);
+  recoveryEmailConsent?.closest(".recovery-consent")?.before(checkoutEmailBlock);
+  const recoveryCopy=document.querySelector(".recovery-consent-copy");
+  if(recoveryCopy)recoveryCopy.textContent="If I don’t finish payment, email me one secure link to continue checkout.";
   if(recoveryEmailConsent){
     recoveryEmailConsent.defaultChecked=true;
     recoveryEmailConsent.checked=true;
@@ -154,6 +171,15 @@
     if(checkout.disabled)return;
     const items=cart.read();
     if(!items.length)return;
+    const customerEmail=checkoutEmail.value.trim().toLowerCase();
+    if(!customerEmail||!checkoutEmail.checkValidity()){
+      checkoutEmail.setCustomValidity(customerEmail?"Enter a valid email address.":"Enter your email address before continuing to secure payment.");
+      checkoutEmail.reportValidity();
+      checkoutEmail.focus();
+      track("checkout_email_required",{checkout_stage:"cart"});
+      return;
+    }
+    checkoutEmail.setCustomValidity("");
     const original=checkout.textContent;
     checkout.disabled=true;
     checkout.textContent="Preparing secure checkout…";
@@ -161,7 +187,7 @@
     let response;
     try{
       const attribution=await window.AURAAttribution?.snapshot?.();
-      response=await fetch(config.checkoutEndpoint||"/api/checkout",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({items:items.map(({sku,quantity})=>({sku,quantity})),shippingRegion:regionSelect.value,returnPath:location.pathname,recoveryEmailConsent:recoveryEmailConsent?.checked===true,requestId:globalThis.crypto?.randomUUID?.()||`${Date.now()}-${Math.random().toString(36).slice(2)}`,attribution})});
+      response=await fetch(config.checkoutEndpoint||"/api/checkout",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({items:items.map(({sku,quantity})=>({sku,quantity})),shippingRegion:regionSelect.value,returnPath:location.pathname,customerEmail,recoveryEmailConsent:recoveryEmailConsent?.checked===true,requestId:globalThis.crypto?.randomUUID?.()||`${Date.now()}-${Math.random().toString(36).slice(2)}`,attribution})});
       const payload=await response.json().catch(()=>({}));
       if(!response.ok||!payload.url)throw new Error(payload.error||"Stripe Checkout could not be prepared.");
       const pricing=bundlePricing(items);
@@ -184,6 +210,7 @@
   });
 
   cart.subscribe(render);
+  checkoutEmail.addEventListener("input",()=>checkoutEmail.setCustomValidity(""));
   render();
   const viewedItems=cart.read();
   if(viewedItems.length){

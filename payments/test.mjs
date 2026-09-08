@@ -55,9 +55,9 @@ test("Fishing Rack is AUD 129 alone and AUD 69 per paired Angler board",()=>{
   assert.equal(params.get("line_items[2][price_data][unit_amount]"),"6450");
 });
 
-test("checkout trusts the 50% deposit, excludes Afterpay, stays country-safe and retains dynamic payment methods",()=>{
+test("checkout trusts the 50% deposit, pre-fills email, excludes Afterpay, stays country-safe and retains dynamic payment methods",()=>{
   const variant=catalog.bySku.get("AP734955");
-  const items=[{variant,quantity:2}],params=buildCheckoutParams({items,priceBySku:stripeMap.bySku,siteUrl:"http://localhost:4242",returnPath:"/products/yoga-cruiser.html?colour=glacier",shipping:shippingFor(items),recoveryEmailConsent:true,integrationIdentifier:"aura_cart_abcdefgh"});
+  const items=[{variant,quantity:2}],params=buildCheckoutParams({items,priceBySku:stripeMap.bySku,siteUrl:"http://localhost:4242",returnPath:"/products/yoga-cruiser.html?colour=glacier",shipping:shippingFor(items),customerEmail:" Buyer@Example.com ",recoveryEmailConsent:true,integrationIdentifier:"aura_cart_abcdefgh"});
   assert.equal(params.get("line_items[0][price]"),null);
   assert.equal(params.get("line_items[0][price_data][product]"),stripeMap.bySku.get("AP734955").productId);
   assert.equal(params.get("line_items[0][price_data][unit_amount]"),"37450");
@@ -66,6 +66,8 @@ test("checkout trusts the 50% deposit, excludes Afterpay, stays country-safe and
   assert.equal(params.get("adaptive_pricing[enabled]"),"false");
   assert.equal(params.get("excluded_payment_method_types[0]"),"afterpay_clearpay");
   assert.equal(params.get("integration_identifier"),"aura_cart_abcdefgh");
+  assert.equal(params.get("customer_email"),"buyer@example.com");
+  assert.equal(params.get("metadata[customer_email]"),null);
   assert.equal(params.get("shipping_address_collection[allowed_countries][0]"),"AU");
   assert.equal(params.get("consent_collection[promotions]"),null);
   assert.equal(params.get("metadata[aura_recovery_email_consent]"),"true");
@@ -183,11 +185,12 @@ test("checkout retries reuse the same APO identity and Stripe integration identi
   assert.equal(integerCalls,1);assert.equal(byteCalls,2);
 });
 
-test("checkout reservation retains attribution for the APO order",()=>{
+test("checkout reservation retains attribution and customer email for the APO order",()=>{
   const state={events:{},orders:{},reservations:{},checkoutRequests:{}};
-  reserveCheckoutIdentity(state,{requestId:"attribution-123",attribution:{consent:{analytics:true,marketing:false},first:{source:"newsletter",medium:"email",landingPath:"/shop/"}},randomInt:()=>12345,randomBytes:size=>Buffer.alloc(size,7)});
+  reserveCheckoutIdentity(state,{requestId:"attribution-123",customerEmail:" Buyer@Example.com ",attribution:{consent:{analytics:true,marketing:false},first:{source:"newsletter",medium:"email",landingPath:"/shop/"}},randomInt:()=>12345,randomBytes:size=>Buffer.alloc(size,7)});
   assert.equal(state.checkoutRequests["attribution-123"].orderNumber,"APO12345");
   assert.equal(state.checkoutRequests["attribution-123"].attribution.first.source,"newsletter");
+  assert.equal(state.checkoutRequests["attribution-123"].customerEmail,"buyer@example.com");
 });
 
 test("quantity validation rejects tampering",()=>{
@@ -350,7 +353,17 @@ test("expired Checkout records an abandonment and queues one explicitly consente
   assert.equal(enqueueStripeAnalytics(state,event,catalog),true);
   assert.equal(measurementPayload(state.analyticsOutbox["checkout_abandoned:cs_test_expired"]).events[0].name,"checkout_abandoned");
   const list=abandonedCheckoutList(state,catalog);
-  assert.equal(list[0].items[0].name,"AURA PADDLE Yoga Cruiser");assert.equal(list[0].source,"google");
+  assert.equal(list[0].items[0].name,"AURA PADDLE Yoga Cruiser");assert.equal(list[0].source,"google");assert.equal(list[0].contactStatus,"contactable");
+});
+
+test("expired Checkout falls back to the securely reserved email and labels controlled tests",()=>{
+  const state={events:{},orders:{},checkoutRequests:{request_test:{orderNumber:"APO48225",customerEmail:"test@example.com",attribution:{version:1,consent:{analytics:true,marketing:true},last:{source:"google",medium:"cpc",campaign:"aura_controlled_test"}}}},abandonedCheckouts:{},recoveryEmailOutbox:{},recoverySuppressions:{}};
+  applyStripeEvent(state,{id:"evt_reserved_email",type:"checkout.session.expired",created:1_787_650_450,data:{object:{id:"cs_test_reserved_email",amount_total:37450,currency:"aud",after_expiration:{recovery:{url:"https://buy.stripe.com/r/reserved"}},metadata:{aura_items:"AP734955:1",aura_order_number:"APO48225",aura_recovery_email_consent:"true"}}}});
+  const abandoned=state.abandonedCheckouts.cs_test_reserved_email,list=abandonedCheckoutList(state,catalog)[0];
+  assert.equal(abandoned.customerEmail,"test@example.com");
+  assert.equal(state.recoveryEmailOutbox.cs_test_reserved_email.recipient,"test@example.com");
+  assert.equal(list.internalTest,true);
+  assert.equal(list.contactStatus,"internal_test");
 });
 
 test("recovery email is not queued without explicit website consent",()=>{
