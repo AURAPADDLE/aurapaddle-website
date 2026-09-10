@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import crypto from "node:crypto";
 import test from "node:test";
-import {abandonedCheckoutList,adminOrderList,applyStripeEvent,buildCheckoutParams,calculateShipping,campaignProgress,isStripeHostedInvoiceUrl,loadCatalog,loadShippingRates,loadStripeMap,normaliseAttribution,normaliseCheckoutItems,normaliseQuantity,orderProgress,prepareBalanceRequest,publicOrderView,queueOrderEmails,queueOrderMilestoneEmail,reserveCheckoutIdentity,unsubscribeRecoveryEmail,updateOrderProgress,verifyStripeSignature} from "./lib.mjs";
+import {abandonedCheckoutList,adminOrderList,applyStripeEvent,buildCheckoutParams,calculateShipping,campaignProgress,isStripeHostedInvoiceUrl,loadCatalog,loadShippingRates,loadStripeMap,normaliseAttribution,normaliseCheckoutItems,normaliseQuantity,orderProgress,parseRequestUrl,prepareBalanceRequest,publicOrderView,queueOrderEmails,queueOrderMilestoneEmail,reserveCheckoutIdentity,unsubscribeRecoveryEmail,updateOrderProgress,verifyStripeSignature} from "./lib.mjs";
 import {enqueueStripeAnalytics,hashUserData,measurementPayload} from "./analytics.mjs";
 import {recoveryEmailContent} from "./recovery-email.mjs";
 import {adminOrderEmailContent,customerOrderEmailContent,milestoneOrderEmailContent} from "./order-email.mjs";
@@ -10,6 +10,11 @@ const catalog=loadCatalog();
 const shippingRates=loadShippingRates();
 const stripeMap=loadStripeMap(catalog);
 const shippingFor=(items,regionId="gold-coast-brisbane")=>calculateShipping(items,regionId,shippingRates);
+
+test("request URL parsing rejects malformed paths without escaping the server error handler",()=>{
+  assert.equal(parseRequestUrl("/api/health","https://www.aurapaddle.com").pathname,"/api/health");
+  assert.throws(()=>parseRequestUrl("//","https://www.aurapaddle.com"),/Invalid request URL/);
+});
 
 test("catalogue contains 77 board SKUs and the Fishing Rack accessory",()=>{
   assert.equal(catalog.variants.length,78);

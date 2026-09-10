@@ -80,6 +80,11 @@ export function normaliseQuantity(value){
   return quantity;
 }
 
+export function parseRequestUrl(value,base){
+  try{return new URL(String(value||"/"),base)}
+  catch{throw new Error("Invalid request URL.")}
+}
+
 const attributionText=(value,max=120)=>{
   if(typeof value!=="string")return "";
   return value.trim().replace(/[\u0000-\u001f\u007f]/g,"").slice(0,max);

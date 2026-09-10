@@ -3,7 +3,7 @@ import http from "node:http";
 import path from "node:path";
 import crypto from "node:crypto";
 import {fileURLToPath} from "node:url";
-import {abandonedCheckoutList,adminOrderList,applyStripeEvent,buildCheckoutParams,calculateShipping,campaignProgress,isStripeHostedInvoiceUrl,loadCatalog,loadShippingRates,loadStripeMap,normaliseAttribution,normaliseCheckoutItems,normaliseQuantity,prepareBalanceRequest,publicOrderView,queueOrderEmails,queueOrderMilestoneEmail,reserveCheckoutIdentity,safeReturnPath,unsubscribeRecoveryEmail,updateOrderProgress,verifyStripeSignature} from "./lib.mjs";
+import {abandonedCheckoutList,adminOrderList,applyStripeEvent,buildCheckoutParams,calculateShipping,campaignProgress,isStripeHostedInvoiceUrl,loadCatalog,loadShippingRates,loadStripeMap,normaliseAttribution,normaliseCheckoutItems,normaliseQuantity,parseRequestUrl,prepareBalanceRequest,publicOrderView,queueOrderEmails,queueOrderMilestoneEmail,reserveCheckoutIdentity,safeReturnPath,unsubscribeRecoveryEmail,updateOrderProgress,verifyStripeSignature} from "./lib.mjs";
 import {enqueueStripeAnalytics,measurementPayload} from "./analytics.mjs";
 import {ensureRecoveryInbox,sendRecoveryEmail} from "./recovery-email.mjs";
 import {sendOrderEmail} from "./order-email.mjs";
@@ -285,8 +285,8 @@ function staticFile(req,res,url){
 }
 
 const server=http.createServer(async(req,res)=>{
-  const url=new URL(req.url,siteUrl);
   try{
+    const url=parseRequestUrl(req.url,siteUrl);
     if(req.method==="GET"&&url.pathname==="/api/health"){const state=await store.read(),analyticsEntries=Object.values(state.analyticsOutbox||{}),recoveryEntries=Object.values(state.recoveryEmailOutbox||{}),orderEmailEntries=Object.values(state.transactionalEmailOutbox||{}),sentAnalytics=analyticsEntries.filter(item=>item.status==="sent"),latestAnalyticsSentAt=Math.max(0,...sentAnalytics.map(item=>Number(item.sentAt||0)));return send(res,200,{ok:true,mode:allowLive?"live-enabled":"sandbox-only",storage:store.kind,stripeConfigured:Boolean(stripeKey),webhookConfigured:Boolean(webhookSecret),adminConfigured:Boolean(adminApiToken),catalogueSkus:catalog.variants.length,mappedStripePrices:stripeMap.bySku.size,stripeAccount:stripeMap.accountId,analytics:{serverEventsEnabled:analyticsDispatchEnabled,configured:Boolean(ga4ApiSecret),validationMode:analyticsValidationMode,enhancedConversionsEnabled,pending:analyticsEntries.filter(item=>["pending","retry","sending"].includes(item.status)).length,failed:analyticsEntries.filter(item=>item.status==="failed").length,sent:sentAnalytics.length,latestSentAt:latestAnalyticsSentAt||null},checkoutRecovery:{enabled:true,emailConfigured:Boolean(agentMailApiKey),emailReady:recoveryEmailReady,configurationError:Boolean(recoveryEmailInitError),smsEnabled:false,pending:recoveryEntries.filter(item=>["pending","retry","sending"].includes(item.status)).length,failed:recoveryEntries.filter(item=>item.status==="failed").length},orderNotifications:{enabled:true,emailConfigured:Boolean(agentMailApiKey),emailReady:recoveryEmailReady,recipient:orderNotificationEmail,pending:orderEmailEntries.filter(item=>["pending","retry","sending"].includes(item.status)).length,failed:orderEmailEntries.filter(item=>item.status==="failed").length},account:"AURA PADDLE PTY LTD"})}
     if(req.method==="POST"&&url.pathname==="/api/checkout")return await checkout(req,res);
     if(req.method==="GET"&&url.pathname==="/api/checkout-session")return await sessionSummary(req,res,url);
