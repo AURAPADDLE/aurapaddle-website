@@ -1,0 +1,21 @@
+{
+  "currency": "AUD",
+  "origin": "Gold Coast, QLD",
+  "localPickupNote": "Gold Coast, QLD — exact pickup address provided after order confirmation.",
+  "longboardSurcharge": 5000,
+  "regions": [
+    {"id":"local-pickup","label":"Local pickup — Gold Coast, QLD","isup":0,"surfboard":0},
+    {"id":"gold-coast-brisbane","label":"Gold Coast / Brisbane Metro","isup":4900,"surfboard":7900},
+    {"id":"qld-nsw-main","label":"QLD / NSW major cities and coastal areas","isup":7900,"surfboard":10900},
+    {"id":"canberra-melbourne","label":"Canberra / Melbourne Metro","isup":9900,"surfboard":14900},
+    {"id":"adelaide","label":"Adelaide Metro","isup":12900,"surfboard":17900},
+    {"id":"perth","label":"Perth Metro","isup":17900,"surfboard":22900},
+    {"id":"tasmania","label":"Tasmania","isup":14900,"surfboard":22900},
+    {"id":"remote","label":"NT, regional, remote and island destinations","quoteRequired":true}
+  ],
+  "classes": {
+    "isup": ["yoga-cruiser", "angler-fishing", "touring-performance", "coast-go"],
+    "surfboard": ["gannet", "current", "meridian"],
+    "quoteOnly": ["inflatable-hydrofoil", "hydrofoil-set", "wayfinder", "fishing-rack"]
+  }
+}
