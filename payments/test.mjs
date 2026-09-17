@@ -19,9 +19,10 @@ test("request URL parsing rejects malformed paths without escaping the server er
 test("catalogue contains 77 board SKUs and the Fishing Rack accessory",()=>{
   assert.equal(catalog.variants.length,78);
   assert.equal(catalog.bySku.size,78);
-  assert.equal(catalog.variants.filter(item=>item.orderMode==="available").length,0);
-  assert.equal(catalog.variants.filter(item=>item.orderMode==="preorder").length,78);
-  assert.equal(catalog.variants.filter(item=>item.campaign?.thresholdRequired===false).length,4);
+  assert.equal(catalog.variants.filter(item=>item.orderMode==="available").length,1);
+  assert.equal(catalog.variants.filter(item=>item.orderMode==="preorder").length,77);
+  assert.equal(catalog.variants.filter(item=>item.campaign?.thresholdRequired===false).length,3);
+  assert.equal(catalog.bySku.get("AP734955").stockQuantity,60);
   assert.equal(stripeMap.bySku.size,76);
   const rack=catalog.bySku.get("AP667703");assert.equal(rack.checkoutAmount,12900);assert.equal(rack.depositAmount,6450);assert.equal(rack.retailAmount-rack.checkoutAmount,0);assert.equal(rack.bundle.unitAmount,6900);
 });
@@ -60,13 +61,15 @@ test("Fishing Rack is AUD 129 alone and AUD 69 per paired Angler board",()=>{
   assert.equal(params.get("line_items[2][price_data][unit_amount]"),"6450");
 });
 
-test("checkout trusts the 50% deposit, pre-fills email, excludes Afterpay, stays country-safe and retains dynamic payment methods",()=>{
+test("in-stock checkout collects full payment and shipping, pre-fills email and excludes Afterpay",()=>{
   const variant=catalog.bySku.get("AP734955");
   const items=[{variant,quantity:2}],params=buildCheckoutParams({items,priceBySku:stripeMap.bySku,siteUrl:"http://localhost:4242",returnPath:"/products/yoga-cruiser.html?colour=glacier",shipping:shippingFor(items),customerEmail:" Buyer@Example.com ",recoveryEmailConsent:true,integrationIdentifier:"aura_cart_abcdefgh"});
   assert.equal(params.get("line_items[0][price]"),null);
   assert.equal(params.get("line_items[0][price_data][product]"),stripeMap.bySku.get("AP734955").productId);
-  assert.equal(params.get("line_items[0][price_data][unit_amount]"),"37450");
+  assert.equal(params.get("line_items[0][price_data][unit_amount]"),"74900");
   assert.equal(params.get("line_items[0][quantity]"),"2");
+  assert.equal(params.get("line_items[1][price_data][unit_amount]"),"9800");
+  assert.equal(params.get("metadata[aura_payment_stage]"),"paid_in_full");
   assert.equal(params.get("payment_method_types[0]"),null);
   assert.equal(params.get("adaptive_pricing[enabled]"),"false");
   assert.equal(params.get("excluded_payment_method_types[0]"),"afterpay_clearpay");
@@ -86,6 +89,33 @@ test("Checkout expires after two hours so Stripe can produce a recovery URL",()=
   assert.equal(params.get("expires_at"),String(now+7200));
 });
 
+test("Glacier Blue's 60-board stock is held for two hours and paid orders count once",()=>{
+  const variant=catalog.bySku.get("AP734955"),state={orders:{
+    legacy:{orderNumber:"APO09000",orderMode:"preorder",items:[{sku:variant.sku,quantity:1}],initialPaymentStatus:"paid"},
+    paid:{orderNumber:"APO10000",orderMode:"available",items:[{sku:variant.sku,quantity:58}],initialPaymentStatus:"paid"}
+  }};
+  reserveCheckoutIdentity(state,{requestId:"stock-test-1",items:[{variant,quantity:2}],now:10000});
+  assert.throws(()=>reserveCheckoutIdentity(state,{requestId:"stock-test-2",items:[{variant,quantity:1}],now:10001}),/insufficient stock/);
+  reserveCheckoutIdentity(state,{requestId:"stock-test-3",items:[{variant,quantity:1}],now:17201});
+  assert.throws(()=>reserveCheckoutIdentity(state,{requestId:"stock-test-3",items:[{variant,quantity:2}],now:17202}),/different cart/);
+});
+
+test("full-payment webhook is ready for dispatch and requires no final invoice",()=>{
+  const state={},event={id:"evt_stock_full",type:"checkout.session.completed",created:10000,data:{object:{id:"cs_live_stock_full",payment_status:"paid",amount_total:82800,currency:"aud",metadata:{aura_items:"AP734955:1",aura_order_number:"APO10001",aura_tracking_token:"secure_tracking_token_stock",aura_order_mode:"available",aura_payment_stage:"paid_in_full",aura_shipping_amount:"7900"}}}};
+  applyStripeEvent(state,event);
+  const order=state.orders.cs_live_stock_full,view=publicOrderView(order),admin=adminOrderList(state,catalog)[0];
+  assert.equal(order.fulfilmentStatus,"preparing_for_dispatch");
+  assert.equal(order.balancePaymentStatus,"paid");
+  assert.equal(view.paymentStage,"paid_in_full");
+  assert.equal(view.progress.length,4);
+  assert.equal(admin.remainingProductBalance,0);
+  assert.equal(admin.paymentStage,"paid_in_full");
+  const email=customerOrderEmailContent({...order,kind:"customer_confirmation"},{catalog,siteUrl:"https://www.aurapaddle.com"});
+  assert.match(email.text,/full payment/i);
+  assert.match(email.text,/Within 1 business day/);
+  assert.doesNotMatch(email.text,/remaining product balance and confirmed shipping charge are payable/i);
+});
+
 test("pre-order checkout applies the AUD 50 incentive and collects exactly 50%",()=>{
   const variant=catalog.bySku.get("AP233694");
   assert.equal(variant.retailAmount-variant.checkoutAmount,5000);
@@ -96,8 +126,9 @@ test("pre-order checkout applies the AUD 50 incentive and collects exactly 50%",
   assert.equal(params.get("metadata[aura_payment_stage]"),"initial_50_percent");
 });
 
-test("multi-SKU cart is merged and rendered as multiple trusted line items",()=>{
-  const items=normaliseCheckoutItems([{sku:"AP734955",quantity:1},{sku:"AP233694",quantity:2},{sku:"AP233694",quantity:1}],catalog);
+test("multi-SKU pre-order cart is merged; mixed stock and pre-order is rejected",()=>{
+  assert.throws(()=>normaliseCheckoutItems([{sku:"AP734955",quantity:1},{sku:"AP233694",quantity:1}],catalog),/separate orders/);
+  const items=normaliseCheckoutItems([{sku:"AP505002",quantity:1},{sku:"AP233694",quantity:2},{sku:"AP233694",quantity:1}],catalog);
   assert.equal(items.length,2);assert.equal(items[1].quantity,3);
   const params=buildCheckoutParams({items,priceBySku:stripeMap.bySku,siteUrl:"http://localhost:4242",returnPath:"/cart-preview.html",shipping:shippingFor(items)});
   assert.equal(params.get("line_items[0][price_data][unit_amount]"),"37450");
@@ -124,14 +155,15 @@ test("shipping regions use the approved iSUP and surfboard prices",()=>{
   assert.equal(shippingFor([{variant:gannetVariant,quantity:2}],"qld-nsw-main").quoteRequired,true);
 });
 
-test("Stripe records shipping for the balance request without charging it today",()=>{
+test("in-stock Checkout charges shipping today; quote-required region requires contact",()=>{
   const items=normaliseCheckoutItems([{sku:"AP734955",quantity:1}],catalog),shipping=shippingFor(items,"qld-nsw-main");
   const params=buildCheckoutParams({items,priceBySku:stripeMap.bySku,siteUrl:"http://localhost:4242",returnPath:"/cart-preview.html",shipping});
   assert.equal(params.get("metadata[aura_shipping_region]"),"qld-nsw-main");
   assert.equal(params.get("metadata[aura_shipping_amount]"),"7900");
-  assert.equal(params.get("line_items[0][price_data][unit_amount]"),"37450");
-  assert.match(params.get("custom_text[submit][message]"),/full refund within 48 hours/);
-  assert.match(params.get("custom_text[submit][message]"),/confirms production in writing/);
+  assert.equal(params.get("line_items[0][price_data][unit_amount]"),"74900");
+  assert.equal(params.get("line_items[1][price_data][unit_amount]"),"7900");
+  assert.match(params.get("custom_text[submit][message]"),/full product price and published shipping/);
+  assert.throws(()=>buildCheckoutParams({items,siteUrl:"http://localhost:4242",returnPath:"/cart/",shipping:shippingFor(items,"remote")}),/freight quote/);
   const pickup=shippingFor(items,"local-pickup"),pickupParams=buildCheckoutParams({items,priceBySku:stripeMap.bySku,siteUrl:"http://localhost:4242",returnPath:"/cart-preview.html",shipping:pickup});
   assert.equal(pickupParams.get("shipping_address_collection[allowed_countries][0]"),null);
 });
@@ -141,7 +173,7 @@ test("Checkout assigns the APO order identity to Stripe metadata",()=>{
   const params=buildCheckoutParams({items,priceBySku:new Map(),siteUrl:"http://localhost:4242",returnPath:"/cart/",shipping:shippingFor(items),orderNumber:"APO48217",trackingToken:"secure_tracking_token_48217"});
   assert.equal(params.get("metadata[aura_order_number]"),"APO48217");
   assert.equal(params.get("payment_intent_data[metadata][aura_order_number]"),"APO48217");
-  assert.equal(params.get("payment_intent_data[description]"),"AURA PADDLE APO48217 initial payment");
+  assert.equal(params.get("payment_intent_data[description]"),"AURA PADDLE APO48217 full payment");
   assert.equal(params.get("line_items[0][price_data][product_data][name]"),"AURA PADDLE Yoga Cruiser · APO48217");
   assert.equal(params.get("metadata[aura_tracking_token]"),"secure_tracking_token_48217");
 });
@@ -312,6 +344,75 @@ test("paid Stripe webhook queues one authoritative GA4 purchase",()=>{
   assert.equal(payload.consent.ad_user_data,"DENIED");
 });
 
+test("in-stock GA4 purchase includes the shipping already paid today",()=>{
+  const attribution={version:1,consent:{analytics:true,marketing:false},analyticsClientId:"123456789.987654321"};
+  const state={orders:{},checkoutRequests:{stock_request:{orderNumber:"APO48299",attribution}},analyticsOutbox:{}};
+  const event={id:"evt_stock_measurement",type:"checkout.session.completed",created:1_787_635_200,data:{object:{id:"cs_stock_measurement",payment_status:"paid",amount_total:82800,currency:"aud",metadata:{aura_items:"AP734955:1",aura_order_number:"APO48299",aura_order_mode:"available",aura_payment_stage:"paid_in_full",aura_shipping_amount:"7900"}}}};
+  applyStripeEvent(state,event);
+  assert.equal(enqueueStripeAnalytics(state,event,catalog),true);
+  const params=measurementPayload(state.analyticsOutbox["purchase:APO48299"]).events[0].params;
+  assert.equal(params.value,828);
+  assert.equal(params.shipping,79);
+  assert.equal(params.payment_stage,"paid_in_full");
+});
+
+// Local fixtures only: these tests never send events to Stripe or GA4.
+function internalAnalyticsFixture(last={},consent={analytics:true,marketing:false}){
+  const order={orderNumber:"APO49001",paymentIntentId:"pi_audit",amountTotal:37450,currency:"aud",shippingAmount:9900,balancePaymentStatus:"paid",items:[{sku:"AP734955",quantity:1}],attribution:{consent,last,analyticsClientId:"123456789.987654321",analyticsSessionId:"1787635200"}};
+  return {orders:{cs_audit:order},abandonedCheckouts:{cs_audit:structuredClone(order)},analyticsOutbox:{}};
+}
+const internalAnalyticsEvents=[
+  ["checkout.session.completed","purchase",374.5],
+  ["checkout.session.async_payment_succeeded","purchase",374.5],
+  ["checkout.session.expired","checkout_abandoned",374.5],
+  ["charge.refunded","refund",100],
+  ["invoice.paid","balance_payment",473.5],
+  ["invoice.voided","balance_invoice_voided",undefined],
+  ["invoice.payment_failed","balance_payment_failed",473.5]
+];
+function internalAnalyticsEvent(type){
+  return {id:`evt_audit_${type}`,type,created:1_787_635_200,data:{object:{id:"cs_audit",payment_status:"paid",payment_intent:"pi_audit",amount_refunded:10000,refunded:false,amount_paid:47350,amount_due:47350,currency:"aud",metadata:{aura_order_number:"APO49001"}}}};
+}
+for(const marker of [{source:"internal_test"},{source:"google",campaign:"aura_controlled_test"}]){
+  for(const [type,name,value] of internalAnalyticsEvents){
+    test(`${type} preserves exact internal marker ${marker.campaign||marker.source} in GA4 payload`,()=>{
+      const state=internalAnalyticsFixture(marker),event=internalAnalyticsEvent(type);
+      assert.equal(enqueueStripeAnalytics(state,event,catalog),true);
+      assert.equal(enqueueStripeAnalytics(state,event,catalog),false);
+      const entries=Object.values(state.analyticsOutbox);
+      assert.equal(entries.length,1);
+      const payload=measurementPayload(entries[0]);
+      assert.equal(payload.events[0].name,name);
+      assert.equal(payload.events[0].params.traffic_type,"internal");
+      assert.equal(payload.events[0].params.value,value);
+      assert.equal(payload.events[0].params.session_id,1787635200);
+      assert.equal(payload.consent.ad_user_data,"DENIED");
+      assert.equal(payload.user_data,undefined);
+    });
+  }
+}
+test("normal, unknown and near-match campaigns are not classified as internal",()=>{
+  for(const last of [{},{source:"google",campaign:"launch"},{source:"internal_test_customer"},{campaign:"aura_controlled_test_sale"},{campaign:"purchase_verification_20260830"}]){
+    for(const [type] of internalAnalyticsEvents){
+      const state=internalAnalyticsFixture(last);
+      assert.equal(enqueueStripeAnalytics(state,internalAnalyticsEvent(type),catalog),true);
+      assert.equal(Object.hasOwn(measurementPayload(Object.values(state.analyticsOutbox)[0]).events[0].params,"traffic_type"),false);
+    }
+  }
+});
+test("internal labels do not bypass measurement consent or client ID requirements",()=>{
+  for(const [type] of internalAnalyticsEvents){
+    const denied=internalAnalyticsFixture({source:"internal_test"},{analytics:false,marketing:false});
+    assert.equal(enqueueStripeAnalytics(denied,internalAnalyticsEvent(type),catalog),false);
+    assert.deepEqual(denied.analyticsOutbox,{});
+    const noClient=internalAnalyticsFixture({campaign:"aura_controlled_test"});
+    delete noClient.orders.cs_audit.attribution.analyticsClientId;
+    delete noClient.abandonedCheckouts.cs_audit.attribution.analyticsClientId;
+    assert.equal(enqueueStripeAnalytics(noClient,internalAnalyticsEvent(type),catalog),false);
+    assert.deepEqual(noClient.analyticsOutbox,{});
+  }
+});
+
 test("marketing-consented purchase is queued once even when analytics consent is off",()=>{
   const attribution={version:1,consent:{analytics:false,marketing:true},analyticsClientId:"123456789.987654321",analyticsSessionId:"1787635200",last:{clickType:"gclid",clickId:"ad_click_123"}};
   const state={events:{},orders:{},checkoutRequests:{request_marketing:{orderNumber:"APO48229",attribution}},analyticsOutbox:{}};
@@ -362,13 +463,19 @@ test("expired Checkout records an abandonment and queues one explicitly consente
 });
 
 test("expired Checkout falls back to the securely reserved email and labels controlled tests",()=>{
-  const state={events:{},orders:{},checkoutRequests:{request_test:{orderNumber:"APO48225",customerEmail:"test@example.com",attribution:{version:1,consent:{analytics:true,marketing:true},last:{source:"google",medium:"cpc",campaign:"aura_controlled_test"}}}},abandonedCheckouts:{},recoveryEmailOutbox:{},recoverySuppressions:{}};
-  applyStripeEvent(state,{id:"evt_reserved_email",type:"checkout.session.expired",created:1_787_650_450,data:{object:{id:"cs_test_reserved_email",amount_total:37450,currency:"aud",after_expiration:{recovery:{url:"https://buy.stripe.com/r/reserved"}},metadata:{aura_items:"AP734955:1",aura_order_number:"APO48225",aura_recovery_email_consent:"true"}}}});
+  const state={events:{},orders:{},checkoutRequests:{request_test:{orderNumber:"APO48225",customerEmail:"test@example.com",attribution:{version:1,consent:{analytics:true,marketing:true},analyticsClientId:"123456789.987654321",last:{source:"google",medium:"cpc",campaign:"aura_controlled_test"}}}},abandonedCheckouts:{},recoveryEmailOutbox:{},recoverySuppressions:{}};
+  const event={id:"evt_reserved_email",type:"checkout.session.expired",created:1_787_650_450,data:{object:{id:"cs_test_reserved_email",amount_total:37450,currency:"aud",after_expiration:{recovery:{url:"https://buy.stripe.com/r/reserved"}},metadata:{aura_items:"AP734955:1",aura_order_number:"APO48225",aura_recovery_email_consent:"true"}}}};
+  applyStripeEvent(state,event);
   const abandoned=state.abandonedCheckouts.cs_test_reserved_email,list=abandonedCheckoutList(state,catalog)[0];
   assert.equal(abandoned.customerEmail,"test@example.com");
   assert.equal(state.recoveryEmailOutbox.cs_test_reserved_email.recipient,"test@example.com");
   assert.equal(list.internalTest,true);
   assert.equal(list.contactStatus,"internal_test");
+  assert.equal(enqueueStripeAnalytics(state,event,catalog),true);
+  const payload=measurementPayload(state.analyticsOutbox["checkout_abandoned:cs_test_reserved_email"]);
+  assert.equal(payload.events[0].params.traffic_type,"internal");
+  assert.equal(payload.events[0].params.value,374.5);
+  assert.equal(payload.consent.ad_user_data,"GRANTED");
 });
 
 test("recovery email is not queued without explicit website consent",()=>{
@@ -412,7 +519,7 @@ test("paid checkout queues one customer confirmation and one internal order noti
 test("order emails include payment, dispatch and secure operational links",()=>{
   const entry={sessionId:"cs_live_mail",kind:"customer_confirmation",recipient:"buyer@example.com",orderNumber:"APO48227",trackingToken:"secure_tracking_token_48227",paymentIntentId:"pi_live_mail",items:[{sku:"AP734955",quantity:1}],amountTotal:37450,currency:"aud",paymentStage:"initial_50_percent",shippingLabel:"Local pickup — Gold Coast, QLD",shippingAmount:0,shippingQuoteRequired:false,customerName:"Alex Buyer",customerEmail:"buyer@example.com",customerPhone:"+61400000000"};
   const customer=customerOrderEmailContent(entry,{catalog,siteUrl:"https://www.aurapaddle.com"});
-  assert.match(customer.subject,/APO48227/);assert.match(customer.text,/AUD \$374\.50/);assert.match(customer.text,/15 September 2026/);assert.match(customer.text,/order\/\?order=APO48227&token=secure_tracking_token_48227/);assert.match(customer.text,/within 48 hours/);
+  assert.match(customer.subject,/APO48227/);assert.match(customer.text,/AUD \$374\.50/);assert.match(customer.text,/Confirmed in your secure order updates/);assert.match(customer.text,/order\/\?order=APO48227&token=secure_tracking_token_48227/);assert.match(customer.text,/within 48 hours/);
   const admin=adminOrderEmailContent({...entry,kind:"admin_notification",recipient:"admin@aurapaddle.com"},{catalog,siteUrl:"https://www.aurapaddle.com"});
   assert.match(admin.subject,/New order APO48227/);assert.match(admin.text,/Alex Buyer/);assert.match(admin.text,/dashboard\.stripe\.com\/payments\/pi_live_mail/);assert.match(admin.text,/Local pickup/);
   const milestone=milestoneOrderEmailContent({...entry,kind:"dispatched",carrier:"Mainfreight",trackingNumber:"MF123",trackingUrl:"https://example.com/track/MF123"},{siteUrl:"https://www.aurapaddle.com"});

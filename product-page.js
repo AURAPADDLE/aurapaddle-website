@@ -55,7 +55,7 @@
   function variant(){return data.variants.find(v=>v.size===selectedSize&&v.colourKey===selectedColour)||data.variants[0]}
   function colour(){return data.colours.find(c=>c.key===selectedColour)||data.colours[0]}
   function isPreorder(v=variant()){return v.orderMode==="preorder"}
-  function numericPrice(v=variant()){return v.retailAUD?(isPreorder(v)?Number(v.retailAUD)-Number(v.preorder?.discountAUD||0):Number(v.retailAUD)):null}
+  function numericPrice(v=variant()){return v.retailAUD?Number(v.saleAUD??(isPreorder(v)?Number(v.retailAUD)-Number(v.preorder?.discountAUD||0):v.retailAUD)):null}
   function displayPrice(v=variant()){const price=numericPrice(v);return price?`AUD $${price}`:data.price}
   function moneyFromCents(value){return value===0?"Free":`AUD $${(Number(value||0)/100).toLocaleString("en-AU",{minimumFractionDigits:2,maximumFractionDigits:2})}`}
   function committedCount(campaign={}){return Math.min(Number(campaign.target||0),Number(companyAllocationByCampaign[campaign.id]||0)+Number(campaign.reserved||0))}
@@ -120,9 +120,17 @@
     const panel=$("purchaseClarity");
     if(!panel)return;
     const v=variant(),campaign=v.preorder||{},preorder=isPreorder(v),price=numericPrice(v);
+    panel.querySelector(".clarity-heading .section-label").textContent=preorder?"Before you pre-order":"Before you buy";
+    const guide=panel.querySelector(".clarity-heading a");
+    guide.href=preorder?"../pre-order/":"../policies/#shipping";
+    guide.textContent=preorder?"Full pre-order guide":"Shipping & returns";
+    const factsLabel=document.querySelector(".clarity-facts dt");
+    factsLabel.textContent=preorder?"Initial payment today":"Board due today (excl. shipping)";
+    const reservationSummary=document.querySelector(".reservation-details summary");
+    if(reservationSummary)reservationSummary.textContent=preorder?"Reservation conditions & production details":"Order details & dimensions";
     $("clarityDueToday").textContent=price?`AUD $${(price*quantity*(preorder?0.5:1)).toFixed(2)}`:"Not charged — waitlist only";
-    $("clarityBalance").textContent=price&&preorder?`AUD $${(price*quantity*.5).toFixed(2)} + shipping`:"Confirmed before payment";
-    $("clarityDispatch").textContent=campaign.estimatedDelivery||"Confirmed after ordering";
+    $("clarityBalance").textContent=price&&preorder?`AUD $${(price*quantity*.5).toFixed(2)} + shipping`:"None — pay in full at checkout";
+    $("clarityDispatch").textContent=v.dispatchLeadBusinessDays?`Within ${v.dispatchLeadBusinessDays} business day after payment`:campaign.estimatedDelivery||"Confirmed after ordering";
     $("clarityCancellation").textContent=preorder?(campaign.thresholdRequired===false?"Full refund within 48 hours":"Full refund within 48 hours, or until production is confirmed"):"See returns policy";
 
     const select=$("shippingRegion"),result=$("shippingEstimate"),quote=$("shippingQuote");
@@ -138,14 +146,15 @@
     const quoteRequired=region.quoteRequired||shippingClass==="quoteOnly"||multiSurfboard;
     if(quoteRequired){
       const reason=multiSurfboard?"Orders with two or more hard surfboards are quoted for the complete consignment.":"This product or destination needs an individual freight quote.";
-      result.innerHTML=`<strong>Quote required</strong><span>${reason}</span>`;
+      result.innerHTML=`<strong>Quote required</strong><span>${reason}${preorder?"":" Contact us to confirm freight and payment before the 1-business-day dispatch window starts."}</span>`;
       quote.hidden=false;
       return;
     }
     let amount=Number(region[shippingClass]||0)*quantity;
     const lengthFeet=Number((selectedSize.match(/^(\d+)/)||[])[1]||0);
     if(shippingClass==="surfboard"&&lengthFeet>=9)amount+=Number(shippingRates.longboardSurcharge||0)*quantity;
-    result.innerHTML=`<strong>Shipping: ${moneyFromCents(amount)} incl. GST</strong><span>Total including shipping: ${moneyFromCents(price*quantity*100+amount)} · ${moneyFromCents(price*quantity*100*(preorder ? 0.5 : 0)+amount)} payable before dispatch${preorder?" after today's initial payment":""}.</span><span>${region.id==="local-pickup"?shippingRates.localPickupNote:"Confirm that this region matches your delivery address in the cart."}</span>`;
+    if(!preorder){factsLabel.textContent="Total due today incl. shipping";$("clarityDueToday").textContent=moneyFromCents(price*quantity*100+amount)}
+    result.innerHTML=`<strong>Shipping: ${moneyFromCents(amount)} incl. GST</strong><span>Total including shipping: ${moneyFromCents(price*quantity*100+amount)} · ${preorder?`${moneyFromCents(price*quantity*50+amount)} payable before dispatch after today's initial payment`:`${moneyFromCents(price*quantity*100+amount)} payable today`}.</span><span>${region.id==="local-pickup"?shippingRates.localPickupNote:"Confirm that this region matches your delivery address in the cart."}</span>`;
     quote.hidden=true;
   }
 
@@ -167,12 +176,13 @@
     $("availability").classList.toggle("is-preorder",preorder);
     document.querySelector("#availability .status-dot").classList.toggle("preorder",preorder);
     $("availabilityText").textContent=preorder?threshold?`Conditional pre-order · ${reserved}/${target} committed`:campaign.inventoryIncoming?"Incoming stock · No minimum-order target":`In production · No minimum-order target`:"Available now";
-    if($("introDispatch"))$("introDispatch").textContent=`Estimated dispatch: ${campaign.estimatedDelivery||"Confirmed with order"}${threshold?" · Subject to production target":""}`;
+    const assurance=document.querySelector(".purchase-assurance");if(assurance)assurance.textContent=preorder?"50% today; remaining 50% + shipping before dispatch. Full refund within 48 hours. Conditions apply.":"In stock · Pay in full including known shipping · Dispatch within 1 business day after payment.";
+    if($("introDispatch"))$("introDispatch").textContent=v.dispatchLeadBusinessDays?`In stock · Dispatch within ${v.dispatchLeadBusinessDays} business day after payment`:`Estimated dispatch: ${campaign.estimatedDelivery||"Confirmed with order"}${threshold?" · Subject to production target":""}`;
     $("productPrice").textContent=displayPrice(v);
-    const showOriginal=preorder&&!!v.retailAUD;
+    const showOriginal=!!v.retailAUD&&numericPrice(v)<Number(v.retailAUD);
     $("originalPrice").hidden=!showOriginal;$("originalPrice").textContent=showOriginal?`Standard AUD $${v.retailAUD}`:"";
     const item=campaign.itemLabel||"board";
-    $("priceNote").textContent=preorder?(v.retailAUD?`AUD $${(numericPrice(v)/2).toFixed(2)} today per ${item} · 50% initial payment. AUD $${campaign.discountAUD} incentive included in the full price.`:`Eligible ${item}s receive an AUD $${campaign.discountAUD} pre-order incentive after the standard retail price is confirmed · 50% initial payment required`):"Australia-only range · Shipping calculated separately · See policy terms";
+    $("priceNote").textContent=preorder?(v.retailAUD?`AUD $${(numericPrice(v)/2).toFixed(2)} today per ${item} · 50% initial payment. AUD $${campaign.discountAUD} incentive included in the full price.`:`Eligible ${item}s receive an AUD $${campaign.discountAUD} pre-order incentive after the standard retail price is confirmed · 50% initial payment required`):v.saleAUD?"In-stock offer · Pay in full at checkout, including the published shipping rate.":"Australia-only range · Shipping calculated separately · See policy terms";
     $("preorderPanel").hidden=!preorder;
     let guideLink=$("preorderGuide");
     if(!guideLink){guideLink=document.createElement("a");guideLink.id="preorderGuide";guideLink.className="preorder-guide";guideLink.href="../pre-order/";guideLink.textContent="Understand the complete pre-order process →";$("preorderCopy").insertAdjacentElement("afterend",guideLink)}
@@ -197,11 +207,11 @@
       $("purchaseActions").innerHTML=`<button class="btn btn-dark" type="button" data-add-cart>${campaign.inventoryIncoming?"Reserve in cart":"Add pre-order to cart"}</button><button class="btn btn-coral" type="button" data-buy-now>${campaign.inventoryIncoming?"Reserve incoming stock":"Pre-order"} — pay AUD $${(numericPrice(v)/2).toFixed(2)} today</button><a class="btn btn-outline" href="${enquiryUrl()}">Ask about this ${campaign.inventoryIncoming?"incoming stock":"pre-order"}</a>`;
     }else $("purchaseActions").innerHTML=`<a class="btn btn-dark" href="${enquiryUrl()}">Join the pre-order waitlist</a><a class="btn btn-outline" href="${enquiryUrl()}">Request confirmed price</a>`;
     if(data.slug==="yoga-cruiser"&&v.retailAUD){
-      $("purchaseActions").innerHTML=`<button class="btn btn-coral" type="button" data-buy-now>${campaign.inventoryIncoming?"Reserve Glacier Blue":"Pre-order "+colour().name}</button><a class="purchase-question" href="${enquiryUrl()}">Ask about this board →</a>`;
+      $("purchaseActions").innerHTML=`<button class="btn btn-coral" type="button" data-buy-now>${v.available?`Buy Glacier Blue — ${displayPrice(v)}`:campaign.inventoryIncoming?"Reserve Glacier Blue":"Pre-order "+colour().name}</button><a class="purchase-question" href="${enquiryUrl()}">Ask about this board →</a>`;
     }
     $("purchaseActions").querySelector("[data-add-cart]")?.addEventListener("click",addToCart);
     $("purchaseActions").querySelector("[data-buy-now]")?.addEventListener("click",buyNow);
-    $("stockCopy").textContent=v.available?data.stock:campaign.inventoryIncoming?`Incoming stock · Estimated dispatch ${campaign.estimatedDelivery}`:campaign.thresholdRequired===false?`In production · No minimum · Estimated dispatch ${campaign.estimatedDelivery}`:`${campaign.scopeLabel} · ${committedCount(campaign)}/${campaign.target} committed`;
+    $("stockCopy").textContent=v.available?(v.dispatchLeadBusinessDays?`In stock · Dispatch within ${v.dispatchLeadBusinessDays} business day after payment`:data.stock):campaign.inventoryIncoming?`Incoming stock · Estimated dispatch ${campaign.estimatedDelivery}`:campaign.thresholdRequired===false?`In production · No minimum · Estimated dispatch ${campaign.estimatedDelivery}`:`${campaign.scopeLabel} · ${committedCount(campaign)}/${campaign.target} committed`;
   }
 
   function renderMobilePurchaseBar(){
@@ -209,7 +219,7 @@
     if(!bar)return;
     const v=variant(),campaign=v.preorder||{},price=numericPrice(v),preorder=isPreorder(v),button=bar.querySelector("button");
     bar.querySelector("strong").textContent=price?(preorder?`AUD $${(price*quantity/2).toFixed(2)} today`:`AUD $${(price*quantity).toFixed(2)}`):"Price on request";
-    bar.querySelector("small").textContent=campaign.estimatedDelivery?`Est. dispatch ${campaign.estimatedDelivery}`:"Secure checkout";
+    bar.querySelector("small").textContent=v.dispatchLeadBusinessDays?`Dispatch within ${v.dispatchLeadBusinessDays} business day`:campaign.estimatedDelivery?`Est. dispatch ${campaign.estimatedDelivery}`:"Secure checkout";
     button.hidden=!price;
     button.textContent=preorder?(campaign.inventoryIncoming?"Reserve":"Pre-order"):"Buy now";
   }
@@ -236,13 +246,13 @@
     const dispatch=document.createElement("p");dispatch.id="introDispatch";dispatch.className="dispatch-summary";intro.append(dispatch);
     layout.prepend(intro);
     const size=$("selectedSize").closest(".selector");if(data.sizes.length===1){size.querySelector(".option-row").hidden=true;size.classList.add("single-size");}
-    const colours=$("selectedColour").closest(".selector"),choice=document.createElement("details");choice.className="colour-choice";choice.innerHTML='<summary id="colourSummary">Choose colour</summary><p>Glacier Blue: incoming stock, no minimum. Other colours: conditional shared production batch.</p>';colours.before(choice);choice.append(colours);
+    const colours=$("selectedColour").closest(".selector"),choice=document.createElement("details");choice.className="colour-choice";choice.innerHTML='<summary id="colourSummary">Choose colour</summary><p>Glacier Blue: in stock, dispatch within 1 business day after payment. Other colours: conditional shared production batch.</p>';colours.before(choice);choice.append(colours);
     const terms=document.createElement("details");terms.className="reservation-details";terms.innerHTML='<summary>Reservation conditions &amp; production details</summary>';
     $("purchaseActions").after(terms);terms.append($("preorderPanel"));terms.append(document.querySelector(".sku-box"));
     terms.append($("purchaseClarity").querySelector(".clarity-facts"));terms.append(size);
-    const assurance=document.createElement("p");assurance.className="purchase-assurance";assurance.textContent="50% today; remaining 50% + shipping before dispatch. Full refund within 48 hours. Conditions apply.";$("purchaseActions").after(assurance);
+    const assurance=document.createElement("p");assurance.className="purchase-assurance";$("purchaseActions").after(assurance);
     $("purchaseClarityTitle").textContent="Delivery & total";
-    $("purchaseClarity").querySelector(".section-label").textContent="Know before you reserve";
+    $("purchaseClarity").querySelector(".section-label").textContent="Know before you buy";
     $("purchaseClarity").querySelector("a").href="../pre-order/";
     const included=[...document.querySelectorAll(".detail-head")].find(el=>el.textContent.includes("What's included"));
     if(included){included.parentElement.classList.add("open");included.setAttribute("aria-expanded","true")}
@@ -254,14 +264,14 @@
     document.querySelector(".answer-grid").before(demo);
     const reviews=document.querySelector(".reviews-grid"),reviewIntro=document.querySelector(".reviews-head");
     if(reviews&&reviewIntro){const fold=document.createElement("details");fold.className="review-disclosure";fold.innerHTML='<summary>Used a Yoga Cruiser? Share your experience</summary>';reviews.before(fold);fold.append(reviews);reviewIntro.querySelector("h2").textContent="Real experiences, as our community grows.";reviews.querySelector(".reviews-stars")?.remove();}
-    const compare=document.createElement("section");compare.className="yoga-comparison";compare.innerHTML=`<div class="wrap"><p class="eyebrow">Choose for your paddling</p><h2>More room, or a lighter starting price?</h2><div class="comparison-scroll"><table><caption>Yoga Cruiser and CoastGo at a glance</caption><thead><tr><th scope="col">Your priority</th><th scope="col">Yoga Cruiser</th><th scope="col">CoastGo</th></tr></thead><tbody><tr><th scope="row">Best suited to</th><td>SUP yoga &amp; relaxed paddling with more deck space</td><td>First paddles &amp; easy all-round outings</td></tr><tr><th scope="row">Board width</th><td>36 inches</td><td>33 inches</td></tr><tr><th scope="row">Stated maximum capacity</th><td>180 kg</td><td>120 kg</td></tr><tr><th scope="row">Pre-order price, excluding shipping</th><td>AUD $749</td><td>AUD $299</td></tr><tr><th scope="row">Explore</th><td>Your selected board above</td><td><a href="../products/coast-go.html">View CoastGo →</a></td></tr></tbody></table></div><p>Choose for your activity and experience, not capacity alone. Each model and colour has its own dispatch schedule. <a href="../support/isup-care-safety/">Read the care &amp; safety guide</a>.</p></div>`;
+    const compare=document.createElement("section");compare.className="yoga-comparison";compare.innerHTML=`<div class="wrap"><p class="eyebrow">Choose for your paddling</p><h2>More room, or a lighter starting price?</h2><div class="comparison-scroll"><table><caption>Yoga Cruiser and CoastGo at a glance</caption><thead><tr><th scope="col">Your priority</th><th scope="col">Yoga Cruiser Glacier Blue</th><th scope="col">CoastGo</th></tr></thead><tbody><tr><th scope="row">Best suited to</th><td>SUP yoga &amp; relaxed paddling with more deck space</td><td>First paddles &amp; easy all-round outings</td></tr><tr><th scope="row">Board width</th><td>36 inches</td><td>33 inches</td></tr><tr><th scope="row">Stated maximum capacity</th><td>180 kg</td><td>120 kg</td></tr><tr><th scope="row">Price, excluding shipping</th><td>AUD $749 · in stock</td><td>AUD $299 · pre-order</td></tr><tr><th scope="row">Explore</th><td>Your selected board above</td><td><a href="../products/coast-go.html">View CoastGo →</a></td></tr></tbody></table></div><p>Choose for your activity and experience, not capacity alone. Other Yoga Cruiser colours remain conditional pre-orders. <a href="../support/isup-care-safety/">Read the care &amp; safety guide</a>.</p></div>`;
     document.querySelector(".answer-grid").after(compare);
   }
 
   function renderShippingSupport(){
     const heading=[...document.querySelectorAll(".detail-head")].find(button=>button.textContent.includes("Shipping and support"));
     const body=heading?.parentElement?.querySelector(".detail-body");
-    if(body)body.innerHTML=`Choose your delivery region in the cart to see the published iSUP or hard-surfboard rate. Free local pickup is available in Gold Coast, QLD; the exact pickup address is provided after order confirmation. Regional, remote, island, multi-surfboard and other quote-required orders are confirmed individually. Shipping is paid with the remaining product balance before dispatch. See the <a href="../policies/#shipping">Shipping Policy</a>, <a href="../policies/#returns">Returns &amp; Refunds</a> and warranty conditions.`;
+    if(body)body.innerHTML=`Choose your delivery region in the cart to see the published iSUP or hard-surfboard rate. Free local pickup is available in Gold Coast, QLD; the exact pickup address is provided after order confirmation. Regional, remote, island, multi-surfboard and other quote-required orders are confirmed individually. In-stock orders pay published shipping at checkout; pre-orders pay shipping with the remaining balance before dispatch. See the <a href="../policies/#shipping">Shipping Policy</a>, <a href="../policies/#returns">Returns &amp; Refunds</a> and warranty conditions.`;
   }
 
   function setupSurfSizeFinder(){
@@ -323,7 +333,7 @@
     const v=variant(),preorder=isPreorder(v),campaign=v.preorder||{},unit=numericPrice(v),total=unit?unit*quantity:null;
     $("checkoutEyebrow").textContent=preorder?(campaign.inventoryIncoming?"Incoming stock reservation · secure checkout":campaign.thresholdRequired===false?"In-production pre-order · secure checkout":"Conditional pre-order · secure checkout"):"Secure Stripe checkout";
     $("checkoutTitle").textContent=preorder?"Review your 50% pre-order payment":"Review your order";
-    $("checkoutSummary").textContent=`${data.name} · ${selectedSize} · ${colour().name} · ${v.sku} · Quantity ${quantity} · ${total?`AUD $${total} pre-order total · AUD $${preorder?(total/2).toFixed(2):total} due today`:displayPrice(v)}.`;
+    $("checkoutSummary").textContent=`${data.name} · ${selectedSize} · ${colour().name} · ${v.sku} · Quantity ${quantity} · ${total?preorder?`AUD $${total} pre-order total · AUD $${(total/2).toFixed(2)} due today`:`AUD $${total} product total due today, plus published shipping at checkout`:displayPrice(v)}.`;
     const offline=location.protocol==="file:"||stripeConfig.enabled===false;
     const item=campaign.itemLabel||"board",items=item==="set"?"sets":"boards";
     $("checkoutStatus").innerHTML=offline?`<strong>Checkout scheduled:</strong> secure payments open after the production Stripe readiness gate is approved and the launch time is reached.`:preorder?(campaign.inventoryIncoming?`<strong>Secure Stripe checkout:</strong> the reservation price is AUD $${unit} per ${item} and today's 50% initial payment is AUD $${(total/2).toFixed(2)}. This reserves incoming stock; there is no production target. The remaining 50% and confirmed shipping are payable before dispatch.`:campaign.thresholdRequired===false?`<strong>Secure Stripe checkout:</strong> the pre-order price is AUD $${unit} per ${item} and today's 50% initial payment is AUD $${(total/2).toFixed(2)}. Production is underway with no minimum order condition. The remaining 50% and confirmed shipping are payable before dispatch.`:`<strong>Secure Stripe checkout:</strong> today's 50% initial payment is AUD $${(total/2).toFixed(2)}. Once paid, ${quantity===1?`this ${item}`:`these ${quantity} ${items}`} counts toward ${campaign.name}'s ${campaign.target}-${item} target. If the target is not reached, the initial payment is fully refunded. The remaining 50% and confirmed shipping are payable before dispatch.`):`<strong>Secure Stripe checkout:</strong> the checkout service validates ${v.sku} at AUD $${unit} per product before redirecting to Stripe.`;

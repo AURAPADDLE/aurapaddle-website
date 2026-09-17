@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-08-30T03:31:34.599Z",
+  "generatedAt": "2026-09-16T21:41:29.879Z",
   "currency": "aud",
   "variants": [
     {
@@ -14,20 +14,13 @@
       "currency": "aud",
       "retailAmount": 79900,
       "checkoutAmount": 74900,
-      "depositAmount": 37450,
-      "orderMode": "preorder",
-      "available": false,
+      "depositAmount": 74900,
+      "orderMode": "available",
+      "available": true,
+      "stockQuantity": 60,
+      "dispatchLeadBusinessDays": 1,
       "productUrl": "https://www.aurapaddle.com/products/yoga-cruiser.html?size=11'0%22&colour=glacier",
-      "campaign": {
-        "id": "yoga-glacier-confirmed-preorder",
-        "name": "Incoming Stock Reservation",
-        "target": 0,
-        "thresholdRequired": false,
-        "deadline": "Not applicable",
-        "deadlineISO": "",
-        "estimatedDelivery": "15 September 2026",
-        "discountAmount": 5000
-      }
+      "campaign": null
     },
     {
       "sku": "AP505002",

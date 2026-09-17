@@ -59,7 +59,7 @@ function send(res,status,body,headers={}){
   res.writeHead(status,{"Content-Type":typeof body==="string"?"text/plain; charset=utf-8":"application/json; charset=utf-8","Cache-Control":"no-store",...headers});res.end(payload);
 }
 function readBody(req,limit=1_000_000){return new Promise((resolve,reject)=>{const chunks=[];let size=0;req.on("data",chunk=>{size+=chunk.length;if(size>limit){reject(new Error("Request body is too large."));req.destroy();return}chunks.push(chunk)});req.on("end",()=>resolve(Buffer.concat(chunks)));req.on("error",reject)})}
-async function createOrderIdentity(requestId,attribution,customerEmail){return store.mutate(state=>reserveCheckoutIdentity(state,{requestId,attribution,customerEmail}))}
+async function createOrderIdentity(requestId,attribution,customerEmail,items){return store.mutate(state=>reserveCheckoutIdentity(state,{requestId,attribution,customerEmail,items}))}
 function requireAdmin(req){const token=String(req.headers.authorization||"").replace(/^Bearer\s+/i,"");if(!adminApiToken||token.length!==adminApiToken.length)return false;return crypto.timingSafeEqual(Buffer.from(token),Buffer.from(adminApiToken))}
 function assertStripeKeyMode(){
   if(!stripeKey)throw new Error("Stripe API key is not configured on the checkout server.");
@@ -82,11 +82,12 @@ async function checkout(req,res){
   const rawItems=Array.isArray(body.items)?body.items:[{sku:body.sku,quantity:normaliseQuantity(body.quantity)}];
   const items=normaliseCheckoutItems(rawItems,catalog);
   const shipping=calculateShipping(items,body.shippingRegion,shippingRates);
+  if(items.some(item=>item.variant.orderMode==="available")&&shipping.quoteRequired)return send(res,400,{error:"Contact AURA PADDLE for a freight quote before ordering this in-stock board."});
   const fallback=items.length===1?items[0].variant:"/cart-preview.html";
   const returnPath=safeReturnPath(body.returnPath,fallback);
   const requestId=/^[a-zA-Z0-9_-]{8,80}$/.test(body.requestId||"")?body.requestId:`${Date.now()}-${Math.random().toString(36).slice(2)}`;
   const attribution=normaliseAttribution(body.attribution);
-  const identity=await createOrderIdentity(requestId,attribution,customerEmail);
+  const identity=await createOrderIdentity(requestId,attribution,customerEmail,items);
   const params=buildCheckoutParams({items,priceBySku:stripeMap.bySku,siteUrl,returnPath,shipping,attribution,customerEmail,recoveryEmailConsent:body.recoveryEmailConsent===true,...identity});
   const session=await stripeRequest("/v1/checkout/sessions",{method:"POST",headers:{"Content-Type":"application/x-www-form-urlencoded","Idempotency-Key":`aura-${requestId}`},body:params});
   send(res,200,{id:session.id,url:session.url,orderNumber:identity.orderNumber,testMode:!session.livemode});
@@ -111,7 +112,7 @@ async function requestBalance(req,res){
   if(!order)return send(res,404,{error:"Order not found."});
   if(order.balancePaymentStatus==="paid")return send(res,409,{error:"The balance is already paid."});
   if(order.balancePaymentStatus==="requested"&&isStripeHostedInvoiceUrl(order.balanceInvoiceUrl))return send(res,200,{orderNumber:order.orderNumber,status:order.balancePaymentStatus,amount:order.balanceRequestedAmount,invoiceUrl:order.balanceInvoiceUrl,existing:true});
-  if(order.initialPaymentStatus!=="paid"||["cancelled","refunded","dispatched"].includes(order.fulfilmentStatus))return send(res,409,{error:"This order is not eligible for a remaining-balance request."});
+  if(order.initialPaymentStatus!=="paid"||order.paymentStage==="paid_in_full"||["cancelled","refunded","dispatched"].includes(order.fulfilmentStatus))return send(res,409,{error:"This order is not eligible for a remaining-balance request."});
   const {shippingAmount,dueAmount}=prepareBalanceRequest(order,body);
   if(!order.customerId)throw new Error("Stripe customer is missing from the initial payment record.");
   const customerLocaleParams=new URLSearchParams();

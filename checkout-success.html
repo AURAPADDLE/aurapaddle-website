@@ -23,7 +23,7 @@
         <span id="orderSku"></span>
         <span id="orderDetails"></span>
       </div>
-      <p>AURA PADDLE will send a separate secure Stripe invoice for the remaining 50% and confirmed shipping charge, normally within six weeks of order confirmation. The balance must be paid before dispatch.</p>
+      <p id="nextSteps">For pre-orders, AURA PADDLE sends a separate secure Stripe invoice for the remaining 50% and confirmed shipping charge before dispatch.</p>
       <div class="actions">
         <a class="btn btn-primary" id="orderStatusLink" href="order/" hidden>View order status</a>
         <a class="btn btn-secondary" href="shop/">Return to the range</a>
@@ -42,10 +42,13 @@
       const response=await fetch(`/api/checkout-session?id=${encodeURIComponent(id)}`),session=await response.json();
       if(!response.ok)throw new Error(session.error||"Unable to verify this checkout.");
       const paid=session.paymentStatus==="paid",items=session.items||[];
-      document.getElementById("statusCopy").textContent=paid?"Stripe confirms that the 50% initial payment succeeded and the pre-order is reserved.":`Stripe payment status: ${session.paymentStatus}.`;
+      const paidInFull=session.paymentStage==="paid_in_full";
+      document.querySelector("h1").textContent=paidInFull?"Full payment received.":"Initial payment received.";
+      document.getElementById("statusCopy").textContent=paid?paidInFull?"Stripe confirms your full payment, including published shipping. We are preparing your in-stock board for dispatch.":"Stripe confirms that the 50% initial payment succeeded and the pre-order is reserved.":`Stripe payment status: ${session.paymentStatus}.`;
+      document.getElementById("nextSteps").textContent=paidInFull?"Glacier Blue dispatches within 1 business day after successful payment. Delivery transit time varies by destination; follow progress from your secure order link.":"AURA PADDLE will send a separate secure Stripe invoice for the remaining 50% and confirmed shipping charge before dispatch.";
       document.getElementById("orderNumber").textContent=`Order ${session.orderNumber}`;
       document.getElementById("orderSku").textContent=items.length>1?`${items.length} SKUs · ${session.quantity} items`:items.length?`${items[0].sku} · Quantity ${items[0].quantity}`:`${session.sku} · Quantity ${session.quantity}`;
-      document.getElementById("orderDetails").textContent=`AUD $${(session.amountTotal/100).toFixed(2)} initial payment · ${session.orderMode==="preorder"?"Pre-order reserved":session.orderMode==="mixed"?"Mixed order":"Available product"} · ${session.customerEmail}`;
+      document.getElementById("orderDetails").textContent=`AUD $${(session.amountTotal/100).toFixed(2)} ${paidInFull?"paid in full including shipping":"initial payment"} · ${session.orderMode==="preorder"?"Pre-order reserved":"Available product"} · ${session.customerEmail}`;
       const orderLink=document.getElementById("orderStatusLink");
       if(session.orderNumber&&session.trackingToken){orderLink.href=`order/?order=${encodeURIComponent(session.orderNumber)}&token=${encodeURIComponent(session.trackingToken)}`;orderLink.hidden=false}
       document.getElementById("orderSummary").hidden=false;

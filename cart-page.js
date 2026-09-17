@@ -5,10 +5,13 @@
 
   const cart=window.AURACart;
   const config=window.AURA_STRIPE||{};
+  let checkoutPending=false;
+  let checkoutRedirected=false;
   const list=document.getElementById("cartList");
   const summary=document.getElementById("cartSummary");
   const empty=document.getElementById("emptyCart");
   const checkout=document.getElementById("checkoutCart");
+  const checkoutLabel=checkout.textContent;
   const error=document.getElementById("checkoutError");
   const regionSelect=document.getElementById("shippingRegion");
   const recoveryEmailConsent=document.getElementById("recoveryEmailConsent");
@@ -49,8 +52,8 @@
   const isupSlugs=new Set(["yoga-cruiser","angler-fishing","touring-performance","coast-go"]);
   const surfboardSlugs=new Set(["gannet","current","meridian"]);
 
-  document.querySelector(".intro").textContent="Review each SKU, quantity, delivery region and pre-order condition before continuing to Stripe’s secure checkout.";
-  empty.querySelector("p").textContent="Choose a board and add its 50% initial pre-order payment to start your order.";
+  document.querySelector(".intro").textContent="Review each SKU, quantity, delivery region and payment amount before continuing to Stripe’s secure checkout.";
+  empty.querySelector("p").textContent="Choose a board to start your order.";
   const money=cents=>new Intl.NumberFormat("en-AU",{style:"currency",currency:"AUD",minimumFractionDigits:cents%100?2:0,maximumFractionDigits:cents%100?2:0}).format(cents/100);
   const escape=value=>String(value).replace(/[&<>'"]/g,char=>({"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;",'"':"&quot;"}[char]));
   const analyticsItem=(item,price=Number(item.unitAmount||0)/100)=>({item_id:item.sku,item_name:item.productName,item_brand:"AURA PADDLE",item_category:item.sku==="AP667703"?"Accessory":item.shortName,item_variant:[item.size,item.colour].filter(Boolean).join(" · "),price,quantity:Number(item.quantity||1)});
@@ -105,9 +108,15 @@
     empty.hidden=Boolean(items.length);
     empty.style.display=items.length?"none":"grid";
     list.innerHTML=items.map(item=>`<article class="cart-item" data-sku="${item.sku}"><a class="cart-image" href="${escape(item.productUrl)}">${item.image?`<img src="${escape(item.image)}" alt="${escape(item.productName)} — ${escape(item.colour)}">`:`<span>AURA PADDLE<br>${escape(item.shortName)}</span>`}</a><div><h2><a href="${escape(item.productUrl)}">${escape(item.productName)}</a></h2><div class="variant">${escape(item.size)} · ${escape(item.colour)} · ${item.sku}</div><span class="mode ${item.orderMode}">${item.orderMode==="preorder"?"Pre-order":"Available now"}</span>${item.sku==="AP667703"&&pricing.paired?`<p class="campaign">Bundle applied · ${pricing.paired} rack${pricing.paired===1?"":"s"} at AUD $69 with Angler Fishing</p>`:item.orderMode==="preorder"&&item.campaign?`<p class="campaign">${item.campaign.thresholdRequired===false?`Confirmed production · no minimum · estimated dispatch ${escape(item.campaign.estimatedDelivery)}`:`${escape(item.campaign.name)} · target ${item.campaign.target} · closes ${escape(item.campaign.deadline)}`}</p>`:""}</div><div class="item-controls"><strong class="line-price">${money(pricing.lineTotal(item))}</strong><span class="each-price">${item.sku==="AP667703"?(pricing.paired?`AUD $34.50 due today · AUD $69 bundle price`:`AUD $64.50 due today · AUD $129 pre-order price`):item.orderMode==="preorder"?`${money(item.unitAmount/2)} due today per board`:`${money(item.unitAmount)} each`}</span><div class="qty"><button type="button" data-action="down" aria-label="Decrease ${escape(item.shortName)} quantity">−</button><span>${item.quantity}</span><button type="button" data-action="up" aria-label="Increase ${escape(item.shortName)} quantity">+</button></div><button class="remove" type="button" data-action="remove">Remove</button></div></article>`).join("");
-    const dueToday=items.reduce((sum,item)=>sum+(item.orderMode==="preorder"?pricing.lineTotal(item)/2:pricing.lineTotal(item)),0);
+    const dueProducts=items.reduce((sum,item)=>sum+(item.orderMode==="preorder"?pricing.lineTotal(item)/2:pricing.lineTotal(item)),0);
     const remaining=items.reduce((sum,item)=>sum+(item.orderMode==="preorder"?pricing.lineTotal(item)/2:0),0);
     const subtotal=items.reduce((sum,item)=>sum+pricing.lineTotal(item),0);
+    const availableOnly=hasAvailable&&!hasPreorder;
+    const dueToday=dueProducts+(availableOnly&&shipping.selected&&!shipping.quoteRequired?Number(shipping.total||0):0);
+    document.getElementById("subtotal").previousElementSibling.textContent="Product total";
+    document.getElementById("beforeDispatch").previousElementSibling.textContent=availableOnly?"Payment after today":"Total due before dispatch";
+    document.getElementById("mixedNotice").textContent="In-stock and pre-order items have different payment and dispatch schedules. Please place separate orders to keep each payment and shipment clear.";
+    document.getElementById("mixedNotice").nextElementSibling.textContent=availableOnly?"In-stock products and published shipping are paid in full today. Glacier Blue dispatches within 1 business day after successful payment; delivery transit time is additional. Quote-required regions must contact AURA PADDLE first.":"Pre-orders collect 50% of the product price today. Remaining product balance and shipping are paid before dispatch; conditional orders follow their published terms.";
     document.getElementById("itemCount").textContent=String(cart.count(items));
     document.getElementById("subtotal").textContent=money(subtotal);
     document.getElementById("orderTotal").textContent=!shipping.selected?`${money(subtotal)} + shipping`:shipping.quoteRequired?`${money(subtotal)} + freight quote`:money(subtotal+Number(shipping.total||0));
@@ -123,22 +132,28 @@
       shippingHelp.textContent="Choose the region matching your delivery address.";
     }else if(shipping.pickup){
       shippingAmount.textContent="Free";
-      beforeDispatch.textContent=money(remaining);
+      beforeDispatch.textContent=availableOnly?"Paid today":money(remaining);
       shippingHelp.textContent="Gold Coast, QLD — exact pickup address provided after order confirmation.";
     }else if(shipping.quoteRequired){
       shippingAmount.textContent="Quote required";
-      beforeDispatch.textContent=`${money(remaining)} + freight quote`;
-      shippingHelp.textContent="AURA PADDLE will confirm the best available freight price before dispatch.";
+      beforeDispatch.textContent=availableOnly?"Request freight quote":`${money(remaining)} + freight quote`;
+      shippingHelp.innerHTML=availableOnly?'Please <a href="mailto:admin@aurapaddle.com?subject=Glacier%20Blue%20freight%20quote">contact AURA PADDLE for a freight quote</a> before payment and the dispatch window.':"AURA PADDLE will confirm the best available freight price before dispatch.";
     }else{
       shippingAmount.textContent=money(shipping.total);
-      beforeDispatch.textContent=money(remaining+shipping.total);
-      shippingHelp.textContent="This shipping amount is recorded now and paid with the remaining product balance before dispatch.";
+      beforeDispatch.textContent=availableOnly?"Paid today":money(remaining+shipping.total);
+      shippingHelp.textContent=availableOnly?"This shipping amount is included in today's secure payment.":"This shipping amount is recorded now and paid with the remaining product balance before dispatch.";
     }
-    checkout.disabled=location.protocol==="file:"||config.enabled===false||!shipping.selected;
+    checkout.textContent=availableOnly?"PAY IN FULL SECURELY":"PAY 50% SECURELY";
+    checkout.disabled=checkoutPending||location.protocol==="file:"||config.enabled===false||!shipping.selected||(hasPreorder&&hasAvailable)||(availableOnly&&shipping.quoteRequired);
+    regionSelect.disabled=checkoutPending;
+    checkoutEmail.disabled=checkoutPending;
+    if(recoveryEmailConsent)recoveryEmailConsent.disabled=checkoutPending;
+    list.querySelectorAll("button").forEach(button=>{button.disabled=checkoutPending;});
     error.style.display="none";
   }
 
   list.addEventListener("click",event=>{
+    if(checkoutPending)return;
     const button=event.target.closest("[data-action]");
     const row=event.target.closest("[data-sku]");
     if(!button||!row)return;
@@ -168,7 +183,7 @@
   });
 
   checkout.addEventListener("click",async()=>{
-    if(checkout.disabled)return;
+    if(checkoutPending||checkout.disabled)return;
     const items=cart.read();
     if(!items.length)return;
     const customerEmail=checkoutEmail.value.trim().toLowerCase();
@@ -180,14 +195,17 @@
       return;
     }
     checkoutEmail.setCustomValidity("");
+    const shippingRegion=regionSelect.value;
+    const recoveryConsent=recoveryEmailConsent?.checked===true;
     const original=checkout.textContent;
-    checkout.disabled=true;
+    checkoutPending=true;
+    render();
     checkout.textContent="Preparing secure checkout…";
     error.style.display="none";
     let response;
     try{
       const attribution=await window.AURAAttribution?.snapshot?.();
-      response=await fetch(config.checkoutEndpoint||"/api/checkout",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({items:items.map(({sku,quantity})=>({sku,quantity})),shippingRegion:regionSelect.value,returnPath:location.pathname,customerEmail,recoveryEmailConsent:recoveryEmailConsent?.checked===true,requestId:globalThis.crypto?.randomUUID?.()||`${Date.now()}-${Math.random().toString(36).slice(2)}`,attribution})});
+      response=await fetch(config.checkoutEndpoint||"/api/checkout",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({items:items.map(({sku,quantity})=>({sku,quantity})),shippingRegion,returnPath:location.pathname,customerEmail,recoveryEmailConsent:recoveryConsent,requestId:globalThis.crypto?.randomUUID?.()||`${Date.now()}-${Math.random().toString(36).slice(2)}`,attribution})});
       const payload=await response.json().catch(()=>({}));
       if(!response.ok||!payload.url)throw new Error(payload.error||"Stripe Checkout could not be prepared.");
       const pricing=bundlePricing(items);
@@ -196,20 +214,31 @@
         return analyticsItem(item,item.orderMode==="preorder"?unitFull/2:unitFull);
       });
       const dueToday=pricedItems.reduce((sum,item)=>sum+item.price*item.quantity,0);
-      const shipping=shippingFor(items,regionSelect.value);
-      track("add_shipping_info",{currency:"AUD",value:dueToday,shipping_tier:regionSelect.value,shipping:Number(shipping.total||0)/100,items:pricedItems});
+      const shipping=shippingFor(items,shippingRegion);
+      track("add_shipping_info",{currency:"AUD",value:dueToday,shipping_tier:shippingRegion,shipping:Number(shipping.total||0)/100,items:pricedItems});
       track("begin_checkout",{currency:"AUD",value:dueToday,items:pricedItems});
+      checkoutRedirected=true;
       location.assign(payload.url);
     }catch(reason){
+      checkoutRedirected=false;
+      checkoutPending=false;
+      render();
       track("checkout_error",{checkout_stage:"cart",error_code:window.AURATracking?.errorCode(response)||"request_failed"});
       error.textContent=`Checkout unavailable: ${reason.message||reason}`;
       error.style.display="block";
-      checkout.disabled=false;
       checkout.textContent=original;
     }
   });
 
   cart.subscribe(render);
+  // A cached Back navigation retains the disabled state from the Stripe redirect.
+  window.addEventListener("pageshow",event=>{
+    if(!event.persisted||!checkoutRedirected)return;
+    checkoutRedirected=false;
+    checkoutPending=false;
+    checkout.textContent=checkoutLabel;
+    render();
+  });
   checkoutEmail.addEventListener("input",()=>checkoutEmail.setCustomValidity(""));
   render();
   const viewedItems=cart.read();

@@ -137,16 +137,27 @@ export function normaliseAttribution(value){
   return attribution;
 }
 
-export function reserveCheckoutIdentity(state,{requestId,attribution,customerEmail,now=Math.floor(Date.now()/1000),randomInt=crypto.randomInt,randomBytes=crypto.randomBytes}={}){
+export function reserveCheckoutIdentity(state,{requestId,attribution,customerEmail,items=[],now=Math.floor(Date.now()/1000),randomInt=crypto.randomInt,randomBytes=crypto.randomBytes}={}){
   if(!/^[a-zA-Z0-9_-]{8,80}$/.test(requestId||""))throw new Error("Invalid checkout request ID.");
   state.orders??={};state.reservations??={};state.checkoutRequests??={};
   for(const [key,entry] of Object.entries(state.checkoutRequests))if(now-Number(entry?.reservedAt||0)>86400)delete state.checkoutRequests[key];
   const existing=state.checkoutRequests[requestId];
   if(existing){
+    if(items.length&&JSON.stringify(existing.stockItems||[])!==JSON.stringify(items.filter(item=>item.variant.stockQuantity).map(item=>({sku:item.variant.sku,quantity:item.quantity}))))throw new Error("This checkout request was already used for a different cart.");
     if(!existing.attribution&&attribution)existing.attribution=normaliseAttribution(attribution);
     const email=normaliseRecoveryEmail(customerEmail);
     if(email)existing.customerEmail=email;
     return {orderNumber:existing.orderNumber,trackingToken:existing.trackingToken,integrationIdentifier:existing.integrationIdentifier};
+  }
+  const stockItems=items.filter(item=>item.variant.stockQuantity).map(item=>({sku:item.variant.sku,quantity:item.quantity}));
+  const paidOrderNumbers=new Set(Object.values(state.orders).map(order=>order.orderNumber));
+  for(const item of stockItems){
+    const stock=items.find(entry=>entry.variant.sku===item.sku).variant.stockQuantity;
+    // The 60 units are the newly recorded on-hand stock. Legacy preorder/test
+    // payments predate this stock count and must not consume it again.
+    const sold=Object.values(state.orders).reduce((sum,order)=>sum+(order.orderMode==="available"?(order.items||[]).reduce((count,entry)=>count+(entry.sku===item.sku?Number(entry.activeQuantity??entry.quantity??0):0),0):0),0);
+    const held=Object.values(state.checkoutRequests).reduce((sum,entry)=>sum+(now-Number(entry.reservedAt||0)<7200&&!paidOrderNumbers.has(entry.orderNumber)?(entry.stockItems||[]).filter(hold=>hold.sku===item.sku).reduce((count,hold)=>count+Number(hold.quantity||0),0):0),0);
+    if(sold+held+item.quantity>stock)throw new Error(`${item.sku} has insufficient stock for this quantity. Please reduce the quantity or contact AURA PADDLE.`);
   }
   const used=new Set(Object.values(state.orders).map(order=>order.orderNumber));
   for(const [number,reservedAt] of Object.entries(state.reservations)){
@@ -157,7 +168,7 @@ export function reserveCheckoutIdentity(state,{requestId,attribution,customerEma
   do orderNumber=`APO${randomInt(0,100000).toString().padStart(5,"0")}`;while(used.has(orderNumber));
   const trackingToken=randomBytes(24).toString("base64url");
   const suffix=randomBytes(8).toString("hex").slice(0,8).replace(/[0-9]/g,char=>"abcdefghij"[Number(char)]);
-  const identity={orderNumber,trackingToken,integrationIdentifier:`aura_cart_${suffix}`,reservedAt:now,attribution:normaliseAttribution(attribution),customerEmail:normaliseRecoveryEmail(customerEmail)};
+  const identity={orderNumber,trackingToken,integrationIdentifier:`aura_cart_${suffix}`,reservedAt:now,stockItems,attribution:normaliseAttribution(attribution),customerEmail:normaliseRecoveryEmail(customerEmail)};
   state.reservations[orderNumber]=now;
   state.checkoutRequests[requestId]=identity;
   return {orderNumber,trackingToken,integrationIdentifier:identity.integrationIdentifier};
@@ -173,6 +184,7 @@ export function normaliseCheckoutItems(rawItems,catalog){
     merged.set(sku,{variant,quantity:(merged.get(sku)?.quantity||0)+quantity});
   }
   let items=[...merged.values()];
+  if(items.some(item=>item.variant.orderMode==="available")&&items.some(item=>item.variant.orderMode==="preorder"))throw new Error("Place in-stock and pre-order products in separate orders.");
   if(items.some(item=>item.quantity>20))throw new Error("A single SKU cannot exceed 20 boards per online order.");
   if(items.reduce((sum,item)=>sum+item.quantity,0)>50)throw new Error("An online cart cannot exceed 50 boards. Contact AURA PADDLE for a larger order.");
   const anglerQuantity=items.filter(item=>item.variant.slug==="angler-fishing").reduce((sum,item)=>sum+item.quantity,0);
@@ -211,7 +223,7 @@ function orderMetadata(items,shipping,orderNumber,trackingToken,attribution,reco
     aura_shipping_region:shipping.regionId,
     aura_shipping_label:shipping.label,
     aura_shipping_amount:shipping.amount===null?"quote_required":String(shipping.amount),
-    aura_shipping_stage:"pay_before_dispatch",
+    aura_shipping_stage:hasPreorder?"pay_before_dispatch":"paid_at_checkout",
     aura_order_number:orderNumber,
     aura_tracking_token:trackingToken,
     aura_recovery_email_consent:String(recoveryEmailConsent===true),
@@ -244,6 +256,8 @@ export function buildCheckoutParams({items,priceBySku,siteUrl,returnPath,shippin
   if(!/^APO\d{5}$/.test(orderNumber))throw new Error("Invalid AURA order number.");
   if(!/^[A-Za-z0-9_-]{16,80}$/.test(trackingToken))throw new Error("Invalid order tracking token.");
   const metadata=orderMetadata(items,shipping,orderNumber,trackingToken,attribution,recoveryEmailConsent);
+  const inStock=metadata.aura_order_mode==="available";
+  if(inStock&&shipping.quoteRequired)throw new Error("Please contact AURA PADDLE for a freight quote before ordering in-stock products.");
   const cancelPath=safeReturnPath(returnPath,"/cart-preview.html");
   const cancelUrl=new URL(cancelPath,siteUrl);
   cancelUrl.searchParams.set("checkout","cancelled");
@@ -263,6 +277,13 @@ export function buildCheckoutParams({items,priceBySku,siteUrl,returnPath,shippin
     params.set(`${prefix}[price_data][unit_amount]`,String(paymentAmount));
     params.set(`${prefix}[quantity]`,String(quantity));
   });
+  if(inStock&&shipping.amount>0){
+    const prefix=`line_items[${items.length}]`;
+    params.set(`${prefix}[price_data][currency]`,"aud");
+    params.set(`${prefix}[price_data][product_data][name]`,`Shipping · ${shipping.label}`);
+    params.set(`${prefix}[price_data][unit_amount]`,String(shipping.amount));
+    params.set(`${prefix}[quantity]`,"1");
+  }
   const cartReference=crypto.createHash("sha256").update(metadata.aura_items).digest("hex").slice(0,24);
   params.set("client_reference_id",items.length===1?items[0].variant.sku:`cart-${cartReference}`);
   params.set("customer_creation","always");
@@ -275,12 +296,12 @@ export function buildCheckoutParams({items,priceBySku,siteUrl,returnPath,shippin
   params.set("expires_at",String(now+7200));
   params.set("locale","en");
   params.set("submit_type","pay");
-  params.set("payment_intent_data[description]",`AURA PADDLE ${orderNumber} initial payment`);
+  params.set("payment_intent_data[description]",`AURA PADDLE ${orderNumber} ${inStock?"full payment":"initial payment"}`);
   params.set("success_url",`${siteUrl}/checkout-success.html?session_id={CHECKOUT_SESSION_ID}`);
   params.set("cancel_url",cancelUrl.toString());
   const freightCopy=shipping.quoteRequired?`${shipping.label}: freight quote required.`:shipping.pickup?"Free local pickup in Gold Coast, QLD. Exact pickup address is provided after order confirmation.":`${shipping.label}: AUD $${(shipping.amount/100).toFixed(2)} shipping.`;
-  params.set("custom_text[submit][message]",`This Checkout collects the 50% initial product payment only. ${freightCopy} The remaining product balance and any shipping charge are payable before dispatch. Change of mind: full refund within 48 hours; conditional orders remain cancellable until AURA PADDLE confirms production in writing. Australian Consumer Law rights are not limited.`);
-  if(!shipping.pickup)params.set("custom_text[shipping_address][message]",`${freightCopy} AURA PADDLE will request this amount with the remaining product balance before dispatch.`);
+  params.set("custom_text[submit][message]",inStock?`This Checkout collects the full product price and published shipping. ${freightCopy} In-stock orders dispatch within 1 business day after successful payment. Transit time is additional. See our returns policy; Australian Consumer Law rights are not limited.`:`This Checkout collects the 50% initial product payment only. ${freightCopy} The remaining product balance and any shipping charge are payable before dispatch. Change of mind: full refund within 48 hours; conditional orders remain cancellable until AURA PADDLE confirms production in writing. Australian Consumer Law rights are not limited.`);
+  if(!shipping.pickup)params.set("custom_text[shipping_address][message]",inStock?`${freightCopy} Shipping is included in today's payment.`:`${freightCopy} AURA PADDLE will request this amount with the remaining product balance before dispatch.`);
   appendObject(params,"metadata",metadata);
   appendObject(params,"payment_intent_data[metadata]",metadata);
   return params;
@@ -431,6 +452,16 @@ function progressAchievements(order){
 }
 
 export function orderProgress(order){
+  if(order.paymentStage==="paid_in_full"){
+    const steps=[
+      {id:"order_confirmed",label:"Order confirmed",description:"Your full payment, including published shipping, has been received.",completedAt:Number(order.orderConfirmedAt||order.created||0)},
+      {id:"preparing_for_dispatch",label:"Preparing for dispatch",description:"In-stock board: dispatch within 1 business day after successful payment.",completedAt:Number(order.preparingForDispatchAt||0)},
+      {id:"dispatched",label:"Dispatched",description:"Your order has left AURA PADDLE.",completedAt:Number(order.dispatchedAt||0)},
+      {id:"delivered",label:"Delivered",description:"Your order has been marked as delivered.",completedAt:Number(order.deliveredAt||0)}
+    ];
+    const latest=steps.reduce((index,item,current)=>item.completedAt?current:index,-1);
+    return steps.map((item,index)=>({...item,state:index<latest?"complete":index===latest?"current":"upcoming",completedAt:item.completedAt||null}));
+  }
   const achieved=progressAchievements(order),latest=achieved.reduce((index,item,current)=>item.done?current:index,-1);
   return ORDER_PROGRESS_DEFINITIONS.map((definition,index)=>({
     ...definition,
@@ -474,6 +505,7 @@ export function publicOrderView(order){
   const balancePaymentUrl=["requested","payment_failed"].includes(order.balancePaymentStatus)&&isStripeHostedInvoiceUrl(order.balanceInvoiceUrl)?order.balanceInvoiceUrl:"";
   return {
     orderNumber:order.orderNumber,items:order.items,quantity:order.quantity,currency:order.currency,
+    paymentStage:order.paymentStage||"initial_50_percent",
     initialPaymentAmount:order.amountTotal,initialPaymentStatus:order.initialPaymentStatus,
     balancePaymentStatus:order.balancePaymentStatus,balanceRequestedAmount:order.balanceRequestedAmount||null,balancePaymentUrl,
     shippingLabel:order.shippingLabel,shippingAmount:order.shippingAmount,orderStatus:order.orderStatus,fulfilmentStatus:order.fulfilmentStatus,
@@ -493,7 +525,8 @@ export function adminOrderList(state,catalog){
     currency:String(order.currency||"aud").toUpperCase(),
     initialPaymentAmount:Number(order.amountTotal||0),
     initialPaymentStatus:order.initialPaymentStatus||"pending",
-    remainingProductBalance:Number(order.amountTotal||0),
+    paymentStage:order.paymentStage||"initial_50_percent",
+    remainingProductBalance:order.paymentStage==="paid_in_full"?0:Number(order.amountTotal||0),
     shippingRegion:order.shippingRegion||"",
     shippingLabel:order.shippingLabel||"",
     shippingAmount:Number.isInteger(order.shippingAmount)?order.shippingAmount:null,
@@ -557,15 +590,16 @@ export function applyStripeEvent(state,event){
       amountRefunded:0,
       currency:object.currency||"aud",
       paymentStatus:object.payment_status,
-      orderStatus:"initial_payment_received",
+      orderStatus:metadata.aura_payment_stage==="paid_in_full"?"paid_in_full":"initial_payment_received",
       initialPaymentStatus:"paid",
-      balancePaymentStatus:"not_requested",
-      fulfilmentStatus:"preorder_confirmed",
+      balancePaymentStatus:metadata.aura_payment_stage==="paid_in_full"?"paid":"not_requested",
+      fulfilmentStatus:metadata.aura_payment_stage==="paid_in_full"?"preparing_for_dispatch":"preorder_confirmed",
       customerEmail:object.customer_details?.email||object.customer_email||"",
       customerName:object.customer_details?.name||"",
       customerPhone:object.customer_details?.phone||"",
       attribution,
       orderConfirmedAt:object.created||event.created,
+      ...(metadata.aura_payment_stage==="paid_in_full"?{balancePaidAt:object.created||event.created,preparingForDispatchAt:object.created||event.created}:{}),
       created:object.created||event.created,
       updated:event.created
     };

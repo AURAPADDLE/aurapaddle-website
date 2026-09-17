@@ -103,7 +103,7 @@ export function enqueueStripeAnalytics(state,event,catalog,{enhancedConversionsE
   if(["checkout.session.completed","checkout.session.async_payment_succeeded"].includes(event.type)&&object.payment_status==="paid"){
     key=`purchase:${order.orderNumber}`;
     eventName="purchase";
-    params={transaction_id:order.orderNumber,currency:String(order.currency||"aud").toUpperCase(),value:cents(order.amountTotal),shipping:0,payment_stage:order.paymentStage||"initial_50_percent",items:orderItems(order,catalog)};
+    params={transaction_id:order.orderNumber,currency:String(order.currency||"aud").toUpperCase(),value:cents(order.amountTotal),shipping:order.paymentStage==="paid_in_full"?cents(order.shippingAmount):0,payment_stage:order.paymentStage||"initial_50_percent",items:orderItems(order,catalog)};
   }else if(event.type==="checkout.session.expired"){
     key=`checkout_abandoned:${object.id}`;
     eventName="checkout_abandoned";
@@ -129,6 +129,10 @@ export function enqueueStripeAnalytics(state,event,catalog,{enhancedConversionsE
     eventName="balance_payment_failed";
     params={transaction_id:`${order.orderNumber}-BALANCE`,currency:String(object.currency||order.currency||"aud").toUpperCase(),value:cents(object.amount_due),payment_stage:"balance_and_shipping"};
   }else return false;
+  // Match the existing abandoned-checkout admin classification exactly. Server
+  // events do not inherit browser IP-based labels; unknown traffic stays unmarked.
+  const last=order.attribution?.last||{};
+  if(last.source==="internal_test"||last.campaign==="aura_controlled_test")params.traffic_type="internal";
   const entry={...base,eventName,params};
   if(enhancedConversionsEnabled&&consent.marketing===true&&eventName==="purchase"&&order.customerId){
     const userData=hashUserData(object.customer_details||{});
