@@ -1,9 +1,10 @@
 (()=>{
   const data=JSON.parse(document.getElementById("product-data").textContent);
   const $=id=>document.getElementById(id);
+  const yogaCruiserDescription="A spacious, confidence-inspiring iSUP created for yoga, relaxed cruising and unhurried days on the water. Its 36-inch-wide deck gives you room to move, reset your stance or bring a seated passenger while the high-volume shape keeps the ride reassuringly composed. Dual-layer UV-resistant PVC — designed for Australian UV intensity.";
   const uvConstruction={
     "yoga-cruiser":{
-      summary:"Its woven drop-stitch core and dual-layer UV-resistant PVC construction are designed for Australian UV intensity.",
+      summary:"Dual-layer UV-resistant PVC — designed for Australian UV intensity.",
       specification:"Woven drop stitch with dual-layer UV-resistant PVC"
     },
     "angler-fishing":{
@@ -265,7 +266,7 @@
     intro.className="product-intro";
     for(const selector of [".breadcrumb",".eyebrow","h1",".subtitle","#availability",".price-row","#priceNote"]){const el=info.querySelector(selector);if(el)intro.append(el)}
     intro.querySelector("h1").textContent="Yoga Cruiser";
-    intro.querySelector(".subtitle").textContent="A spacious 36-inch platform for SUP yoga and relaxed paddling. Woven drop-stitch core with dual-layer UV-resistant PVC construction, designed for Australian UV intensity.";
+    intro.querySelector(".subtitle").textContent=yogaCruiserDescription;
     const kit=document.createElement("p");kit.className="kit-summary";kit.textContent="Electric pump · Wheeled carry bag · Adjustable paddle included";intro.append(kit);
     const dispatch=document.createElement("p");dispatch.id="introDispatch";dispatch.className="dispatch-summary";intro.append(dispatch);
     layout.prepend(intro);
