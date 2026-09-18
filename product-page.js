@@ -1,6 +1,30 @@
 (()=>{
   const data=JSON.parse(document.getElementById("product-data").textContent);
   const $=id=>document.getElementById(id);
+  const uvConstruction={
+    "yoga-cruiser":{
+      summary:"Its woven drop-stitch core and dual-layer UV-resistant PVC construction are designed for Australian UV intensity.",
+      specification:"Woven drop stitch with dual-layer UV-resistant PVC"
+    },
+    "angler-fishing":{
+      summary:"Woven drop-stitch construction with reinforced UV-resistant PVC is designed for Australian UV intensity.",
+      specification:"Woven drop stitch with reinforced UV-resistant PVC"
+    },
+    "touring-performance":{
+      summary:"Woven drop-stitch construction with reinforced UV-resistant PVC is designed for Australian UV intensity.",
+      specification:"Woven drop stitch with reinforced UV-resistant PVC"
+    }
+  }[data.slug];
+  if(uvConstruction){
+    const subtitle=document.querySelector(".product-info .subtitle");
+    if(subtitle&&!subtitle.textContent.includes("UV-resistant"))subtitle.textContent=`${subtitle.textContent.trim()} ${uvConstruction.summary}`;
+    const table=document.querySelector(".spec-table");
+    if(table){
+      let row=[...table.rows].find(item=>item.cells[0]?.textContent.trim()==="Construction");
+      if(!row){row=table.insertRow();row.insertCell().textContent="Construction";row.insertCell()}
+      row.cells[1].textContent=uvConstruction.specification;
+    }
+  }
   if(data.slug==="yoga-cruiser"){
     const galleryOverrides={
       sandstone:[
@@ -241,7 +265,7 @@
     intro.className="product-intro";
     for(const selector of [".breadcrumb",".eyebrow","h1",".subtitle","#availability",".price-row","#priceNote"]){const el=info.querySelector(selector);if(el)intro.append(el)}
     intro.querySelector("h1").textContent="Yoga Cruiser";
-    intro.querySelector(".subtitle").textContent="A spacious 36-inch platform for SUP yoga and relaxed paddling.";
+    intro.querySelector(".subtitle").textContent="A spacious 36-inch platform for SUP yoga and relaxed paddling. Woven drop-stitch core with dual-layer UV-resistant PVC construction, designed for Australian UV intensity.";
     const kit=document.createElement("p");kit.className="kit-summary";kit.textContent="Electric pump · Wheeled carry bag · Adjustable paddle included";intro.append(kit);
     const dispatch=document.createElement("p");dispatch.id="introDispatch";dispatch.className="dispatch-summary";intro.append(dispatch);
     layout.prepend(intro);
