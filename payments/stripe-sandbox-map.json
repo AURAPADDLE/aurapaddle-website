@@ -1,0 +1,540 @@
+{
+  "accountId": "acct_1U1HMPR8v0GjS5xa",
+  "mode": "sandbox",
+  "generatedAt": "2026-08-12T04:57:21.360Z",
+  "catalogueVersion": "2026_V4_1",
+  "skus": {
+    "AP734955": {
+      "productId": "prod_V3bENydptqeHxr",
+      "priceId": "price_1U3p8yR8v0GjS5xaUZpNin5R",
+      "unitAmount": 74900,
+      "currency": "aud",
+      "orderMode": "preorder"
+    },
+    "AP505002": {
+      "productId": "prod_V3bExLm2mvcH8e",
+      "priceId": "price_1U3U2RR8v0GjS5xaRzYs2sKE",
+      "unitAmount": 74900,
+      "currency": "aud",
+      "orderMode": "preorder"
+    },
+    "AP233694": {
+      "productId": "prod_V3bFBpcQZUOZfv",
+      "priceId": "price_1U3U2YR8v0GjS5xaOlMnXP4n",
+      "unitAmount": 74900,
+      "currency": "aud",
+      "orderMode": "preorder"
+    },
+    "AP587273": {
+      "productId": "prod_V3bFE8IqRRuJsu",
+      "priceId": "price_1U3U2xR8v0GjS5xai4ZE1Jql",
+      "unitAmount": 74900,
+      "currency": "aud",
+      "orderMode": "preorder"
+    },
+    "AP550986": {
+      "productId": "prod_V3bFx0HaBXyFBW",
+      "priceId": "price_1U3U32R8v0GjS5xaPLg5yrQa",
+      "unitAmount": 104900,
+      "currency": "aud",
+      "orderMode": "preorder"
+    },
+    "AP246179": {
+      "productId": "prod_V3bFtc4bZkpIVf",
+      "priceId": "price_1U3U2dR8v0GjS5xaN86lsncj",
+      "unitAmount": 104900,
+      "currency": "aud",
+      "orderMode": "preorder"
+    },
+    "AP560103": {
+      "productId": "prod_V3bFC2XaaaDhbC",
+      "priceId": "price_1U3U2kR8v0GjS5xaldl2uNTq",
+      "unitAmount": 104900,
+      "currency": "aud",
+      "orderMode": "preorder"
+    },
+    "AP912342": {
+      "productId": "prod_V3bFdda6HjuIMQ",
+      "priceId": "price_1U3U2tR8v0GjS5xamWGjDGQ5",
+      "unitAmount": 104900,
+      "currency": "aud",
+      "orderMode": "preorder"
+    },
+    "AP881762": {
+      "productId": "prod_V3bGmCeq7e1bcm",
+      "priceId": "price_1U3U3fR8v0GjS5xa6GfLJ5Y4",
+      "unitAmount": 124900,
+      "currency": "aud",
+      "orderMode": "preorder"
+    },
+    "AP804412": {
+      "productId": "prod_V3bFMZh3iz2Vha",
+      "priceId": "price_1U3U3HR8v0GjS5xamToCQ42c",
+      "unitAmount": 124900,
+      "currency": "aud",
+      "orderMode": "preorder"
+    },
+    "AP511450": {
+      "productId": "prod_V3bGq8WyGeowRL",
+      "priceId": "price_1U3U3tR8v0GjS5xaq9wpuQRM",
+      "unitAmount": 124900,
+      "currency": "aud",
+      "orderMode": "preorder"
+    },
+    "AP168023": {
+      "productId": "prod_V3bFXm5RHNMlBx",
+      "priceId": "price_1U3U2oR8v0GjS5xaI4Lc1PlV",
+      "unitAmount": 124900,
+      "currency": "aud",
+      "orderMode": "preorder"
+    },
+    "AP081165": {
+      "productId": "prod_V3bFuaQ0Q0DyBI",
+      "priceId": "price_1U3p8oR8v0GjS5xay0QneC0D",
+      "unitAmount": 29900,
+      "currency": "aud",
+      "orderMode": "preorder"
+    },
+    "AP730047": {
+      "productId": "prod_V3bFoxPfoZH1xY",
+      "priceId": "price_1U3p93R8v0GjS5xaLM8AoxjX",
+      "unitAmount": 29900,
+      "currency": "aud",
+      "orderMode": "preorder"
+    },
+    "AP388238": {
+      "productId": "prod_V3bGH6OsR7Iym8",
+      "priceId": "price_1U3p9AR8v0GjS5xanlyZpFJ2",
+      "unitAmount": 29900,
+      "currency": "aud",
+      "orderMode": "preorder"
+    },
+    "AP428330": {
+      "productId": "prod_V3bGqG4mryhluO",
+      "priceId": "price_1U3U4HR8v0GjS5xaNMyEQcAF",
+      "unitAmount": 94900,
+      "currency": "aud",
+      "orderMode": "preorder"
+    },
+    "AP579723": {
+      "productId": "prod_V3bGorJ6pj1SGU",
+      "priceId": "price_1U3U4OR8v0GjS5xa3LUuLFFs",
+      "unitAmount": 49900,
+      "currency": "aud",
+      "orderMode": "preorder"
+    },
+    "AP074024": {
+      "productId": "prod_V3bHw4f3SonWsV",
+      "priceId": "price_1U3U4SR8v0GjS5xac0bcGSLV",
+      "unitAmount": 49900,
+      "currency": "aud",
+      "orderMode": "preorder"
+    },
+    "AP023909": {
+      "productId": "prod_V3bH3vSwVXNHsV",
+      "priceId": "price_1U3U4WR8v0GjS5xascYXzezS",
+      "unitAmount": 49900,
+      "currency": "aud",
+      "orderMode": "preorder"
+    },
+    "AP946846": {
+      "productId": "prod_V3bH9RsdsJp7eY",
+      "priceId": "price_1U3U4bR8v0GjS5xammk06ZrP",
+      "unitAmount": 49900,
+      "currency": "aud",
+      "orderMode": "preorder"
+    },
+    "AP006579": {
+      "productId": "prod_V3bHueoVR7XkBQ",
+      "priceId": "price_1U3U4iR8v0GjS5xaLFv2ZEBk",
+      "unitAmount": 49900,
+      "currency": "aud",
+      "orderMode": "preorder"
+    },
+    "AP664194": {
+      "productId": "prod_V3bH3iolKOFDe0",
+      "priceId": "price_1U3U4mR8v0GjS5xag4Y3p2Ka",
+      "unitAmount": 49900,
+      "currency": "aud",
+      "orderMode": "preorder"
+    },
+    "AP919973": {
+      "productId": "prod_V3bHQUSkGpU92z",
+      "priceId": "price_1U3U4uR8v0GjS5xaKNzB2kTT",
+      "unitAmount": 49900,
+      "currency": "aud",
+      "orderMode": "preorder"
+    },
+    "AP554929": {
+      "productId": "prod_V3bH2q0EvnwSxH",
+      "priceId": "price_1U3U5GR8v0GjS5xaak5ArMCR",
+      "unitAmount": 49900,
+      "currency": "aud",
+      "orderMode": "preorder"
+    },
+    "AP651051": {
+      "productId": "prod_V3bHLCDhtJ7EXO",
+      "priceId": "price_1U3U5KR8v0GjS5xagLQ8VTN4",
+      "unitAmount": 49900,
+      "currency": "aud",
+      "orderMode": "preorder"
+    },
+    "AP469730": {
+      "productId": "prod_V3bH6hPp8Y7zUO",
+      "priceId": "price_1U3U5PR8v0GjS5xaBVw1kckp",
+      "unitAmount": 49900,
+      "currency": "aud",
+      "orderMode": "preorder"
+    },
+    "AP187862": {
+      "productId": "prod_V3bIMDGbrFxpQL",
+      "priceId": "price_1U3U5cR8v0GjS5xagZTPTDr4",
+      "unitAmount": 49900,
+      "currency": "aud",
+      "orderMode": "preorder"
+    },
+    "AP751836": {
+      "productId": "prod_V3bIRXWoVX5ZHK",
+      "priceId": "price_1U3U5TR8v0GjS5xaECGLFqnY",
+      "unitAmount": 49900,
+      "currency": "aud",
+      "orderMode": "preorder"
+    },
+    "AP033381": {
+      "productId": "prod_V3bIcWPKoGsv6j",
+      "priceId": "price_1U3U5kR8v0GjS5xaEUH1fQtY",
+      "unitAmount": 49900,
+      "currency": "aud",
+      "orderMode": "preorder"
+    },
+    "AP966827": {
+      "productId": "prod_V3bIPMzJ7Cno7r",
+      "priceId": "price_1U3U5oR8v0GjS5xaqIo25Y9H",
+      "unitAmount": 49900,
+      "currency": "aud",
+      "orderMode": "preorder"
+    },
+    "AP070849": {
+      "productId": "prod_V3bInjV1wWvmri",
+      "priceId": "price_1U3U5XR8v0GjS5xaDkxOMHX6",
+      "unitAmount": 49900,
+      "currency": "aud",
+      "orderMode": "preorder"
+    },
+    "AP788266": {
+      "productId": "prod_V3bIuSIP4JOUB4",
+      "priceId": "price_1U3U6KR8v0GjS5xa7ZGP2pHL",
+      "unitAmount": 49900,
+      "currency": "aud",
+      "orderMode": "preorder"
+    },
+    "AP777052": {
+      "productId": "prod_V3bISctaeA1Lpb",
+      "priceId": "price_1U3U6BR8v0GjS5xaCPCz2j3Q",
+      "unitAmount": 49900,
+      "currency": "aud",
+      "orderMode": "preorder"
+    },
+    "AP000256": {
+      "productId": "prod_V3bJrkpQFCnZgc",
+      "priceId": "price_1U3U6SR8v0GjS5xaMueJlFjW",
+      "unitAmount": 49900,
+      "currency": "aud",
+      "orderMode": "preorder"
+    },
+    "AP471027": {
+      "productId": "prod_V3bJg5GgiKhlvp",
+      "priceId": "price_1U3U6YR8v0GjS5xaA0LFDUED",
+      "unitAmount": 49900,
+      "currency": "aud",
+      "orderMode": "preorder"
+    },
+    "AP338627": {
+      "productId": "prod_V3bJkyu2ScnozT",
+      "priceId": "price_1U3U6OR8v0GjS5xaNB9WHKbg",
+      "unitAmount": 49900,
+      "currency": "aud",
+      "orderMode": "preorder"
+    },
+    "AP839236": {
+      "productId": "prod_V3bI8mhxuYbqyO",
+      "priceId": "price_1U3U6GR8v0GjS5xaUqS5IVwE",
+      "unitAmount": 49900,
+      "currency": "aud",
+      "orderMode": "preorder"
+    },
+    "AP732417": {
+      "productId": "prod_V3bJxjnKBoVwRM",
+      "priceId": "price_1U3U6iR8v0GjS5xauU2xBJ5Z",
+      "unitAmount": 49900,
+      "currency": "aud",
+      "orderMode": "preorder"
+    },
+    "AP307472": {
+      "productId": "prod_V3bJ5U8Bk3rlFg",
+      "priceId": "price_1U3U6eR8v0GjS5xaNDldZ907",
+      "unitAmount": 49900,
+      "currency": "aud",
+      "orderMode": "preorder"
+    },
+    "AP319929": {
+      "productId": "prod_V3bJOYFxf36yPH",
+      "priceId": "price_1U3U74R8v0GjS5xaK4dm5OfQ",
+      "unitAmount": 49900,
+      "currency": "aud",
+      "orderMode": "preorder"
+    },
+    "AP200288": {
+      "productId": "prod_V3bJLvZ76ZMASB",
+      "priceId": "price_1U3U78R8v0GjS5xac4LwkjP5",
+      "unitAmount": 54900,
+      "currency": "aud",
+      "orderMode": "preorder"
+    },
+    "AP011855": {
+      "productId": "prod_V3bKZd9dGVKXDU",
+      "priceId": "price_1U3U7ZR8v0GjS5xavybIZWmR",
+      "unitAmount": 54900,
+      "currency": "aud",
+      "orderMode": "preorder"
+    },
+    "AP695811": {
+      "productId": "prod_V3bJTJeJKNwvfG",
+      "priceId": "price_1U3U7DR8v0GjS5xatcz2wuLm",
+      "unitAmount": 54900,
+      "currency": "aud",
+      "orderMode": "preorder"
+    },
+    "AP963442": {
+      "productId": "prod_V3bJGEMoAl4XGa",
+      "priceId": "price_1U3U7HR8v0GjS5xaiN54uPKv",
+      "unitAmount": 54900,
+      "currency": "aud",
+      "orderMode": "preorder"
+    },
+    "AP367651": {
+      "productId": "prod_V3bKls5GpTrapM",
+      "priceId": "price_1U3U7UR8v0GjS5xaClFbFjra",
+      "unitAmount": 54900,
+      "currency": "aud",
+      "orderMode": "preorder"
+    },
+    "AP925022": {
+      "productId": "prod_V3bK00Vt5ZpGhk",
+      "priceId": "price_1U3U7MR8v0GjS5xaCMRSvNzw",
+      "unitAmount": 54900,
+      "currency": "aud",
+      "orderMode": "preorder"
+    },
+    "AP663112": {
+      "productId": "prod_V3bK3Za0ZKjmZa",
+      "priceId": "price_1U3U7eR8v0GjS5xaiGBJfn3A",
+      "unitAmount": 54900,
+      "currency": "aud",
+      "orderMode": "preorder"
+    },
+    "AP558837": {
+      "productId": "prod_V3bKhnumk8oEi0",
+      "priceId": "price_1U3U83R8v0GjS5xax1favS6l",
+      "unitAmount": 54900,
+      "currency": "aud",
+      "orderMode": "preorder"
+    },
+    "AP514602": {
+      "productId": "prod_V3bKoPERnmMGpy",
+      "priceId": "price_1U3U89R8v0GjS5xajvsbDZ9p",
+      "unitAmount": 54900,
+      "currency": "aud",
+      "orderMode": "preorder"
+    },
+    "AP665269": {
+      "productId": "prod_V3bLc32LeZAV8m",
+      "priceId": "price_1U3U8KR8v0GjS5xaZuQi7o0T",
+      "unitAmount": 64900,
+      "currency": "aud",
+      "orderMode": "preorder"
+    },
+    "AP875178": {
+      "productId": "prod_V3bKTkQ1q0Kr1W",
+      "priceId": "price_1U3U8DR8v0GjS5xaJdstFyR3",
+      "unitAmount": 64900,
+      "currency": "aud",
+      "orderMode": "preorder"
+    },
+    "AP038101": {
+      "productId": "prod_V3bL2sSsMN31zm",
+      "priceId": "price_1U3U8PR8v0GjS5xaZcZUiLDk",
+      "unitAmount": 64900,
+      "currency": "aud",
+      "orderMode": "preorder"
+    },
+    "AP824369": {
+      "productId": "prod_V3bLj860SfjZqX",
+      "priceId": "price_1U3U8TR8v0GjS5xahfwwZCQS",
+      "unitAmount": 64900,
+      "currency": "aud",
+      "orderMode": "preorder"
+    },
+    "AP951141": {
+      "productId": "prod_V3bLzpUNnKQdEs",
+      "priceId": "price_1U3U8YR8v0GjS5xa7soIuudc",
+      "unitAmount": 64900,
+      "currency": "aud",
+      "orderMode": "preorder"
+    },
+    "AP054037": {
+      "productId": "prod_V3bLtjwgbQrACB",
+      "priceId": "price_1U3U9BR8v0GjS5xa429g7C90",
+      "unitAmount": 64900,
+      "currency": "aud",
+      "orderMode": "preorder"
+    },
+    "AP641007": {
+      "productId": "prod_V3bM509S3BfTJx",
+      "priceId": "price_1U3U9jR8v0GjS5xavbnGZp1P",
+      "unitAmount": 64900,
+      "currency": "aud",
+      "orderMode": "preorder"
+    },
+    "AP606027": {
+      "productId": "prod_V3bOHYay6DwXdT",
+      "priceId": "price_1U3UBGR8v0GjS5xagDp0UqN0",
+      "unitAmount": 64900,
+      "currency": "aud",
+      "orderMode": "preorder"
+    },
+    "AP043644": {
+      "productId": "prod_V3bN4rfHiU4znt",
+      "priceId": "price_1U3UBAR8v0GjS5xaI2dMYmAQ",
+      "unitAmount": 64900,
+      "currency": "aud",
+      "orderMode": "preorder"
+    },
+    "AP500687": {
+      "productId": "prod_V3bNr6VWOejmus",
+      "priceId": "price_1U3UALR8v0GjS5xaLI67jMMI",
+      "unitAmount": 54900,
+      "currency": "aud",
+      "orderMode": "preorder"
+    },
+    "AP606496": {
+      "productId": "prod_V3bNSu7AYFLTzj",
+      "priceId": "price_1U3UAuR8v0GjS5xa57x4H060",
+      "unitAmount": 54900,
+      "currency": "aud",
+      "orderMode": "preorder"
+    },
+    "AP366317": {
+      "productId": "prod_V3bOBieDRpIfBT",
+      "priceId": "price_1U3UBNR8v0GjS5xatNqvZiQu",
+      "unitAmount": 54900,
+      "currency": "aud",
+      "orderMode": "preorder"
+    },
+    "AP946958": {
+      "productId": "prod_V3bOQbuXgH2C7F",
+      "priceId": "price_1U3UBTR8v0GjS5xaAsoo4nIJ",
+      "unitAmount": 54900,
+      "currency": "aud",
+      "orderMode": "preorder"
+    },
+    "AP927466": {
+      "productId": "prod_V3bOADy7a3MExR",
+      "priceId": "price_1U3UBdR8v0GjS5xakMFP62gQ",
+      "unitAmount": 54900,
+      "currency": "aud",
+      "orderMode": "preorder"
+    },
+    "AP559907": {
+      "productId": "prod_V3bOhvexGBaeUG",
+      "priceId": "price_1U3UC1R8v0GjS5xaHCu22a5M",
+      "unitAmount": 54900,
+      "currency": "aud",
+      "orderMode": "preorder"
+    },
+    "AP020612": {
+      "productId": "prod_V3bP11Y4vOh6Ut",
+      "priceId": "price_1U3UCCR8v0GjS5xa24sxcZ4c",
+      "unitAmount": 54900,
+      "currency": "aud",
+      "orderMode": "preorder"
+    },
+    "AP739739": {
+      "productId": "prod_V3bOs1bCPnvz3o",
+      "priceId": "price_1U3UC7R8v0GjS5xalsfmxNpk",
+      "unitAmount": 54900,
+      "currency": "aud",
+      "orderMode": "preorder"
+    },
+    "AP275308": {
+      "productId": "prod_V3bPzOLLSSOPHU",
+      "priceId": "price_1U3UCHR8v0GjS5xaC4Hwkmyn",
+      "unitAmount": 54900,
+      "currency": "aud",
+      "orderMode": "preorder"
+    },
+    "AP397729": {
+      "productId": "prod_V3bPNdNI2PHpyz",
+      "priceId": "price_1U3UCUR8v0GjS5xaEwoA1Hoh",
+      "unitAmount": 64900,
+      "currency": "aud",
+      "orderMode": "preorder"
+    },
+    "AP963612": {
+      "productId": "prod_V3bPm1pshqsWSk",
+      "priceId": "price_1U3UCkR8v0GjS5xaAXkWdsbd",
+      "unitAmount": 64900,
+      "currency": "aud",
+      "orderMode": "preorder"
+    },
+    "AP982409": {
+      "productId": "prod_V3bPut83A1M9b4",
+      "priceId": "price_1U3UCPR8v0GjS5xaSYWyHXKE",
+      "unitAmount": 64900,
+      "currency": "aud",
+      "orderMode": "preorder"
+    },
+    "AP831252": {
+      "productId": "prod_V3bP2sCUPUfLt4",
+      "priceId": "price_1U3UCgR8v0GjS5xafYcioiX9",
+      "unitAmount": 64900,
+      "currency": "aud",
+      "orderMode": "preorder"
+    },
+    "AP579681": {
+      "productId": "prod_V3bPwMciGP6Vdy",
+      "priceId": "price_1U3UD9R8v0GjS5xa2CrSjsnT",
+      "unitAmount": 64900,
+      "currency": "aud",
+      "orderMode": "preorder"
+    },
+    "AP874598": {
+      "productId": "prod_V3bQlCHxcw0cl5",
+      "priceId": "price_1U3UDVR8v0GjS5xaAPqEMUH7",
+      "unitAmount": 64900,
+      "currency": "aud",
+      "orderMode": "preorder"
+    },
+    "AP332801": {
+      "productId": "prod_V3bQjIUgzHq2se",
+      "priceId": "price_1U3UDiR8v0GjS5xaNP2N9B3n",
+      "unitAmount": 64900,
+      "currency": "aud",
+      "orderMode": "preorder"
+    },
+    "AP859327": {
+      "productId": "prod_V3bQuCu3NwnkOL",
+      "priceId": "price_1U3UDeR8v0GjS5xaSywYbM6l",
+      "unitAmount": 64900,
+      "currency": "aud",
+      "orderMode": "preorder"
+    },
+    "AP199561": {
+      "productId": "prod_V3bQN7FBN1xqmk",
+      "priceId": "price_1U3UDZR8v0GjS5xaiAjC4Kjj",
+      "unitAmount": 64900,
+      "currency": "aud",
+      "orderMode": "preorder"
+    }
+  }
+}
