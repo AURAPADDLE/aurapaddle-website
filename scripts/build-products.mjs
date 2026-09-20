@@ -457,20 +457,31 @@ const merchantAvailabilityDate=value=>{
 };
 const feedItems=paymentCatalogue.filter(item=>item.kind!=="accessory").map(item=>{
   const product=products.find(candidate=>candidate.slug===item.slug);
-  const productImages=product?.images?.[item.colourKey]||[];
-  const primaryImageIndex=item.sku==="AP734955"?4:0;
+  const glacierFeedImages=[
+    "../assets/products/yoga-cruiser/glacier-blue/AP734955_yoga-cruiser_11ft_glacier-blue_amazon-01-main-package.jpg",
+    "../assets/products/yoga-cruiser/glacier-blue/AP734955_yoga-cruiser_11ft_glacier-blue_amazon-02-wide-deck.jpg",
+    "../assets/products/yoga-cruiser/glacier-blue/AP734955_yoga-cruiser_11ft_glacier-blue_amazon-03-electric-pump.jpg",
+    "../assets/products/yoga-cruiser/glacier-blue/AP734955_yoga-cruiser_11ft_glacier-blue_amazon-04-woven-construction.jpg",
+    "../assets/products/yoga-cruiser/glacier-blue/AP734955_yoga-cruiser_11ft_glacier-blue_amazon-05-uv-treated-pvc-eva.jpg",
+    "../assets/products/yoga-cruiser/glacier-blue/AP734955_yoga-cruiser_11ft_glacier-blue_amazon-06-complete-package.jpg",
+    "../assets/products/yoga-cruiser/glacier-blue/AP734955_yoga-cruiser_11ft_glacier-blue_amazon-07-details.jpg",
+    "../assets/products/yoga-cruiser/glacier-blue/yoga-on-water-1200.jpg",
+    "../assets/products/yoga-cruiser/glacier-blue/AP734955_yoga-cruiser_11ft_glacier-blue_yoga-lifestyle-08.webp"
+  ];
+  const productImages=item.sku==="AP734955"?glacierFeedImages:(product?.images?.[item.colourKey]||[]);
+  const primaryImageIndex=0;
   const imageBase=(productImages[primaryImageIndex]||productImages[0])?.replace("../","https://www.aurapaddle.com/")||"https://www.aurapaddle.com/WEBSITE_HERO_IMAGE_1600_900.png";
   // A new, RFC-compliant URL makes Merchant Center fetch the corrected image
   // instead of retaining a previously failed crawl from the pre-launch host.
-  const image=`${encodeURI(imageBase)}?gmc=20260830-conversion`;
+  const feedVersion=item.sku==="AP734955"?"20260920-new-gallery":"20260830-conversion";
+  const image=`${encodeURI(imageBase)}?gmc=${feedVersion}`;
   const additionalImageSources=productImages.filter((_,index)=>index!==primaryImageIndex);
-  if(item.sku==="AP734955")additionalImageSources.push("../assets/products/yoga-cruiser/glacier-blue/yoga-on-water-1200.jpg");
-  const additionalImages=additionalImageSources.slice(0,10).map(src=>`<g:additional_image_link>${xml(`${encodeURI(src.replace("../","https://www.aurapaddle.com/"))}?gmc=20260830-conversion`)}</g:additional_image_link>`).join("");
+  const additionalImages=additionalImageSources.slice(0,10).map(src=>`<g:additional_image_link>${xml(`${encodeURI(src.replace("../","https://www.aurapaddle.com/"))}?gmc=${feedVersion}`)}</g:additional_image_link>`).join("");
   const availabilityDate=item.orderMode==="preorder"?merchantAvailabilityDate(item.campaign?.estimatedDelivery):"";
   const isGlacierHero=item.sku==="AP734955";
   const title=isGlacierHero?"AURA PADDLE Yoga Cruiser 11ft Inflatable SUP — Glacier Blue — In Stock":`${item.productName} — ${item.size} — ${item.colour}`;
   const description=isGlacierHero?"Glacier Blue is in stock. Stable 36-inch deck for SUP yoga, beginners and family paddling. Complete kit. Dispatch within 1 business day after payment; delivery transit time varies by destination.":(product?.metaDescription||item.description);
-  const labels=isGlacierHero?"<g:custom_label_0>Yoga Hero</g:custom_label_0><g:custom_label_1>In Stock</g:custom_label_1>":"";
+  const labels=isGlacierHero?"<g:custom_label_0>Yoga Hero</g:custom_label_0><g:custom_label_1>In Stock</g:custom_label_1><g:shipping_label>yoga_glacier_in_stock</g:shipping_label>":"";
   return `<item><g:id>${xml(item.sku)}</g:id><title>${xml(title)}</title><description>${xml(description)}</description><link>${xml(item.productUrl)}</link><g:image_link>${xml(image)}</g:image_link>${additionalImages}<g:availability>${item.available?"in_stock":"preorder"}</g:availability>${availabilityDate?`<g:availability_date>${availabilityDate}</g:availability_date>`:""}<g:price>${(item.retailAmount/100).toFixed(2)} AUD</g:price><g:sale_price>${(item.checkoutAmount/100).toFixed(2)} AUD</g:sale_price><g:sale_price_effective_date>2026-08-18T01:18:00+10:00/2026-09-30T23:59:59+10:00</g:sale_price_effective_date><g:brand>AURA PADDLE</g:brand><g:condition>new</g:condition><g:color>${xml(item.colour)}</g:color><g:size>${xml(item.size)}</g:size>${labels}<g:identifier_exists>yes</g:identifier_exists></item>`;
 }).join("");
 fs.writeFileSync(path.join(siteDir,"merchant-feed.xml"),`<?xml version="1.0" encoding="UTF-8"?><rss xmlns:g="http://base.google.com/ns/1.0" version="2.0"><channel><title>AURA PADDLE Australia</title><link>https://www.aurapaddle.com/</link><description>AURA PADDLE product feed</description>${feedItems}</channel></rss>\n`);
