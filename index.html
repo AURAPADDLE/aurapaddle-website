@@ -75,7 +75,25 @@
     .hero-batch-proof__foot strong{font-weight:500;color:#fff}
     @media(max-width:1000px){.hero-batch-proof{max-width:720px}}
     @media(max-width:650px){.hero-batch-proof{margin-top:1.6rem}.hero-batch-proof__foot{align-items:flex-start;flex-direction:column;gap:.25rem}}
-    .preorder-offer{max-height:calc(100dvh - 2rem);overflow:auto;overscroll-behavior:contain}
+    .preorder-offer{width:min(860px,calc(100% - 2rem));max-height:calc(100dvh - 2rem);overflow:auto;overscroll-behavior:contain;background:#fff;color:var(--deep);border:0}
+    .preorder-offer__inner{display:grid;grid-template-columns:.92fr 1.08fr;padding:0;background:#fff}
+    .preorder-offer__visual{min-height:510px;display:grid;place-items:center;padding:1.5rem;background:linear-gradient(150deg,#e9f7f5,#d9eff0)}
+    .preorder-offer__visual img{display:block;width:100%;height:100%;max-height:480px;object-fit:contain}
+    .preorder-offer__content{padding:clamp(2rem,5vw,3.3rem);align-self:center}
+    .preorder-offer__close{z-index:2;background:#fff;color:var(--deep);border-color:rgba(7,31,45,.18);box-shadow:0 8px 30px rgba(7,31,45,.12)}
+    .preorder-offer__eyebrow{color:var(--ocean)}
+    .preorder-offer h2{margin:.75rem 0 1rem;font-size:clamp(2.25rem,5vw,3.65rem);color:var(--deep);text-transform:none}
+    .preorder-offer h2 span{color:var(--coral)}
+    .preorder-offer__price{margin:0 0 .9rem;color:var(--deep);font:700 1.15rem/1.2 "Manrope",sans-serif}
+    .preorder-offer__price del{margin-left:.45rem;color:var(--muted);font-weight:500}
+    .preorder-offer__value{margin-bottom:.8rem;color:var(--deep)}
+    .preorder-offer__code{width:100%;display:flex;align-items:center;justify-content:space-between;gap:1rem;margin:.9rem 0 1rem;padding:.9rem 1rem;border:2px dashed var(--coral);border-radius:.8rem;background:#fff7f4;color:var(--deep);cursor:pointer}
+    .preorder-offer__code strong{font:700 clamp(1rem,2.2vw,1.25rem)/1 "Manrope",sans-serif;letter-spacing:.08em}
+    .preorder-offer__code span{color:var(--coral);font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em}
+    .preorder-offer__copy{color:var(--muted)}
+    .preorder-offer__actions{margin-top:1.5rem}
+    .preorder-offer__later{color:var(--deep);border-color:rgba(7,31,45,.22)}
+    @media(max-width:700px){.preorder-offer__inner{grid-template-columns:1fr}.preorder-offer__visual{min-height:190px;height:31vh;max-height:240px;padding:1rem 3rem}.preorder-offer__content{padding:1.4rem 1.25rem 1.5rem}.preorder-offer h2{font-size:2.15rem}.preorder-offer__value{font-size:1rem}.preorder-offer__copy{font-size:.82rem}.preorder-offer__actions{display:grid}.preorder-offer__actions .btn,.preorder-offer__later{width:100%}}
   </style>
 <link rel="stylesheet" href="conversion-review.css?v=20260907"></head>
 <body>
@@ -166,16 +184,21 @@
 
   <dialog class="preorder-offer" id="preorderOffer" aria-labelledby="preorderOfferTitle" aria-describedby="preorderOfferCopy">
     <div class="preorder-offer__inner">
-      <button class="preorder-offer__close" type="button" data-preorder-offer-close aria-label="Close pre-order offer">×</button>
-      <p class="preorder-offer__eyebrow">Pre-order offer</p>
-      <h2 id="preorderOfferTitle"><span>AUD $50 off</span><br>every pre-order board</h2>
-      <div id="preorderOfferCopy">
-        <p class="preorder-offer__value">The AUD $50 board offer is already included in the displayed pre-order prices.</p>
-        <p class="preorder-offer__copy">Pay 50% of the product price today. Pay the remaining product balance plus shipping before dispatch. Shipping is additional; check your region in the cart.</p>
-      </div>
-      <div class="preorder-offer__actions">
-        <a class="btn btn-primary" href="shop/#products" data-preorder-offer-shop>Shop pre-order boards</a>
-        <button class="preorder-offer__later" type="button" data-preorder-offer-close>Maybe later</button>
+      <button class="preorder-offer__close" type="button" data-preorder-offer-close aria-label="Close new-arrival offer">×</button>
+      <div class="preorder-offer__visual"><img src="assets/products/yoga-cruiser/glacier-blue/AP734955_yoga-cruiser_11ft_glacier-blue_amazon-01-main-package.jpg" alt="Yoga Cruiser Glacier Blue complete paddleboard package"></div>
+      <div class="preorder-offer__content">
+        <p class="preorder-offer__eyebrow">In stock · New arrival week</p>
+        <h2 id="preorderOfferTitle"><span>Free shipping</span><br>Yoga Cruiser</h2>
+        <p class="preorder-offer__price">AUD $749 <del>AUD $799</del></p>
+        <div id="preorderOfferCopy">
+          <p class="preorder-offer__value">Use this code at checkout:</p>
+          <button class="preorder-offer__code" type="button" data-promo-code-copy aria-label="Copy promo code YOGAFREESHIP"><strong>YOGAFREESHIP</strong><span>Copy code</span></button>
+          <p class="preorder-offer__copy">Order by 26 September 2026. Eligible metro and coastal delivery regions only. In-stock boards dispatch within 1 business day after successful payment.</p>
+        </div>
+        <div class="preorder-offer__actions">
+          <a class="btn btn-primary" href="products/yoga-cruiser.html?colour=glacier" data-preorder-offer-shop>Shop Glacier Blue</a>
+          <button class="preorder-offer__later" type="button" data-preorder-offer-close>Not now</button>
+        </div>
       </div>
     </div>
   </dialog>
@@ -188,6 +211,6 @@
     const heroBatch=document.querySelector("[data-hero-batch]"),heroBatchTarget=50,heroBatchAllocation=20;const updateHeroBatch=reserved=>{const committed=Math.min(heroBatchTarget,heroBatchAllocation+Math.max(0,Number(reserved)||0)),percent=Math.min(100,Math.round(committed/heroBatchTarget*100)),remaining=Math.max(0,heroBatchTarget-committed);heroBatch.querySelector("[data-hero-batch-count]").textContent=`${committed} / ${heroBatchTarget}`;heroBatch.querySelector("[data-hero-batch-bar]").style.width=`${percent}%`;heroBatch.querySelector("[role=progressbar]").setAttribute("aria-valuenow",String(committed));heroBatch.querySelector("[data-hero-batch-remaining]").textContent=remaining?`${remaining} more to production.`:"Production target reached."};const refreshHeroBatch=async()=>{if(location.protocol==="file:")return;try{const response=await fetch("/api/preorder-progress",{cache:"no-store",headers:{Accept:"application/json"}});if(!response.ok)return;const payload=await response.json(),campaign=(payload.campaigns||[]).find(item=>item.id==="paddle-launch-batch-01");updateHeroBatch(campaign?.reserved)}catch{}};updateHeroBatch(0);refreshHeroBatch();window.setInterval(refreshHeroBatch,60000);
     document.getElementById("newsletterForm").addEventListener("submit",async e=>{e.preventDefault();const form=e.currentTarget,status=document.getElementById("newsletterStatus"),button=form.querySelector("button[type=submit]");status.style.display="block";status.textContent="Joining…";button.disabled=true;let response;try{response=await fetch(form.action,{method:"POST",body:new FormData(form),headers:{Accept:"application/json"}});if(!response.ok)throw new Error();window.AURATracking?.event("sign_up",{method:"newsletter",form_location:"homepage"});status.textContent="Thank you — you are on the AURA PADDLE list.";form.reset()}catch{window.AURATracking?.event("form_submit_error",{form_type:"newsletter",error_code:window.AURATracking?.errorCode(response)||"request_failed"});status.textContent="We could not save your subscription. Please email admin@aurapaddle.com."}finally{button.disabled=false}});
   </script>
-  <script src="home-offer.js"></script>
+  <script src="home-offer.js?v=20260920-yoga-free-shipping"></script>
 </body>
 </html>
