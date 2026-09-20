@@ -97,12 +97,39 @@
   }
   function updateUrl(){const url=new URL(location.href);url.searchParams.set("size",selectedSize);url.searchParams.set("colour",selectedColour);history.replaceState({},"",url)}
 
+  function imageLightbox(){
+    let dialog=$("imageLightbox");
+    if(dialog)return dialog;
+    dialog=document.createElement("dialog");
+    dialog.id="imageLightbox";
+    dialog.className="image-lightbox";
+    dialog.setAttribute("aria-label","Enlarged product image");
+    dialog.innerHTML=`<div class="image-lightbox-frame"><button class="image-lightbox-close" type="button" aria-label="Close enlarged image">×</button><img src="" alt=""><p class="image-lightbox-caption"></p></div>`;
+    document.body.append(dialog);
+    dialog.querySelector(".image-lightbox-close").addEventListener("click",()=>dialog.close());
+    dialog.addEventListener("click",event=>{if(event.target===dialog)dialog.close()});
+    return dialog;
+  }
+
+  function openImageLightbox(src,alt,index){
+    const dialog=imageLightbox(),image=dialog.querySelector("img");
+    image.src=src;image.alt=alt;
+    dialog.querySelector(".image-lightbox-caption").textContent=`${data.name} — ${colour().name} · Image ${index+1}`;
+    if(!dialog.open)dialog.showModal();
+    track("view_item_image_zoom",{item_id:variant().sku,item_name:data.name,item_variant:[selectedSize,colour().name].join(" · "),image_position:index+1});
+  }
+
+  function showMainImage(main,src,alt,index,priority=false){
+    main.innerHTML=`<button class="gallery-zoom-trigger" type="button" aria-label="Enlarge image ${index+1}"><img src="${src}" alt="${alt}" width="900" height="900"${priority?' fetchpriority="high"':''}><span class="gallery-zoom-hint" aria-hidden="true">View larger</span></button>`;
+    main.querySelector(".gallery-zoom-trigger").addEventListener("click",()=>openImageLightbox(src,alt,index));
+  }
+
   function renderGallery(){
     const c=colour(),images=c.images||[],main=$("mainImage"),strip=$("thumbStrip");
     if(images.length){
       strip.innerHTML=images.map((src,index)=>`<button class="thumb${index===0?" active":""}" type="button" data-image="${src}" aria-label="View image ${index+1}"><img src="${src}" alt="${data.name} — ${c.name}, view ${index+1}" width="96" height="96"></button>`).join("");
-      main.innerHTML=`<img src="${images[0]}" alt="${data.name} — ${c.name}" width="900" height="900" fetchpriority="high">`;
-      strip.querySelectorAll("button").forEach((btn,index)=>btn.addEventListener("click",()=>{strip.querySelectorAll("button").forEach(x=>x.classList.remove("active"));btn.classList.add("active");main.innerHTML=`<img src="${btn.dataset.image}" alt="${data.name} — ${c.name}" width="900" height="900">`;track("view_item_image",{item_id:variant().sku,item_name:data.name,item_variant:[selectedSize,c.name].join(" · "),image_position:index+1})}));
+      showMainImage(main,images[0],`${data.name} — ${c.name}`,0,true);
+      strip.querySelectorAll("button").forEach((btn,index)=>btn.addEventListener("click",()=>{strip.querySelectorAll("button").forEach(x=>x.classList.remove("active"));btn.classList.add("active");showMainImage(main,btn.dataset.image,`${data.name} — ${c.name}, view ${index+1}`,index);track("view_item_image",{item_id:variant().sku,item_name:data.name,item_variant:[selectedSize,c.name].join(" · "),image_position:index+1})}));
     }else{
       strip.innerHTML=`<button class="thumb active" type="button" aria-label="Photography placeholder"><span class="thumb-placeholder" style="--thumb-bg:${c.swatch}">Photo<br>needed</span></button>`;
       main.innerHTML=`<div class="image-placeholder" style="--placeholder:${c.swatch}"><div class="placeholder-board"></div><strong>${c.name}</strong><span>${data.short} photography is reserved here. The final deck, bottom, detail and on-water images have not yet been supplied.</span></div>`;
@@ -124,7 +151,7 @@
     const selectedSpec=data.sizeGuide?.find(item=>item.size===selectedSize),dimensions=$("selectedDimensions"),volume=$("selectedVolume");
     if(selectedSpec&&dimensions&&volume){dimensions.textContent=`${selectedSpec.size} × ${selectedSpec.width} × ${selectedSpec.thickness}`;volume.textContent=selectedSpec.volume}
     document.querySelectorAll("[data-guide-size]").forEach(row=>row.classList.toggle("selected",row.dataset.guideSize===selectedSize));
-    if($("colourSummary"))$("colourSummary").textContent=`Colour: ${colour().name} · Change`;
+    if($("colourSummary"))$("colourSummary").textContent=`Colour option: ${colour().name} · Change`;
     renderGallery();renderPreorder();renderActions();renderPurchaseClarity();renderMobilePurchaseBar();updateUrl();
   }
 
@@ -139,6 +166,14 @@
   function productShippingClass(){
     if(!shippingRates)return null;
     return Object.entries(shippingRates.classes||{}).find(([,slugs])=>slugs.includes(data.slug))?.[0]||"quoteOnly";
+  }
+
+  function activeShippingPromotion(regionId){
+    const now=Date.now();
+    return (shippingRates?.promotions||[]).find(promotion=>
+      promotion.sku===variant().sku&&promotion.regionIds?.includes(regionId)&&
+      now>=Date.parse(promotion.startsAt)&&now<Date.parse(promotion.endsAt)
+    )||null;
   }
 
   function renderPurchaseClarity(){
@@ -175,11 +210,13 @@
       quote.hidden=false;
       return;
     }
-    let amount=Number(region[shippingClass]||0)*quantity;
+    const promotion=activeShippingPromotion(region.id);
+    const baseRate=data.slug==="yoga-cruiser"&&Number.isInteger(region.yogaCruiser)?region.yogaCruiser:region[shippingClass];
+    let amount=promotion?0:Number(baseRate||0)*quantity;
     const lengthFeet=Number((selectedSize.match(/^(\d+)/)||[])[1]||0);
     if(shippingClass==="surfboard"&&lengthFeet>=9)amount+=Number(shippingRates.longboardSurcharge||0)*quantity;
     if(!preorder){factsLabel.textContent="Total due today incl. shipping";$("clarityDueToday").textContent=moneyFromCents(price*quantity*100+amount)}
-    result.innerHTML=`<strong>Shipping: ${moneyFromCents(amount)} incl. GST</strong><span>Total including shipping: ${moneyFromCents(price*quantity*100+amount)} · ${preorder?`${moneyFromCents(price*quantity*50+amount)} payable before dispatch after today's initial payment`:`${moneyFromCents(price*quantity*100+amount)} payable today`}.</span><span>${region.id==="local-pickup"?shippingRates.localPickupNote:"Confirm that this region matches your delivery address in the cart."}</span>`;
+    result.innerHTML=`<strong>Shipping: ${moneyFromCents(amount)}${promotion?" — launch offer":" incl. GST"}</strong><span>Total including shipping: ${moneyFromCents(price*quantity*100+amount)} · ${preorder?`${moneyFromCents(price*quantity*50+amount)} payable before dispatch after today's initial payment`:`${moneyFromCents(price*quantity*100+amount)} payable today`}.</span><span>${promotion?"Free shipping offer ends 26 September 2026 for eligible metro and coastal regions.":region.id==="local-pickup"?shippingRates.localPickupNote:"Confirm that this region matches your delivery address in the cart."}</span>`;
     quote.hidden=true;
   }
 
@@ -193,7 +230,7 @@
     panel.innerHTML=`<div class="clarity-heading"><div><p class="section-label">Before you pre-order</p><h2 id="purchaseClarityTitle">What you pay, when it ships, and how delivery works.</h2></div><a href="../pre-order/">Full pre-order guide</a></div><dl class="clarity-facts"><div><dt>Due today</dt><dd id="clarityDueToday">—</dd></div><div><dt>Balance before dispatch</dt><dd id="clarityBalance">—</dd></div><div><dt>Estimated dispatch</dt><dd id="clarityDispatch">—</dd></div><div><dt>Cancellation</dt><dd id="clarityCancellation">—</dd></div></dl><div class="shipping-estimator"><label for="shippingRegion">Check shipping before checkout</label><select id="shippingRegion" aria-describedby="shippingEstimate"></select><div id="shippingEstimate" class="shipping-estimate" aria-live="polite">Loading current delivery rates…</div><a id="shippingQuote" class="btn btn-outline" href="mailto:admin@aurapaddle.com" hidden>Request a shipping quote</a><p>Australia only · Rates include GST · Free Gold Coast pickup is available.</p></div>`;
     $("purchaseActions").insertAdjacentElement("beforebegin",panel);
     $("shippingRegion").addEventListener("change",()=>{try{if($("shippingRegion").value)sessionStorage.setItem(shippingRegionKey,$("shippingRegion").value);else sessionStorage.removeItem(shippingRegionKey)}catch{}renderPurchaseClarity();track("view_shipping_rate",{item_id:variant().sku,item_name:data.name,shipping_region:$("shippingRegion").value,quantity})});
-    fetch("../shipping-rates.json",{headers:{Accept:"application/json"}}).then(response=>response.ok?response.json():Promise.reject()).then(payload=>{shippingRates=payload;renderPurchaseClarity()}).catch(()=>{$("shippingEstimate").textContent="Current rates could not be loaded. Please request a shipping quote.";$("shippingQuote").hidden=false});
+    fetch("../shipping-rates.json",{headers:{Accept:"application/json"}}).then(response=>response.ok?response.json():Promise.reject()).then(payload=>{shippingRates=payload;renderPreorder();renderPurchaseClarity()}).catch(()=>{$("shippingEstimate").textContent="Current rates could not be loaded. Please request a shipping quote.";$("shippingQuote").hidden=false});
   }
 
   function renderPreorder(){
@@ -207,7 +244,8 @@
     const showOriginal=!!v.retailAUD&&numericPrice(v)<Number(v.retailAUD);
     $("originalPrice").hidden=!showOriginal;$("originalPrice").textContent=showOriginal?`Standard AUD $${v.retailAUD}`:"";
     const item=campaign.itemLabel||"board";
-    $("priceNote").textContent=preorder?(v.retailAUD?`AUD $${(numericPrice(v)/2).toFixed(2)} today per ${item} · 50% initial payment. AUD $${campaign.discountAUD} incentive included in the full price.`:`Eligible ${item}s receive an AUD $${campaign.discountAUD} pre-order incentive after the standard retail price is confirmed · 50% initial payment required`):v.saleAUD?"In-stock offer · Pay in full at checkout, including the published shipping rate.":"Australia-only range · Shipping calculated separately · See policy terms";
+    const launchPromotion=(shippingRates?.promotions||[]).find(promotion=>promotion.sku===v.sku&&Date.now()>=Date.parse(promotion.startsAt)&&Date.now()<Date.parse(promotion.endsAt));
+    $("priceNote").textContent=preorder?(v.retailAUD?`AUD $${(numericPrice(v)/2).toFixed(2)} today per ${item} · 50% initial payment. AUD $${campaign.discountAUD} incentive included in the full price.`:`Eligible ${item}s receive an AUD $${campaign.discountAUD} pre-order incentive after the standard retail price is confirmed · 50% initial payment required`):launchPromotion?"New arrival offer · Free shipping to eligible metro and coastal regions through 26 September 2026.":v.saleAUD?"In-stock offer · Pay in full at checkout, including the published shipping rate.":"Australia-only range · Shipping calculated separately · See policy terms";
     $("preorderPanel").hidden=!preorder;
     let guideLink=$("preorderGuide");
     if(!guideLink){guideLink=document.createElement("a");guideLink.id="preorderGuide";guideLink.className="preorder-guide";guideLink.href="../pre-order/";guideLink.textContent="Understand the complete pre-order process →";$("preorderCopy").insertAdjacentElement("afterend",guideLink)}
@@ -282,9 +320,13 @@
     const included=[...document.querySelectorAll(".detail-head")].find(el=>el.textContent.includes("What's included"));
     if(included){included.parentElement.classList.add("open");included.setAttribute("aria-expanded","true")}
     // Keep all image assets, bringing kit and usage context forward. The hero stays first.
-    for(const option of data.colours){const images=option.images||[];option.images=[...images.filter((src,i)=>i===0),...images.filter(src=>src.includes("full-kit")).map(src=>src.replace(/\.jpg$/,".webp")),...images.filter(src=>src.includes("lifestyle")),...images.filter((src,i)=>i!==0&&!src.includes("full-kit")&&!src.includes("lifestyle"))]}
+    for(const option of data.colours){
+      if(option.key==="glacier")continue;
+      const images=option.images||[];option.images=[...images.filter((src,i)=>i===0),...images.filter(src=>src.includes("full-kit")).map(src=>src.replace(/\.jpg$/,".webp")),...images.filter(src=>src.includes("lifestyle")),...images.filter((src,i)=>i!==0&&!src.includes("full-kit")&&!src.includes("lifestyle"))]
+    }
     const glacier=data.colours.find(option=>option.key==="glacier");
-    if(glacier)glacier.images.splice(2,0,"../assets/products/yoga-cruiser/glacier-blue/yoga-on-water-1200.jpg");
+    const yogaOnWater="../assets/products/yoga-cruiser/glacier-blue/yoga-on-water-1200.jpg";
+    if(glacier&&!glacier.images.includes(yogaOnWater))glacier.images.splice(2,0,yogaOnWater);
     const demo=document.createElement("section");demo.className="yoga-demo";demo.innerHTML='<div class="wrap"><div><p class="eyebrow">See the board in use</p><h2>From the kit to the water.</h2><p>Watch our existing Yoga Cruiser demonstration, then explore the full kit and board details above.</p><p><a href="../our-story/">Meet AURA PADDLE →</a> · <a href="../contact/">Ask our Australian team →</a></p><p class="demo-note">Demonstration footage is not a safety guide. Follow local conditions and the care &amp; safety guidance.</p></div><video controls playsinline preload="none" poster="../assets/products/yoga-cruiser/glacier-blue/yoga-on-water-1200.jpg" aria-label="Yoga Cruiser product and on-water demonstration"><source src="../assets/products/yoga-cruiser/glacier-blue/yoga-demo-20260902.mp4" type="video/mp4"></video></div>';
     document.querySelector(".answer-grid").before(demo);
     const reviews=document.querySelector(".reviews-grid"),reviewIntro=document.querySelector(".reviews-head");

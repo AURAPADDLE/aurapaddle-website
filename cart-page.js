@@ -40,17 +40,18 @@
   const totalRow=document.createElement("div");totalRow.className="summary-row order-total";totalRow.innerHTML='<span>Total including shipping</span><strong id="orderTotal">Select region</strong>';
   document.getElementById("beforeDispatch").parentElement.after(totalRow);
   const regions={
-    "local-pickup":{label:"Local pickup — Gold Coast, QLD",isup:0,surfboard:0},
-    "gold-coast-brisbane":{label:"Gold Coast / Brisbane Metro",isup:4900,surfboard:7900},
-    "qld-nsw-main":{label:"QLD / NSW major cities and coastal areas",isup:7900,surfboard:10900},
-    "canberra-melbourne":{label:"Canberra / Melbourne Metro",isup:9900,surfboard:14900},
-    adelaide:{label:"Adelaide Metro",isup:12900,surfboard:17900},
-    perth:{label:"Perth Metro",isup:17900,surfboard:22900},
-    tasmania:{label:"Tasmania",isup:14900,surfboard:22900},
+    "local-pickup":{label:"Local pickup — Gold Coast, QLD",isup:0,yogaCruiser:0,surfboard:0},
+    "gold-coast-brisbane":{label:"Gold Coast / Brisbane Metro",isup:4900,yogaCruiser:2500,surfboard:7900},
+    "qld-nsw-main":{label:"QLD / NSW major cities and coastal areas",isup:7900,yogaCruiser:4800,surfboard:10900},
+    "canberra-melbourne":{label:"Canberra / Melbourne Metro",isup:9900,yogaCruiser:4600,surfboard:14900},
+    adelaide:{label:"Adelaide Metro",isup:12900,yogaCruiser:12900,surfboard:17900},
+    perth:{label:"Perth Metro",isup:17900,yogaCruiser:17900,surfboard:22900},
+    tasmania:{label:"Tasmania",isup:14900,yogaCruiser:14900,surfboard:22900},
     remote:{label:"NT, regional, remote and island destinations",quoteRequired:true}
   };
   const isupSlugs=new Set(["yoga-cruiser","angler-fishing","touring-performance","coast-go"]);
   const surfboardSlugs=new Set(["gannet","current","meridian"]);
+  const yogaLaunchPromotion={sku:"AP734955",startsAt:Date.parse("2026-09-20T00:00:00+10:00"),endsAt:Date.parse("2026-09-27T00:00:00+10:00"),regionIds:new Set(["gold-coast-brisbane","qld-nsw-main","canberra-melbourne"])};
 
   document.querySelector(".intro").textContent="Review each SKU, quantity, delivery region and payment amount before continuing to Stripe’s secure checkout.";
   empty.querySelector("p").textContent="Choose a board to start your order.";
@@ -79,14 +80,17 @@
     if(regionId==="local-pickup")return {selected:true,total:0,quoteRequired:false,label:region.label,pickup:true};
     if(region.quoteRequired)return {selected:true,total:null,quoteRequired:true,label:region.label};
     const hasAngler=items.some(item=>slugFor(item)==="angler-fishing");
-    let total=0,surfboardQuantity=0,quoteRequired=false;
+    let total=0,surfboardQuantity=0,quoteRequired=false,promotionApplied=false;
     for(const item of items){
       const slug=slugFor(item);
       if(item.sku==="AP667703"){
         if(!hasAngler)quoteRequired=true;
         continue;
       }
-      if(isupSlugs.has(slug))total+=region.isup*item.quantity;
+      const promotionActive=item.sku===yogaLaunchPromotion.sku&&yogaLaunchPromotion.regionIds.has(regionId)&&Date.now()>=yogaLaunchPromotion.startsAt&&Date.now()<yogaLaunchPromotion.endsAt;
+      if(promotionActive)promotionApplied=true;
+      else if(slug==="yoga-cruiser")total+=region.yogaCruiser*item.quantity;
+      else if(isupSlugs.has(slug))total+=region.isup*item.quantity;
       else if(surfboardSlugs.has(slug)){
         surfboardQuantity+=item.quantity;
         total+=region.surfboard*item.quantity;
@@ -94,7 +98,7 @@
       }else quoteRequired=true;
     }
     if(surfboardQuantity>1)quoteRequired=true;
-    return {selected:true,total:quoteRequired?null:total,quoteRequired,label:region.label};
+    return {selected:true,total:quoteRequired?null:total,quoteRequired,label:region.label,promotionApplied};
   }
 
   function render(){
@@ -139,9 +143,9 @@
       beforeDispatch.textContent=availableOnly?"Request freight quote":`${money(remaining)} + freight quote`;
       shippingHelp.innerHTML=availableOnly?'Please <a href="mailto:admin@aurapaddle.com?subject=Glacier%20Blue%20freight%20quote">contact AURA PADDLE for a freight quote</a> before payment and the dispatch window.':"AURA PADDLE will confirm the best available freight price before dispatch.";
     }else{
-      shippingAmount.textContent=money(shipping.total);
+      shippingAmount.textContent=shipping.promotionApplied?"Free — launch offer":money(shipping.total);
       beforeDispatch.textContent=availableOnly?"Paid today":money(remaining+shipping.total);
-      shippingHelp.textContent=availableOnly?"This shipping amount is included in today's secure payment.":"This shipping amount is recorded now and paid with the remaining product balance before dispatch.";
+      shippingHelp.textContent=shipping.promotionApplied?"Yoga Cruiser Glacier Blue launch offer ends 26 September 2026. Eligible metro and coastal regions only.":availableOnly?"This shipping amount is included in today's secure payment.":"This shipping amount is recorded now and paid with the remaining product balance before dispatch.";
     }
     checkout.textContent=availableOnly?"PAY IN FULL SECURELY":"PAY 50% SECURELY";
     checkout.disabled=checkoutPending||location.protocol==="file:"||config.enabled===false||!shipping.selected||(hasPreorder&&hasAvailable)||(availableOnly&&shipping.quoteRequired);

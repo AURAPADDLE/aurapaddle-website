@@ -28,27 +28,36 @@ export function loadShippingRates(){
   const byId=new Map();
   for(const region of parsed.regions){
     if(!/^[a-z0-9-]+$/.test(region.id)||byId.has(region.id))throw new Error(`Invalid or duplicate shipping region: ${region.id}`);
-    if(!region.quoteRequired&&(!Number.isInteger(region.isup)||!Number.isInteger(region.surfboard)))throw new Error(`Invalid shipping prices for ${region.id}`);
+    if(!region.quoteRequired&&(!Number.isInteger(region.isup)||!Number.isInteger(region.surfboard)||("yogaCruiser" in region&&!Number.isInteger(region.yogaCruiser))))throw new Error(`Invalid shipping prices for ${region.id}`);
     byId.set(region.id,Object.freeze(region));
   }
   return {...parsed,byId};
 }
 
-export function calculateShipping(items,regionId,rates=loadShippingRates()){
+export function calculateShipping(items,regionId,rates=loadShippingRates(),now=Date.now()){
   const region=rates.byId.get(String(regionId||""));
   if(!region)throw new Error("Select a valid Australian delivery region.");
   if(region.id==="local-pickup")return {regionId:region.id,label:region.label,amount:0,quoteRequired:false,pickup:true};
   if(region.quoteRequired)return {regionId:region.id,label:region.label,amount:null,quoteRequired:true,pickup:false};
   const isup=new Set(rates.classes.isup),surfboard=new Set(rates.classes.surfboard);
   const hasAngler=items.some(item=>item.variant.slug==="angler-fishing");
+  const activePromotions=(rates.promotions||[]).filter(promotion=>
+    promotion.regionIds?.includes(region.id)&&
+    Number.isFinite(Date.parse(promotion.startsAt))&&Number.isFinite(Date.parse(promotion.endsAt))&&
+    now>=Date.parse(promotion.startsAt)&&now<Date.parse(promotion.endsAt)
+  );
   let amount=0,surfboardQuantity=0,quoteRequired=false;
+  const promotionIds=new Set();
   for(const item of items){
     const slug=item.variant.slug;
     if(item.variant.sku==="AP667703"){
       if(!hasAngler)quoteRequired=true;
       continue;
     }
-    if(isup.has(slug))amount+=region.isup*item.quantity;
+    const promotion=activePromotions.find(entry=>entry.sku===item.variant.sku);
+    if(promotion)promotionIds.add(promotion.id);
+    else if(slug==="yoga-cruiser"&&Number.isInteger(region.yogaCruiser))amount+=region.yogaCruiser*item.quantity;
+    else if(isup.has(slug))amount+=region.isup*item.quantity;
     else if(surfboard.has(slug)){
       surfboardQuantity+=item.quantity;
       amount+=region.surfboard*item.quantity;
@@ -56,7 +65,7 @@ export function calculateShipping(items,regionId,rates=loadShippingRates()){
     }else quoteRequired=true;
   }
   if(surfboardQuantity>1)quoteRequired=true;
-  return {regionId:region.id,label:region.label,amount:quoteRequired?null:amount,quoteRequired,pickup:false};
+  return {regionId:region.id,label:region.label,amount:quoteRequired?null:amount,quoteRequired,pickup:false,promotionIds:[...promotionIds]};
 }
 
 export function loadStripeMap(catalog){

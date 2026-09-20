@@ -9,7 +9,7 @@ import {adminOrderEmailContent,customerOrderEmailContent,milestoneOrderEmailCont
 const catalog=loadCatalog();
 const shippingRates=loadShippingRates();
 const stripeMap=loadStripeMap(catalog);
-const shippingFor=(items,regionId="gold-coast-brisbane")=>calculateShipping(items,regionId,shippingRates);
+const shippingFor=(items,regionId="gold-coast-brisbane",now=Date.parse("2026-09-28T00:00:00+10:00"))=>calculateShipping(items,regionId,shippingRates,now);
 
 test("request URL parsing rejects malformed paths without escaping the server error handler",()=>{
   assert.equal(parseRequestUrl("/api/health","https://www.aurapaddle.com").pathname,"/api/health");
@@ -63,12 +63,12 @@ test("Fishing Rack is AUD 129 alone and AUD 69 per paired Angler board",()=>{
 
 test("in-stock checkout collects full payment and shipping, pre-fills email and excludes Afterpay",()=>{
   const variant=catalog.bySku.get("AP734955");
-  const items=[{variant,quantity:2}],params=buildCheckoutParams({items,priceBySku:stripeMap.bySku,siteUrl:"http://localhost:4242",returnPath:"/products/yoga-cruiser.html?colour=glacier",shipping:shippingFor(items),customerEmail:" Buyer@Example.com ",recoveryEmailConsent:true,integrationIdentifier:"aura_cart_abcdefgh"});
+  const items=[{variant,quantity:2}],params=buildCheckoutParams({items,priceBySku:stripeMap.bySku,siteUrl:"http://localhost:4242",returnPath:"/products/yoga-cruiser.html?colour=glacier",shipping:calculateShipping(items,"gold-coast-brisbane",shippingRates,Date.parse("2026-09-28T00:00:00+10:00")),customerEmail:" Buyer@Example.com ",recoveryEmailConsent:true,integrationIdentifier:"aura_cart_abcdefgh"});
   assert.equal(params.get("line_items[0][price]"),null);
   assert.equal(params.get("line_items[0][price_data][product]"),stripeMap.bySku.get("AP734955").productId);
   assert.equal(params.get("line_items[0][price_data][unit_amount]"),"74900");
   assert.equal(params.get("line_items[0][quantity]"),"2");
-  assert.equal(params.get("line_items[1][price_data][unit_amount]"),"9800");
+  assert.equal(params.get("line_items[1][price_data][unit_amount]"),"5000");
   assert.equal(params.get("metadata[aura_payment_stage]"),"paid_in_full");
   assert.equal(params.get("payment_method_types[0]"),null);
   assert.equal(params.get("adaptive_pricing[enabled]"),"false");
@@ -140,9 +140,9 @@ test("multi-SKU pre-order cart is merged; mixed stock and pre-order is rejected"
 test("shipping regions use the approved iSUP and surfboard prices",()=>{
   const isup=normaliseCheckoutItems([{sku:"AP734955",quantity:1}],catalog);
   assert.equal(shippingFor(isup,"local-pickup").amount,0);
-  assert.equal(shippingFor(isup,"gold-coast-brisbane").amount,4900);
-  assert.equal(shippingFor(isup,"qld-nsw-main").amount,7900);
-  assert.equal(shippingFor(isup,"canberra-melbourne").amount,9900);
+  assert.equal(shippingFor(isup,"gold-coast-brisbane").amount,2500);
+  assert.equal(shippingFor(isup,"qld-nsw-main").amount,4800);
+  assert.equal(shippingFor(isup,"canberra-melbourne").amount,4600);
   assert.equal(shippingFor(isup,"adelaide").amount,12900);
   assert.equal(shippingFor(isup,"perth").amount,17900);
   assert.equal(shippingFor(isup,"tasmania").amount,14900);
@@ -155,13 +155,22 @@ test("shipping regions use the approved iSUP and surfboard prices",()=>{
   assert.equal(shippingFor([{variant:gannetVariant,quantity:2}],"qld-nsw-main").quoteRequired,true);
 });
 
+test("Yoga Cruiser Glacier Blue launch promotion waives eligible shipping through 26 September",()=>{
+  const items=normaliseCheckoutItems([{sku:"AP734955",quantity:1}],catalog);
+  const active=shippingFor(items,"qld-nsw-main",Date.parse("2026-09-26T23:59:00+10:00"));
+  assert.equal(active.amount,0);
+  assert.deepEqual(active.promotionIds,["yoga-glacier-launch-free-shipping"]);
+  assert.equal(shippingFor(items,"adelaide",Date.parse("2026-09-26T12:00:00+10:00")).amount,12900);
+  assert.equal(shippingFor(items,"qld-nsw-main",Date.parse("2026-09-27T00:00:00+10:00")).amount,4800);
+});
+
 test("in-stock Checkout charges shipping today; quote-required region requires contact",()=>{
   const items=normaliseCheckoutItems([{sku:"AP734955",quantity:1}],catalog),shipping=shippingFor(items,"qld-nsw-main");
   const params=buildCheckoutParams({items,priceBySku:stripeMap.bySku,siteUrl:"http://localhost:4242",returnPath:"/cart-preview.html",shipping});
   assert.equal(params.get("metadata[aura_shipping_region]"),"qld-nsw-main");
-  assert.equal(params.get("metadata[aura_shipping_amount]"),"7900");
+  assert.equal(params.get("metadata[aura_shipping_amount]"),"4800");
   assert.equal(params.get("line_items[0][price_data][unit_amount]"),"74900");
-  assert.equal(params.get("line_items[1][price_data][unit_amount]"),"7900");
+  assert.equal(params.get("line_items[1][price_data][unit_amount]"),"4800");
   assert.match(params.get("custom_text[submit][message]"),/full product price and published shipping/);
   assert.throws(()=>buildCheckoutParams({items,siteUrl:"http://localhost:4242",returnPath:"/cart/",shipping:shippingFor(items,"remote")}),/freight quote/);
   const pickup=shippingFor(items,"local-pickup"),pickupParams=buildCheckoutParams({items,priceBySku:stripeMap.bySku,siteUrl:"http://localhost:4242",returnPath:"/cart-preview.html",shipping:pickup});
