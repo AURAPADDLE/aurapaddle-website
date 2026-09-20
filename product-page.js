@@ -197,8 +197,9 @@
     quote.href=shippingQuoteUrl();
     if(!shippingRates){result.textContent="Loading current delivery rates…";quote.hidden=true;return}
     if(!select.options.length){
-      select.innerHTML=`<option value="">Choose delivery region</option>${shippingRates.regions.map(region=>`<option value="${region.id}">${region.label}</option>`).join("")}`;
-      try{const saved=sessionStorage.getItem(shippingRegionKey);if(shippingRates.regions.some(region=>region.id===saved))select.value=saved}catch{}
+      const visibleRegions=shippingRates.regions.filter(region=>!region.hidden);
+      select.innerHTML=`<option value="">Choose delivery region</option>${visibleRegions.map(region=>`<option value="${region.id}">${region.label}</option>`).join("")}`;
+      try{const saved=sessionStorage.getItem(shippingRegionKey),normalisedSaved=saved==="canberra-melbourne"?"qld-nsw-main":saved;if(visibleRegions.some(region=>region.id===normalisedSaved))select.value=normalisedSaved;if(saved!==normalisedSaved&&normalisedSaved)sessionStorage.setItem(shippingRegionKey,normalisedSaved)}catch{}
     }
     const region=shippingRates.regions.find(item=>item.id===select.value),shippingClass=productShippingClass();
     if(!region){result.textContent="Shipping is additional. Choose a region to see your total before payment.";quote.hidden=true;return}
@@ -212,11 +213,11 @@
     }
     const promotion=activeShippingPromotion(region.id);
     const baseRate=data.slug==="yoga-cruiser"&&Number.isInteger(region.yogaCruiser)?region.yogaCruiser:region[shippingClass];
-    let amount=promotion?0:Number(baseRate||0)*quantity;
+    let amount=promotion&&!promotion.requiresCode?0:Number(baseRate||0)*quantity;
     const lengthFeet=Number((selectedSize.match(/^(\d+)/)||[])[1]||0);
     if(shippingClass==="surfboard"&&lengthFeet>=9)amount+=Number(shippingRates.longboardSurcharge||0)*quantity;
     if(!preorder){factsLabel.textContent="Total due today incl. shipping";$("clarityDueToday").textContent=moneyFromCents(price*quantity*100+amount)}
-    result.innerHTML=`<strong>Shipping: ${moneyFromCents(amount)}${promotion?" — launch offer":" incl. GST"}</strong><span>Total including shipping: ${moneyFromCents(price*quantity*100+amount)} · ${preorder?`${moneyFromCents(price*quantity*50+amount)} payable before dispatch after today's initial payment`:`${moneyFromCents(price*quantity*100+amount)} payable today`}.</span><span>${promotion?"Free shipping offer ends 26 September 2026 for eligible metro and coastal regions.":region.id==="local-pickup"?shippingRates.localPickupNote:"Confirm that this region matches your delivery address in the cart."}</span>`;
+    result.innerHTML=`<strong>Shipping: ${moneyFromCents(amount)} incl. GST</strong><span>Total before promo code: ${moneyFromCents(price*quantity*100+amount)} · ${preorder?`${moneyFromCents(price*quantity*50+amount)} payable before dispatch after today's initial payment`:`${moneyFromCents(price*quantity*100+amount)} payable today`}.</span><span>${promotion?.requiresCode?`Use code ${promotion.code} in the cart for free shipping through 26 September 2026.`:promotion?"Free shipping offer ends 26 September 2026 for eligible metro and coastal regions.":region.id==="local-pickup"?shippingRates.localPickupNote:"Confirm that this region matches your delivery address in the cart."}</span>`;
     quote.hidden=true;
   }
 
@@ -245,7 +246,7 @@
     $("originalPrice").hidden=!showOriginal;$("originalPrice").textContent=showOriginal?`Standard AUD $${v.retailAUD}`:"";
     const item=campaign.itemLabel||"board";
     const launchPromotion=(shippingRates?.promotions||[]).find(promotion=>promotion.sku===v.sku&&Date.now()>=Date.parse(promotion.startsAt)&&Date.now()<Date.parse(promotion.endsAt));
-    $("priceNote").textContent=preorder?(v.retailAUD?`AUD $${(numericPrice(v)/2).toFixed(2)} today per ${item} · 50% initial payment. AUD $${campaign.discountAUD} incentive included in the full price.`:`Eligible ${item}s receive an AUD $${campaign.discountAUD} pre-order incentive after the standard retail price is confirmed · 50% initial payment required`):launchPromotion?"New arrival offer · Free shipping to eligible metro and coastal regions through 26 September 2026.":v.saleAUD?"In-stock offer · Pay in full at checkout, including the published shipping rate.":"Australia-only range · Shipping calculated separately · See policy terms";
+    $("priceNote").textContent=preorder?(v.retailAUD?`AUD $${(numericPrice(v)/2).toFixed(2)} today per ${item} · 50% initial payment. AUD $${campaign.discountAUD} incentive included in the full price.`:`Eligible ${item}s receive an AUD $${campaign.discountAUD} pre-order incentive after the standard retail price is confirmed · 50% initial payment required`):launchPromotion?.requiresCode?`New arrival offer · Use code ${launchPromotion.code} for eligible free shipping through 26 September 2026.`:launchPromotion?"New arrival offer · Free shipping to eligible metro and coastal regions through 26 September 2026.":v.saleAUD?"In-stock offer · Pay in full at checkout, including the published shipping rate.":"Australia-only range · Shipping calculated separately · See policy terms";
     $("preorderPanel").hidden=!preorder;
     let guideLink=$("preorderGuide");
     if(!guideLink){guideLink=document.createElement("a");guideLink.id="preorderGuide";guideLink.className="preorder-guide";guideLink.href="../pre-order/";guideLink.textContent="Understand the complete pre-order process →";$("preorderCopy").insertAdjacentElement("afterend",guideLink)}

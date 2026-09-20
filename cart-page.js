@@ -14,6 +14,10 @@
   const checkoutLabel=checkout.textContent;
   const error=document.getElementById("checkoutError");
   const regionSelect=document.getElementById("shippingRegion");
+  const legacyRegionOption=regionSelect.querySelector('option[value="canberra-melbourne"]');
+  if(legacyRegionOption)legacyRegionOption.remove();
+  const mergedRegionOption=regionSelect.querySelector('option[value="qld-nsw-main"]');
+  if(mergedRegionOption)mergedRegionOption.textContent="QLD / NSW / ACT major cities, coastal areas & Melbourne Metro";
   const recoveryEmailConsent=document.getElementById("recoveryEmailConsent");
   const checkoutEmail=document.createElement("input");
   checkoutEmail.id="checkoutEmail";
@@ -39,11 +43,17 @@
   const regionStorageKey="aura-shipping-region-v1";
   const totalRow=document.createElement("div");totalRow.className="summary-row order-total";totalRow.innerHTML='<span>Total including shipping</span><strong id="orderTotal">Select region</strong>';
   document.getElementById("beforeDispatch").parentElement.after(totalRow);
+  const promoBlock=document.createElement("div");
+  promoBlock.className="promo-code";
+  promoBlock.innerHTML='<label for="promoCode">Promo code</label><div class="promo-code-controls"><input id="promoCode" name="promoCode" autocomplete="off" maxlength="32" placeholder="Enter promo code"><button id="applyPromoCode" type="button">Apply</button></div><p id="promoHelp">Yoga Cruiser Glacier Blue: use YOGAFREESHIP for eligible free shipping through 26 September.</p>';
+  document.querySelector(".shipping-choice").after(promoBlock);
+  const promoInput=document.getElementById("promoCode"),applyPromoButton=document.getElementById("applyPromoCode"),promoHelp=document.getElementById("promoHelp");
+  let appliedPromoCode="";
   const regions={
     "local-pickup":{label:"Local pickup — Gold Coast, QLD",isup:0,yogaCruiser:0,surfboard:0},
     "gold-coast-brisbane":{label:"Gold Coast / Brisbane Metro",isup:4900,yogaCruiser:2500,surfboard:7900},
-    "qld-nsw-main":{label:"QLD / NSW major cities and coastal areas",isup:7900,yogaCruiser:4800,surfboard:10900},
-    "canberra-melbourne":{label:"Canberra / Melbourne Metro",isup:9900,yogaCruiser:4600,surfboard:14900},
+    "qld-nsw-main":{label:"QLD / NSW / ACT major cities, coastal areas & Melbourne Metro",isup:9900,yogaCruiser:4500,surfboard:14900},
+    "canberra-melbourne":{aliasTo:"qld-nsw-main"},
     adelaide:{label:"Adelaide Metro",isup:12900,yogaCruiser:12900,surfboard:17900},
     perth:{label:"Perth Metro",isup:17900,yogaCruiser:17900,surfboard:22900},
     tasmania:{label:"Tasmania",isup:14900,yogaCruiser:14900,surfboard:22900},
@@ -51,7 +61,7 @@
   };
   const isupSlugs=new Set(["yoga-cruiser","angler-fishing","touring-performance","coast-go"]);
   const surfboardSlugs=new Set(["gannet","current","meridian"]);
-  const yogaLaunchPromotion={sku:"AP734955",startsAt:Date.parse("2026-09-20T00:00:00+10:00"),endsAt:Date.parse("2026-09-27T00:00:00+10:00"),regionIds:new Set(["gold-coast-brisbane","qld-nsw-main","canberra-melbourne"])};
+  const yogaLaunchPromotion={code:"YOGAFREESHIP",sku:"AP734955",startsAt:Date.parse("2026-09-20T00:00:00+10:00"),endsAt:Date.parse("2026-09-27T00:00:00+10:00"),regionIds:new Set(["gold-coast-brisbane","qld-nsw-main"])};
 
   document.querySelector(".intro").textContent="Review each SKU, quantity, delivery region and payment amount before continuing to Stripe’s secure checkout.";
   empty.querySelector("p").textContent="Choose a board to start your order.";
@@ -74,10 +84,12 @@
     return String(item.productUrl||"").match(/products\/([^/?]+)\.html/)?.[1]||"";
   }
 
-  function shippingFor(items,regionId){
-    const region=regions[regionId];
+  function shippingFor(items,regionId,promoCode=appliedPromoCode){
+    const requestedRegion=regions[regionId];
+    const resolvedRegionId=requestedRegion?.aliasTo||regionId;
+    const region=regions[resolvedRegionId];
     if(!region)return {selected:false,total:null,quoteRequired:false};
-    if(regionId==="local-pickup")return {selected:true,total:0,quoteRequired:false,label:region.label,pickup:true};
+    if(resolvedRegionId==="local-pickup")return {selected:true,total:0,quoteRequired:false,label:region.label,pickup:true,regionId:resolvedRegionId};
     if(region.quoteRequired)return {selected:true,total:null,quoteRequired:true,label:region.label};
     const hasAngler=items.some(item=>slugFor(item)==="angler-fishing");
     let total=0,surfboardQuantity=0,quoteRequired=false,promotionApplied=false;
@@ -87,7 +99,7 @@
         if(!hasAngler)quoteRequired=true;
         continue;
       }
-      const promotionActive=item.sku===yogaLaunchPromotion.sku&&yogaLaunchPromotion.regionIds.has(regionId)&&Date.now()>=yogaLaunchPromotion.startsAt&&Date.now()<yogaLaunchPromotion.endsAt;
+      const promotionActive=item.sku===yogaLaunchPromotion.sku&&String(promoCode||"").trim().toUpperCase()===yogaLaunchPromotion.code&&yogaLaunchPromotion.regionIds.has(resolvedRegionId)&&Date.now()>=yogaLaunchPromotion.startsAt&&Date.now()<yogaLaunchPromotion.endsAt;
       if(promotionActive)promotionApplied=true;
       else if(slug==="yoga-cruiser")total+=region.yogaCruiser*item.quantity;
       else if(isupSlugs.has(slug))total+=region.isup*item.quantity;
@@ -98,7 +110,7 @@
       }else quoteRequired=true;
     }
     if(surfboardQuantity>1)quoteRequired=true;
-    return {selected:true,total:quoteRequired?null:total,quoteRequired,label:region.label,promotionApplied};
+    return {selected:true,total:quoteRequired?null:total,quoteRequired,label:region.label,promotionApplied,regionId:resolvedRegionId};
   }
 
   function render(){
@@ -143,14 +155,19 @@
       beforeDispatch.textContent=availableOnly?"Request freight quote":`${money(remaining)} + freight quote`;
       shippingHelp.innerHTML=availableOnly?'Please <a href="mailto:admin@aurapaddle.com?subject=Glacier%20Blue%20freight%20quote">contact AURA PADDLE for a freight quote</a> before payment and the dispatch window.':"AURA PADDLE will confirm the best available freight price before dispatch.";
     }else{
-      shippingAmount.textContent=shipping.promotionApplied?"Free — launch offer":money(shipping.total);
+      shippingAmount.textContent=shipping.promotionApplied?"Free — promo applied":money(shipping.total);
       beforeDispatch.textContent=availableOnly?"Paid today":money(remaining+shipping.total);
-      shippingHelp.textContent=shipping.promotionApplied?"Yoga Cruiser Glacier Blue launch offer ends 26 September 2026. Eligible metro and coastal regions only.":availableOnly?"This shipping amount is included in today's secure payment.":"This shipping amount is recorded now and paid with the remaining product balance before dispatch.";
+      shippingHelp.textContent=shipping.promotionApplied?"YOGAFREESHIP applied. Free shipping ends 26 September 2026 for eligible regions.":availableOnly?"This shipping amount is included in today's secure payment.":"This shipping amount is recorded now and paid with the remaining product balance before dispatch.";
     }
+    const promoValid=appliedPromoCode===yogaLaunchPromotion.code&&shipping.promotionApplied;
+    promoHelp.className=promoValid?"success":appliedPromoCode?"error":"";
+    promoHelp.textContent=promoValid?"YOGAFREESHIP applied — this order qualifies for free shipping.":appliedPromoCode?"YOGAFREESHIP is not available for the current product, region or date.":"Yoga Cruiser Glacier Blue: use YOGAFREESHIP for eligible free shipping through 26 September.";
     checkout.textContent=availableOnly?"PAY IN FULL SECURELY":"PAY 50% SECURELY";
     checkout.disabled=checkoutPending||location.protocol==="file:"||config.enabled===false||!shipping.selected||(hasPreorder&&hasAvailable)||(availableOnly&&shipping.quoteRequired);
     regionSelect.disabled=checkoutPending;
     checkoutEmail.disabled=checkoutPending;
+    promoInput.disabled=checkoutPending;
+    applyPromoButton.disabled=checkoutPending;
     if(recoveryEmailConsent)recoveryEmailConsent.disabled=checkoutPending;
     list.querySelectorAll("button").forEach(button=>{button.disabled=checkoutPending;});
     error.style.display="none";
@@ -175,7 +192,7 @@
     render();
   });
 
-  try{const saved=sessionStorage.getItem(regionStorageKey);regionSelect.value=regions[saved]?saved:""}catch{regionSelect.value=""}
+  try{const saved=sessionStorage.getItem(regionStorageKey),normalisedSaved=saved==="canberra-melbourne"?"qld-nsw-main":saved;regionSelect.value=regions[normalisedSaved]?normalisedSaved:"";if(saved!==normalisedSaved&&normalisedSaved)sessionStorage.setItem(regionStorageKey,normalisedSaved)}catch{regionSelect.value=""}
   regionSelect.addEventListener("change",()=>{
     try{if(regionSelect.value)sessionStorage.setItem(regionStorageKey,regionSelect.value);
     else sessionStorage.removeItem(regionStorageKey)}catch{}
@@ -185,6 +202,17 @@
     }
     render();
   });
+
+  applyPromoButton.addEventListener("click",()=>{
+    const code=promoInput.value.trim().toUpperCase();
+    if(!code){appliedPromoCode="";render();return}
+    if(code!==yogaLaunchPromotion.code){appliedPromoCode="INVALID";promoHelp.className="error";promoHelp.textContent="Promo code not recognised.";return}
+    appliedPromoCode=code;
+    const shipping=shippingFor(cart.read(),regionSelect.value,appliedPromoCode);
+    track("apply_promotion",{promotion_id:"yoga-glacier-launch-free-shipping",promotion_name:"Yoga Cruiser Glacier Blue free shipping",eligible:shipping.promotionApplied});
+    render();
+  });
+  promoInput.addEventListener("keydown",event=>{if(event.key==="Enter"){event.preventDefault();applyPromoButton.click()}});
 
   checkout.addEventListener("click",async()=>{
     if(checkoutPending||checkout.disabled)return;
@@ -209,7 +237,8 @@
     let response;
     try{
       const attribution=await window.AURAAttribution?.snapshot?.();
-      response=await fetch(config.checkoutEndpoint||"/api/checkout",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({items:items.map(({sku,quantity})=>({sku,quantity})),shippingRegion,returnPath:location.pathname,customerEmail,recoveryEmailConsent:recoveryConsent,requestId:globalThis.crypto?.randomUUID?.()||`${Date.now()}-${Math.random().toString(36).slice(2)}`,attribution})});
+      const currentShipping=shippingFor(items,shippingRegion);
+      response=await fetch(config.checkoutEndpoint||"/api/checkout",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({items:items.map(({sku,quantity})=>({sku,quantity})),shippingRegion,promoCode:currentShipping.promotionApplied?appliedPromoCode:"",returnPath:location.pathname,customerEmail,recoveryEmailConsent:recoveryConsent,requestId:globalThis.crypto?.randomUUID?.()||`${Date.now()}-${Math.random().toString(36).slice(2)}`,attribution})});
       const payload=await response.json().catch(()=>({}));
       if(!response.ok||!payload.url)throw new Error(payload.error||"Stripe Checkout could not be prepared.");
       const pricing=bundlePricing(items);

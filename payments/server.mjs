@@ -81,7 +81,9 @@ async function checkout(req,res){
   if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(customerEmail)||customerEmail.length>254)return send(res,400,{error:"Enter a valid email address before continuing to secure payment."});
   const rawItems=Array.isArray(body.items)?body.items:[{sku:body.sku,quantity:normaliseQuantity(body.quantity)}];
   const items=normaliseCheckoutItems(rawItems,catalog);
-  const shipping=calculateShipping(items,body.shippingRegion,shippingRates);
+  const promoCode=String(body.promoCode||"").trim().toUpperCase();
+  const shipping=calculateShipping(items,body.shippingRegion,shippingRates,Date.now(),promoCode);
+  if(promoCode&&!shipping.promotionCode)return send(res,400,{error:"This promo code is invalid or not available for this order, region or date."});
   if(items.some(item=>item.variant.orderMode==="available")&&shipping.quoteRequired)return send(res,400,{error:"Contact AURA PADDLE for a freight quote before ordering this in-stock board."});
   const fallback=items.length===1?items[0].variant:"/cart-preview.html";
   const returnPath=safeReturnPath(body.returnPath,fallback);

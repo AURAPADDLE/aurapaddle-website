@@ -6,8 +6,8 @@
   "regions": [
     {"id":"local-pickup","label":"Local pickup — Gold Coast, QLD","isup":0,"yogaCruiser":0,"surfboard":0},
     {"id":"gold-coast-brisbane","label":"Gold Coast / Brisbane Metro","isup":4900,"yogaCruiser":2500,"surfboard":7900},
-    {"id":"qld-nsw-main","label":"QLD / NSW major cities and coastal areas","isup":7900,"yogaCruiser":4800,"surfboard":10900},
-    {"id":"canberra-melbourne","label":"Canberra / Melbourne Metro","isup":9900,"yogaCruiser":4600,"surfboard":14900},
+    {"id":"qld-nsw-main","label":"QLD / NSW / ACT major cities, coastal areas & Melbourne Metro","isup":9900,"yogaCruiser":4500,"surfboard":14900},
+    {"id":"canberra-melbourne","label":"Canberra / Melbourne Metro","aliasTo":"qld-nsw-main","hidden":true,"isup":9900,"yogaCruiser":4500,"surfboard":14900},
     {"id":"adelaide","label":"Adelaide Metro","isup":12900,"yogaCruiser":12900,"surfboard":17900},
     {"id":"perth","label":"Perth Metro","isup":17900,"yogaCruiser":17900,"surfboard":22900},
     {"id":"tasmania","label":"Tasmania","isup":14900,"yogaCruiser":14900,"surfboard":22900},
@@ -22,10 +22,12 @@
     {
       "id": "yoga-glacier-launch-free-shipping",
       "label": "Yoga Cruiser Glacier Blue launch — free shipping",
+      "code": "YOGAFREESHIP",
+      "requiresCode": true,
       "sku": "AP734955",
       "startsAt": "2026-09-20T00:00:00+10:00",
       "endsAt": "2026-09-27T00:00:00+10:00",
-      "regionIds": ["gold-coast-brisbane", "qld-nsw-main", "canberra-melbourne"]
+      "regionIds": ["gold-coast-brisbane", "qld-nsw-main"]
     }
   ]
 }

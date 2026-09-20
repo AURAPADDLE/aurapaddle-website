@@ -34,15 +34,18 @@ export function loadShippingRates(){
   return {...parsed,byId};
 }
 
-export function calculateShipping(items,regionId,rates=loadShippingRates(),now=Date.now()){
-  const region=rates.byId.get(String(regionId||""));
+export function calculateShipping(items,regionId,rates=loadShippingRates(),now=Date.now(),promoCode=""){
+  const requestedRegion=rates.byId.get(String(regionId||""));
+  const region=requestedRegion?.aliasTo?rates.byId.get(requestedRegion.aliasTo):requestedRegion;
   if(!region)throw new Error("Select a valid Australian delivery region.");
   if(region.id==="local-pickup")return {regionId:region.id,label:region.label,amount:0,quoteRequired:false,pickup:true};
   if(region.quoteRequired)return {regionId:region.id,label:region.label,amount:null,quoteRequired:true,pickup:false};
   const isup=new Set(rates.classes.isup),surfboard=new Set(rates.classes.surfboard);
   const hasAngler=items.some(item=>item.variant.slug==="angler-fishing");
+  const normalisedPromoCode=String(promoCode||"").trim().toUpperCase();
   const activePromotions=(rates.promotions||[]).filter(promotion=>
     promotion.regionIds?.includes(region.id)&&
+    (!promotion.requiresCode||String(promotion.code||"").toUpperCase()===normalisedPromoCode)&&
     Number.isFinite(Date.parse(promotion.startsAt))&&Number.isFinite(Date.parse(promotion.endsAt))&&
     now>=Date.parse(promotion.startsAt)&&now<Date.parse(promotion.endsAt)
   );
@@ -65,7 +68,8 @@ export function calculateShipping(items,regionId,rates=loadShippingRates(),now=D
     }else quoteRequired=true;
   }
   if(surfboardQuantity>1)quoteRequired=true;
-  return {regionId:region.id,label:region.label,amount:quoteRequired?null:amount,quoteRequired,pickup:false,promotionIds:[...promotionIds]};
+  const appliedPromotions=activePromotions.filter(promotion=>promotionIds.has(promotion.id));
+  return {regionId:region.id,label:region.label,amount:quoteRequired?null:amount,quoteRequired,pickup:false,promotionIds:[...promotionIds],promotionCode:appliedPromotions.find(promotion=>promotion.code)?.code||""};
 }
 
 export function loadStripeMap(catalog){
@@ -232,6 +236,7 @@ function orderMetadata(items,shipping,orderNumber,trackingToken,attribution,reco
     aura_shipping_region:shipping.regionId,
     aura_shipping_label:shipping.label,
     aura_shipping_amount:shipping.amount===null?"quote_required":String(shipping.amount),
+    aura_promotion_code:shipping.promotionCode||"",
     aura_shipping_stage:hasPreorder?"pay_before_dispatch":"paid_at_checkout",
     aura_order_number:orderNumber,
     aura_tracking_token:trackingToken,
@@ -308,7 +313,7 @@ export function buildCheckoutParams({items,priceBySku,siteUrl,returnPath,shippin
   params.set("payment_intent_data[description]",`AURA PADDLE ${orderNumber} ${inStock?"full payment":"initial payment"}`);
   params.set("success_url",`${siteUrl}/checkout-success.html?session_id={CHECKOUT_SESSION_ID}`);
   params.set("cancel_url",cancelUrl.toString());
-  const freightCopy=shipping.quoteRequired?`${shipping.label}: freight quote required.`:shipping.pickup?"Free local pickup in Gold Coast, QLD. Exact pickup address is provided after order confirmation.":`${shipping.label}: AUD $${(shipping.amount/100).toFixed(2)} shipping.`;
+  const freightCopy=shipping.quoteRequired?`${shipping.label}: freight quote required.`:shipping.pickup?"Free local pickup in Gold Coast, QLD. Exact pickup address is provided after order confirmation.":shipping.promotionCode?`${shipping.label}: free shipping with promo code ${shipping.promotionCode}.`:`${shipping.label}: AUD $${(shipping.amount/100).toFixed(2)} shipping.`;
   params.set("custom_text[submit][message]",inStock?`This Checkout collects the full product price and published shipping. ${freightCopy} In-stock orders dispatch within 1 business day after successful payment. Transit time is additional. See our returns policy; Australian Consumer Law rights are not limited.`:`This Checkout collects the 50% initial product payment only. ${freightCopy} The remaining product balance and any shipping charge are payable before dispatch. Change of mind: full refund within 48 hours; conditional orders remain cancellable until AURA PADDLE confirms production in writing. Australian Consumer Law rights are not limited.`);
   if(!shipping.pickup)params.set("custom_text[shipping_address][message]",inStock?`${freightCopy} Shipping is included in today's payment.`:`${freightCopy} AURA PADDLE will request this amount with the remaining product balance before dispatch.`);
   appendObject(params,"metadata",metadata);
