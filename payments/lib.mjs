@@ -229,6 +229,7 @@ function orderMetadata(items,shipping,orderNumber,trackingToken,attribution,reco
   const metadata={
     aura_cart_version:"2",
     aura_items:[...quantities].map(([sku,quantity])=>`${sku}:${quantity}`).join(","),
+    aura_invoice_lines:items.map(item=>`${item.variant.sku}:${item.quantity}:${item.unitPaymentAmount!==undefined&&item.variant.orderMode==="preorder"?Number(item.unitPaymentAmount)*2:Number(item.variant.checkoutAmount)}`).join(","),
     aura_item_count:String(quantities.size),
     aura_total_quantity:String(items.reduce((sum,item)=>sum+item.quantity,0)),
     aura_order_mode:modes.size===1?[...modes][0]:"mixed",
@@ -322,6 +323,8 @@ export function buildCheckoutParams({items,priceBySku,siteUrl,returnPath,shippin
 }
 
 function parseMetadataItems(metadata){
+  const invoiceLines=String(metadata.aura_invoice_lines||"");
+  if(invoiceLines)return invoiceLines.split(",").map(entry=>{const [sku,rawQuantity,rawUnitAmount]=entry.split(":");return {sku,quantity:normaliseQuantity(rawQuantity),activeQuantity:normaliseQuantity(rawQuantity),invoiceUnitAmount:Number(rawUnitAmount)}}).filter(item=>/^AP(?:\d{6}|-RACK-01)$/.test(item.sku)&&Number.isInteger(item.invoiceUnitAmount)&&item.invoiceUnitAmount>0);
   const compact=String(metadata.aura_items||"");
   if(compact)return compact.split(",").map(entry=>{const [sku,rawQuantity]=entry.split(":");return {sku,quantity:normaliseQuantity(rawQuantity),activeQuantity:normaliseQuantity(rawQuantity)}}).filter(item=>/^AP(?:\d{6}|-RACK-01)$/.test(item.sku));
   if(metadata.aura_sku)return [{sku:metadata.aura_sku,quantity:normaliseQuantity(metadata.aura_quantity||1),activeQuantity:normaliseQuantity(metadata.aura_quantity||1)}];
@@ -430,6 +433,23 @@ export function prepareBalanceRequest(order,input={}){
   const remainingProductBalance=Number(order.amountTotal||0);
   if(!Number.isInteger(remainingProductBalance)||remainingProductBalance<=0)throw new Error("The remaining product balance is invalid.");
   return {shippingAmount,dueAmount:remainingProductBalance+shippingAmount};
+}
+
+export function buildOrderInvoiceLines(items,shippingAmount,{includeShipping=true}={}){
+  if(!Array.isArray(items)||!items.length)throw new Error("Order invoice items are required.");
+  const lines=items.map(item=>{
+    const variant=item.variant;
+    if(!variant)throw new Error("A catalogue variant is required for each invoice item.");
+    const quantity=normaliseQuantity(item.quantity);
+    const unitAmount=Number(item.invoiceUnitAmount??(item.bundleApplied?variant.bundle?.unitAmount:variant.checkoutAmount));
+    if(!Number.isInteger(unitAmount)||unitAmount<=0)throw new Error(`Invalid full order amount for ${variant.sku}.`);
+    return {amount:unitAmount*quantity,quantity:1,description:item.bundleApplied?`${variant.productName} — Angler Fishing bundle · ${variant.sku} × ${quantity}`:`${variant.productName} · ${variant.size} · ${variant.colour} · ${variant.sku} × ${quantity}`,sku:variant.sku,kind:"product"};
+  });
+  if(includeShipping){
+    if(!Number.isInteger(shippingAmount)||shippingAmount<0)throw new Error("A confirmed shipping amount is required for the order invoice.");
+    if(shippingAmount>0)lines.push({amount:shippingAmount,quantity:1,description:"Shipping",sku:"",kind:"shipping"});
+  }
+  return lines;
 }
 
 const ORDER_PROGRESS_DEFINITIONS=[
@@ -640,9 +660,10 @@ export function applyStripeEvent(state,event){
     const orderNumber=object.metadata?.aura_order_number;
     const order=Object.values(state.orders).find(item=>item.orderNumber===orderNumber);
     if(order){
-      const paidAmount=Number(object.amount_paid||0),expectedAmount=Number(order.balanceRequestedAmount||0),invoiceMatches=!order.balanceInvoiceId||order.balanceInvoiceId===object.id;
-      order.balancePaidAmount=paidAmount;
-      if(expectedAmount>0&&paidAmount===expectedAmount&&invoiceMatches){order.balancePaymentStatus="paid";order.balanceInvoiceId=object.id;order.balancePaidAt=event.created;order.preparingForDispatchAt=event.created;order.orderStatus="balance_paid";order.fulfilmentStatus="preparing_for_dispatch";delete order.requiresBalancePaymentReview}
+      const paidAmount=Number(object.amount_paid||0),remainingAmount=Number(object.amount_remaining||0),expectedBalance=Number(order.balanceRequestedAmount||0),expectedOrderTotal=Number(order.amountTotal||0)+expectedBalance,invoiceMatches=!order.balanceInvoiceId||order.balanceInvoiceId===object.id;
+      const orderInvoice=order.orderInvoiceId===object.id||object.metadata?.aura_invoice_type==="order_tax_invoice";
+      order.balancePaidAmount=orderInvoice?Math.max(0,paidAmount-Number(order.amountTotal||0)):paidAmount;
+      if(expectedBalance>0&&invoiceMatches&&remainingAmount===0&&paidAmount===(orderInvoice?expectedOrderTotal:expectedBalance)){order.balancePaymentStatus="paid";order.balanceInvoiceId=object.id;order.orderInvoiceId=orderInvoice?object.id:order.orderInvoiceId;order.orderInvoiceStatus=orderInvoice?"paid":order.orderInvoiceStatus;order.orderInvoiceUrl=orderInvoice?(object.hosted_invoice_url||order.orderInvoiceUrl||""):order.orderInvoiceUrl;order.orderInvoicePdf=orderInvoice?(object.invoice_pdf||order.orderInvoicePdf||""):order.orderInvoicePdf;order.balancePaidAt=event.created;order.preparingForDispatchAt=event.created;order.orderStatus="balance_paid";order.fulfilmentStatus="preparing_for_dispatch";delete order.requiresBalancePaymentReview}
       else{order.balancePaymentStatus="payment_review";order.requiresBalancePaymentReview=true}
       order.updated=event.created;
     }

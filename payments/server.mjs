@@ -3,7 +3,7 @@ import http from "node:http";
 import path from "node:path";
 import crypto from "node:crypto";
 import {fileURLToPath} from "node:url";
-import {abandonedCheckoutList,adminOrderList,applyStripeEvent,buildCheckoutParams,calculateShipping,campaignProgress,isStripeHostedInvoiceUrl,loadCatalog,loadShippingRates,loadStripeMap,normaliseAttribution,normaliseCheckoutItems,normaliseQuantity,parseRequestUrl,prepareBalanceRequest,publicOrderView,queueOrderEmails,queueOrderMilestoneEmail,reserveCheckoutIdentity,safeReturnPath,unsubscribeRecoveryEmail,updateOrderProgress,verifyStripeSignature} from "./lib.mjs";
+import {abandonedCheckoutList,adminOrderList,applyStripeEvent,buildCheckoutParams,buildOrderInvoiceLines,calculateShipping,campaignProgress,isStripeHostedInvoiceUrl,loadCatalog,loadShippingRates,loadStripeMap,normaliseAttribution,normaliseCheckoutItems,normaliseQuantity,parseRequestUrl,prepareBalanceRequest,publicOrderView,queueOrderEmails,queueOrderMilestoneEmail,reserveCheckoutIdentity,safeReturnPath,unsubscribeRecoveryEmail,updateOrderProgress,verifyStripeSignature} from "./lib.mjs";
 import {enqueueStripeAnalytics,measurementPayload} from "./analytics.mjs";
 import {ensureRecoveryInbox,sendRecoveryEmail} from "./recovery-email.mjs";
 import {sendOrderEmail} from "./order-email.mjs";
@@ -35,6 +35,8 @@ const stripeKey=process.env.STRIPE_API_KEY||"";
 const webhookSecret=process.env.STRIPE_WEBHOOK_SECRET||"";
 const adminApiToken=process.env.ADMIN_API_TOKEN||"";
 const allowLive=process.env.ALLOW_LIVE_PAYMENTS==="true";
+const orderInvoicesEnabled=process.env.STRIPE_ORDER_INVOICES_ENABLED==="true";
+const gstTaxRateId=process.env.STRIPE_GST_TAX_RATE_ID||"";
 const ga4MeasurementId=process.env.GA4_MEASUREMENT_ID||"G-0DJKT6VHVL";
 const ga4ApiSecret=process.env.GA4_API_SECRET||"";
 const analyticsDispatchEnabled=process.env.GA4_SERVER_EVENTS_ENABLED!=="false";
@@ -72,6 +74,60 @@ async function stripeRequest(apiPath,options={}){
   const payload=await response.json().catch(()=>({}));
   if(!response.ok)throw new Error(payload.error?.message||`Stripe returned HTTP ${response.status}.`);
   return payload;
+}
+function assertOrderInvoiceConfiguration(){
+  if(!orderInvoicesEnabled)throw new Error("Stripe order invoices are not enabled.");
+  if(!/^txr_[A-Za-z0-9]+$/.test(gstTaxRateId))throw new Error("STRIPE_GST_TAX_RATE_ID must identify the active 10% inclusive Australian GST tax rate.");
+}
+function catalogueOrderItems(order){
+  return (order.items||[]).map(item=>{
+    const variant=catalog.bySku.get(item.sku);
+    if(!variant)throw new Error(`SKU ${item.sku} is missing from the catalogue.`);
+    const bundleApplied=item.bundleApplied===true;
+    return {variant,quantity:Number(item.quantity||1),bundleApplied,invoiceUnitAmount:Number(item.invoiceUnitAmount)||undefined};
+  });
+}
+async function createOrderInvoiceDraft(order,{shippingAmount=order.shippingAmount,includeShipping=!order.shippingQuoteRequired}={}){
+  assertOrderInvoiceConfiguration();
+  if(!order.customerId)throw new Error("Stripe customer is missing from the order.");
+  const invoiceParams=new URLSearchParams({customer:order.customerId,collection_method:"send_invoice",days_until_due:"14",auto_advance:"false",description:`AURA PADDLE ${order.orderNumber} order tax invoice`,footer:"Prices are in Australian dollars and include GST. Final Tax Invoice is issued when the order is paid in full."});
+  invoiceParams.set("metadata[aura_order_number]",order.orderNumber);
+  invoiceParams.set("metadata[aura_invoice_type]","order_tax_invoice");
+  invoiceParams.set("custom_fields[0][name]","AURA order");invoiceParams.set("custom_fields[0][value]",order.orderNumber);
+  const invoice=await stripeRequest("/v1/invoices",{method:"POST",headers:{"Content-Type":"application/x-www-form-urlencoded","Idempotency-Key":`${order.orderNumber}-order-invoice-v1`},body:invoiceParams});
+  const lines=buildOrderInvoiceLines(catalogueOrderItems(order),shippingAmount,{includeShipping});
+  for(const [index,line] of lines.entries()){
+    const item=new URLSearchParams({customer:order.customerId,invoice:invoice.id,currency:"aud",amount:String(line.amount),description:line.description});
+    item.append("tax_rates[]",gstTaxRateId);
+    item.set("metadata[aura_order_number]",order.orderNumber);
+    item.set("metadata[aura_line_kind]",line.kind);
+    if(line.sku)item.set("metadata[aura_sku]",line.sku);
+    await stripeRequest("/v1/invoiceitems",{method:"POST",headers:{"Content-Type":"application/x-www-form-urlencoded","Idempotency-Key":`${order.orderNumber}-order-line-${index}-v1`},body:item});
+  }
+  return stripeRequest(`/v1/invoices/${invoice.id}`);
+}
+async function ensureOrderInvoice(order,options={}){
+  if(order.orderInvoiceId)return stripeRequest(`/v1/invoices/${order.orderInvoiceId}`);
+  const invoice=await createOrderInvoiceDraft(order,options);
+  await store.mutate(state=>{const target=Object.values(state.orders||{}).find(item=>item.orderNumber===order.orderNumber);if(target){target.orderInvoiceId=invoice.id;target.orderInvoiceStatus=invoice.status;target.updated=Math.floor(Date.now()/1000)}});
+  return invoice;
+}
+async function attachOrderPayment(invoiceId,paymentIntentId,idempotencyKey){
+  if(!paymentIntentId)throw new Error("Stripe PaymentIntent is missing from the order.");
+  return stripeRequest(`/v1/invoices/${invoiceId}/attach_payment`,{method:"POST",headers:{"Content-Type":"application/x-www-form-urlencoded","Idempotency-Key":idempotencyKey},body:new URLSearchParams({payment_intent:paymentIntentId})});
+}
+async function syncPaidCheckoutToOrderInvoice(event){
+  if(!orderInvoicesEnabled||!["checkout.session.completed","checkout.session.async_payment_succeeded"].includes(event.type)||event.data?.object?.payment_status!=="paid")return;
+  const session=event.data.object,orderNumber=session.metadata?.aura_order_number;
+  const order=Object.values((await store.read()).orders||{}).find(item=>item.orderNumber===orderNumber);
+  if(!order)return;
+  let invoice=await ensureOrderInvoice(order);
+  if(order.paymentStage==="paid_in_full"){
+    if(invoice.status==="draft")invoice=await stripeRequest(`/v1/invoices/${invoice.id}/finalize`,{method:"POST",headers:{"Content-Type":"application/x-www-form-urlencoded","Idempotency-Key":`${order.orderNumber}-finalize-order-invoice-v1`},body:new URLSearchParams()});
+    await attachOrderPayment(invoice.id,order.paymentIntentId,`${order.orderNumber}-attach-full-payment-v1`);
+    invoice=await stripeRequest(`/v1/invoices/${invoice.id}`);
+    await store.mutate(state=>{const target=Object.values(state.orders||{}).find(item=>item.orderNumber===order.orderNumber);if(target){target.orderInvoiceStatus=invoice.status;target.orderInvoiceUrl=invoice.hosted_invoice_url||"";target.orderInvoicePdf=invoice.invoice_pdf||"";target.updated=Math.floor(Date.now()/1000)}});
+  }
 }
 async function checkout(req,res){
   const origin=req.headers.origin;
@@ -120,6 +176,23 @@ async function requestBalance(req,res){
   const customerLocaleParams=new URLSearchParams();
   customerLocaleParams.set("preferred_locales[0]","en");
   await stripeRequest(`/v1/customers/${encodeURIComponent(order.customerId)}`,{method:"POST",headers:{"Content-Type":"application/x-www-form-urlencoded"},body:customerLocaleParams});
+  if(orderInvoicesEnabled){
+    let invoice=await ensureOrderInvoice(order,{shippingAmount,includeShipping:true});
+    if(invoice.status==="draft"&&order.shippingQuoteRequired){
+      const shippingLine=new URLSearchParams({customer:order.customerId,invoice:invoice.id,currency:"aud",amount:String(shippingAmount),description:`Shipping · ${order.shippingLabel||"confirmed freight"}`});
+      shippingLine.append("tax_rates[]",gstTaxRateId);shippingLine.set("metadata[aura_order_number]",order.orderNumber);shippingLine.set("metadata[aura_line_kind]","shipping");
+      await stripeRequest("/v1/invoiceitems",{method:"POST",headers:{"Content-Type":"application/x-www-form-urlencoded","Idempotency-Key":`${order.orderNumber}-confirmed-shipping-v1`},body:shippingLine});
+      invoice=await stripeRequest(`/v1/invoices/${invoice.id}`);
+    }
+    if(invoice.status==="draft")invoice=await stripeRequest(`/v1/invoices/${invoice.id}/finalize`,{method:"POST",headers:{"Content-Type":"application/x-www-form-urlencoded","Idempotency-Key":`${order.orderNumber}-finalize-order-invoice-v1`},body:new URLSearchParams()});
+    await attachOrderPayment(invoice.id,order.paymentIntentId,`${order.orderNumber}-attach-initial-payment-v1`);
+    invoice=await stripeRequest(`/v1/invoices/${invoice.id}`);
+    if(Number(invoice.amount_remaining)!==dueAmount)throw new Error(`Stripe invoice balance mismatch: expected ${dueAmount}, received ${Number(invoice.amount_remaining||0)}.`);
+    const sent=await stripeRequest(`/v1/invoices/${invoice.id}/send`,{method:"POST",headers:{"Content-Type":"application/x-www-form-urlencoded","Idempotency-Key":`${order.orderNumber}-send-order-invoice-v1`},body:new URLSearchParams()});
+    const updated=await store.mutate(latest=>{const target=Object.values(latest.orders||{}).find(item=>item.orderNumber===body.orderNumber);if(!target)throw new Error("Order not found.");target.shippingAmount=shippingAmount;target.balanceRequestedAmount=dueAmount;target.balancePaymentStatus="requested";target.balanceInvoiceId=invoice.id;target.balanceInvoiceUrl=sent.hosted_invoice_url||invoice.hosted_invoice_url||"";target.orderInvoiceId=invoice.id;target.orderInvoiceStatus=sent.status||invoice.status;target.orderInvoiceUrl=target.balanceInvoiceUrl;target.orderInvoicePdf=sent.invoice_pdf||invoice.invoice_pdf||"";target.balanceRequestedAt=Math.floor(Date.now()/1000);target.orderStatus="balance_requested";target.fulfilmentStatus="awaiting_balance";target.updated=Math.floor(Date.now()/1000);queueOrderMilestoneEmail(latest,target,"balance_requested",target.updated);return target});
+    void flushOrderEmailOutbox().catch(error=>console.error("Balance-request email flush failed",error));
+    return send(res,200,{orderNumber:updated.orderNumber,status:updated.balancePaymentStatus,amount:dueAmount,invoiceUrl:updated.balanceInvoiceUrl});
+  }
   const invoiceParams=new URLSearchParams({customer:order.customerId,collection_method:"send_invoice",days_until_due:"14",description:`AURA PADDLE ${order.orderNumber} remaining balance and shipping`});
   invoiceParams.set("metadata[aura_order_number]",order.orderNumber);
   invoiceParams.set("custom_fields[0][name]","AURA order");invoiceParams.set("custom_fields[0][value]",order.orderNumber);
@@ -269,6 +342,7 @@ async function webhook(req,res){
   if(!verifyStripeSignature(raw.toString("utf8"),req.headers["stripe-signature"],webhookSecret))return send(res,400,{error:"Invalid Stripe webhook signature."});
   const event=JSON.parse(raw.toString("utf8"));
   await store.mutate(state=>{const applied=applyStripeEvent(state,event);enqueueStripeAnalytics(state,event,catalog,{enhancedConversionsEnabled});queueOrderEmails(state,event,{adminEmail:orderNotificationEmail});if(applied&&event.type==="invoice.paid"){const target=Object.values(state.orders||{}).find(item=>item.orderNumber===event.data?.object?.metadata?.aura_order_number);if(target?.balancePaymentStatus==="paid")queueOrderMilestoneEmail(state,target,"balance_paid",event.created)}return applied});
+  await syncPaidCheckoutToOrderInvoice(event);
   void flushAnalyticsOutbox().catch(error=>console.error("GA4 outbox flush failed",error));
   void flushRecoveryEmailOutbox().catch(error=>console.error("Recovery email outbox flush failed",error));
   void flushOrderEmailOutbox().catch(error=>console.error("Order email outbox flush failed",error));
@@ -290,7 +364,7 @@ function staticFile(req,res,url){
 const server=http.createServer(async(req,res)=>{
   try{
     const url=parseRequestUrl(req.url,siteUrl);
-    if(req.method==="GET"&&url.pathname==="/api/health"){const state=await store.read(),analyticsEntries=Object.values(state.analyticsOutbox||{}),recoveryEntries=Object.values(state.recoveryEmailOutbox||{}),orderEmailEntries=Object.values(state.transactionalEmailOutbox||{}),sentAnalytics=analyticsEntries.filter(item=>item.status==="sent"),latestAnalyticsSentAt=Math.max(0,...sentAnalytics.map(item=>Number(item.sentAt||0)));return send(res,200,{ok:true,mode:allowLive?"live-enabled":"sandbox-only",storage:store.kind,stripeConfigured:Boolean(stripeKey),webhookConfigured:Boolean(webhookSecret),adminConfigured:Boolean(adminApiToken),catalogueSkus:catalog.variants.length,mappedStripePrices:stripeMap.bySku.size,stripeAccount:stripeMap.accountId,analytics:{serverEventsEnabled:analyticsDispatchEnabled,configured:Boolean(ga4ApiSecret),validationMode:analyticsValidationMode,enhancedConversionsEnabled,pending:analyticsEntries.filter(item=>["pending","retry","sending"].includes(item.status)).length,failed:analyticsEntries.filter(item=>item.status==="failed").length,sent:sentAnalytics.length,latestSentAt:latestAnalyticsSentAt||null},checkoutRecovery:{enabled:true,emailConfigured:Boolean(agentMailApiKey),emailReady:recoveryEmailReady,configurationError:Boolean(recoveryEmailInitError),smsEnabled:false,pending:recoveryEntries.filter(item=>["pending","retry","sending"].includes(item.status)).length,failed:recoveryEntries.filter(item=>item.status==="failed").length},orderNotifications:{enabled:true,emailConfigured:Boolean(agentMailApiKey),emailReady:recoveryEmailReady,recipient:orderNotificationEmail,pending:orderEmailEntries.filter(item=>["pending","retry","sending"].includes(item.status)).length,failed:orderEmailEntries.filter(item=>item.status==="failed").length},account:"AURA PADDLE PTY LTD"})}
+    if(req.method==="GET"&&url.pathname==="/api/health"){const state=await store.read(),analyticsEntries=Object.values(state.analyticsOutbox||{}),recoveryEntries=Object.values(state.recoveryEmailOutbox||{}),orderEmailEntries=Object.values(state.transactionalEmailOutbox||{}),sentAnalytics=analyticsEntries.filter(item=>item.status==="sent"),latestAnalyticsSentAt=Math.max(0,...sentAnalytics.map(item=>Number(item.sentAt||0)));return send(res,200,{ok:true,mode:allowLive?"live-enabled":"sandbox-only",storage:store.kind,stripeConfigured:Boolean(stripeKey),webhookConfigured:Boolean(webhookSecret),adminConfigured:Boolean(adminApiToken),orderInvoices:{enabled:orderInvoicesEnabled,gstTaxRateConfigured:/^txr_[A-Za-z0-9]+$/.test(gstTaxRateId)},catalogueSkus:catalog.variants.length,mappedStripePrices:stripeMap.bySku.size,stripeAccount:stripeMap.accountId,analytics:{serverEventsEnabled:analyticsDispatchEnabled,configured:Boolean(ga4ApiSecret),validationMode:analyticsValidationMode,enhancedConversionsEnabled,pending:analyticsEntries.filter(item=>["pending","retry","sending"].includes(item.status)).length,failed:analyticsEntries.filter(item=>item.status==="failed").length,sent:sentAnalytics.length,latestSentAt:latestAnalyticsSentAt||null},checkoutRecovery:{enabled:true,emailConfigured:Boolean(agentMailApiKey),emailReady:recoveryEmailReady,configurationError:Boolean(recoveryEmailInitError),smsEnabled:false,pending:recoveryEntries.filter(item=>["pending","retry","sending"].includes(item.status)).length,failed:recoveryEntries.filter(item=>item.status==="failed").length},orderNotifications:{enabled:true,emailConfigured:Boolean(agentMailApiKey),emailReady:recoveryEmailReady,recipient:orderNotificationEmail,pending:orderEmailEntries.filter(item=>["pending","retry","sending"].includes(item.status)).length,failed:orderEmailEntries.filter(item=>item.status==="failed").length},account:"AURA PADDLE PTY LTD"})}
     if(req.method==="POST"&&url.pathname==="/api/checkout")return await checkout(req,res);
     if(req.method==="GET"&&url.pathname==="/api/checkout-session")return await sessionSummary(req,res,url);
     if(req.method==="GET"&&url.pathname==="/api/order")return await orderStatus(req,res,url);

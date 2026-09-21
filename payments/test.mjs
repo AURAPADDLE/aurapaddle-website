@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import crypto from "node:crypto";
 import test from "node:test";
-import {abandonedCheckoutList,adminOrderList,applyStripeEvent,buildCheckoutParams,calculateShipping,campaignProgress,isStripeHostedInvoiceUrl,loadCatalog,loadShippingRates,loadStripeMap,normaliseAttribution,normaliseCheckoutItems,normaliseQuantity,orderProgress,parseRequestUrl,prepareBalanceRequest,publicOrderView,queueOrderEmails,queueOrderMilestoneEmail,reserveCheckoutIdentity,unsubscribeRecoveryEmail,updateOrderProgress,verifyStripeSignature} from "./lib.mjs";
+import {abandonedCheckoutList,adminOrderList,applyStripeEvent,buildCheckoutParams,buildOrderInvoiceLines,calculateShipping,campaignProgress,isStripeHostedInvoiceUrl,loadCatalog,loadShippingRates,loadStripeMap,normaliseAttribution,normaliseCheckoutItems,normaliseQuantity,orderProgress,parseRequestUrl,prepareBalanceRequest,publicOrderView,queueOrderEmails,queueOrderMilestoneEmail,reserveCheckoutIdentity,unsubscribeRecoveryEmail,updateOrderProgress,verifyStripeSignature} from "./lib.mjs";
 import {enqueueStripeAnalytics,hashUserData,measurementPayload} from "./analytics.mjs";
 import {recoveryEmailContent} from "./recovery-email.mjs";
 import {adminOrderEmailContent,customerOrderEmailContent,milestoneOrderEmailContent} from "./order-email.mjs";
@@ -57,6 +57,7 @@ test("Fishing Rack is AUD 129 alone and AUD 69 per paired Angler board",()=>{
   assert.equal(bundleLine.quantity,2);assert.equal(bundleLine.unitPaymentAmount,3450);assert.equal(fullPriceLine.quantity,1);
   params=buildCheckoutParams({items:bundled,priceBySku:stripeMap.bySku,siteUrl:"http://localhost:4242",returnPath:"/cart-preview.html",shipping:shippingFor(bundled)});
   assert.equal(params.get("metadata[aura_items]"),`${angler.sku}:2,AP667703:3`);
+  assert.match(params.get("metadata[aura_invoice_lines]"),/AP667703:2:6900/);
   assert.equal(params.get("line_items[1][price_data][unit_amount]"),"3450");
   assert.equal(params.get("line_items[2][price_data][unit_amount]"),"6450");
 });
@@ -278,6 +279,12 @@ test("paid and refunded events update preorder progress idempotently",()=>{
   assert.equal(campaignProgress(state,catalog).find(item=>item.id==="paddle-launch-batch-01").reserved,1);
 });
 
+test("checkout metadata preserves full invoice amounts for bundled and regular lines",()=>{
+  const state={events:{},orders:{}};
+  applyStripeEvent(state,{id:"evt_invoice_lines",type:"checkout.session.completed",created:1,data:{object:{id:"cs_test_invoice_lines",payment_status:"paid",amount_total:9900,currency:"aud",metadata:{aura_items:"AP667703:2",aura_invoice_lines:"AP667703:1:6900,AP667703:1:12900",aura_order_number:"APO48216",aura_tracking_token:"secure_tracking_token_48216",aura_order_mode:"preorder",aura_payment_stage:"initial_50_percent"}}}});
+  assert.deepEqual(state.orders.cs_test_invoice_lines.items.map(item=>item.invoiceUnitAmount),[6900,12900]);
+});
+
 test("Invoice payment updates the remaining-balance order state",()=>{
   const state={events:{},orders:{}};
   applyStripeEvent(state,{id:"evt_initial",type:"checkout.session.completed",created:1,data:{object:{id:"cs_test_order",customer:"cus_test",payment_status:"paid",payment_intent:"pi_test_order",amount_total:37450,currency:"aud",metadata:{aura_items:"AP734955:1",aura_order_number:"APO48217",aura_tracking_token:"secure_tracking_token_48217",aura_order_mode:"preorder",aura_payment_stage:"initial_50_percent"}}}});
@@ -319,6 +326,21 @@ test("final balance approval locks published freight and accepts a confirmed quo
   assert.deepEqual(prepareBalanceRequest(quoted,{productReady:true,finalShippingConfirmed:true,shippingAmount:12900}),{shippingAmount:12900,dueAmount:50350});
   assert.throws(()=>prepareBalanceRequest(quoted,{productReady:false,finalShippingConfirmed:true,shippingAmount:12900}),/product is ready/);
   assert.throws(()=>prepareBalanceRequest(quoted,{productReady:true,finalShippingConfirmed:false,shippingAmount:12900}),/shipping charge/);
+});
+
+test("order invoice lines use the full product price and confirmed shipping",()=>{
+  const items=normaliseCheckoutItems([{sku:"AP233694",quantity:1}],catalog);
+  const lines=buildOrderInvoiceLines(items,7900);
+  assert.deepEqual(lines.map(line=>({amount:line.amount,kind:line.kind})),[{amount:74900,kind:"product"},{amount:7900,kind:"shipping"}]);
+  assert.equal(lines.reduce((sum,line)=>sum+line.amount,0),82800);
+  assert.equal(buildOrderInvoiceLines(items,null,{includeShipping:false}).reduce((sum,line)=>sum+line.amount,0),74900);
+});
+
+test("paid order-level invoice recognises initial and balance payments together",()=>{
+  const state={events:{},orders:{cs_test_order:{orderNumber:"APO48219",amountTotal:37450,balanceRequestedAmount:45350,balanceInvoiceId:"in_order",orderInvoiceId:"in_order",balancePaymentStatus:"requested",orderStatus:"balance_requested",fulfilmentStatus:"awaiting_balance"}}};
+  const order=state.orders.cs_test_order;
+  applyStripeEvent(state,{id:"evt_order_invoice",type:"invoice.paid",created:3,data:{object:{id:"in_order",amount_paid:82800,amount_remaining:0,hosted_invoice_url:"https://invoice.stripe.com/i/test",invoice_pdf:"https://pay.stripe.com/invoice/test/pdf",metadata:{aura_order_number:"APO48219",aura_invoice_type:"order_tax_invoice"}}}});
+  assert.equal(order.balancePaidAmount,45350);assert.equal(order.balancePaymentStatus,"paid");assert.equal(order.orderInvoiceStatus,"paid");assert.equal(order.fulfilmentStatus,"preparing_for_dispatch");
 });
 
 test("customer progress is derived from legacy and explicit order milestones",()=>{
