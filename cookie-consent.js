@@ -4,6 +4,7 @@
   const defaults={necessary:true,analytics:false,marketing:false};
   const attributionKey="aura-attribution-v1";
   const attributionMaxAge=90*24*60*60*1000;
+  const debugMode=new URL(location.href).searchParams.get("aura_debug")==="1";
   const read=()=>{try{return {...defaults,...JSON.parse(localStorage.getItem(storageKey)||"null")}}catch{return {...defaults}}};
   const saved=()=>localStorage.getItem(storageKey)!==null;
   let tagRequested=false;
@@ -70,8 +71,11 @@
     script.src=`https://www.googletagmanager.com/gtag/js?id=${measurementId}`;
     document.head.append(script);
     window.gtag("js",new Date());
-    window.gtag("config",measurementId,{send_page_view:true});
+    window.gtag("config",measurementId,{send_page_view:true,...(debugMode?{debug_mode:true,traffic_type:"internal_test"}:{})});
   };
+  // Advanced Consent Mode: load the tag after the denied default so Google can
+  // receive cookieless measurement pings while optional storage remains off.
+  loadGoogleTag();
   const getGoogleTagValue=name=>new Promise(resolve=>{
     let finished=false;
     const finish=value=>{if(finished)return;finished=true;clearTimeout(timer);resolve(value)};
@@ -116,7 +120,7 @@
   const sendAnalyticsEvent=(name,parameters={})=>{
     if(!analyticsAllowed()||typeof window.gtag!=="function")return false;
     loadGoogleTag();
-    window.gtag("event",String(name),parameters);
+    window.gtag("event",String(name),debugMode?{...parameters,debug_mode:true,traffic_type:"internal_test"}:parameters);
     return true;
   };
   window.AURAAnalytics={
