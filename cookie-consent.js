@@ -8,7 +8,6 @@
   const read=()=>{try{return {...defaults,...JSON.parse(localStorage.getItem(storageKey)||"null")}}catch{return {...defaults}}};
   const saved=()=>localStorage.getItem(storageKey)!==null;
   let tagRequested=false;
-  const pendingAnalytics=[];
 
   const clean=(value,max=160)=>String(value||"").trim().replace(/[\u0000-\u001f\u007f]/g,"").slice(0,max);
   const readAttribution=()=>{try{const value=JSON.parse(localStorage.getItem(attributionKey)||"null"),expiresAt=Date.parse(value?.expiresAt||"");if(!value||!Number.isFinite(expiresAt)||Date.now()>=expiresAt)return null;return value}catch{return null}};
@@ -116,26 +115,21 @@
     });
     if(analytics||marketing)loadGoogleTag();
   };
-  const analyticsAllowed=()=>Boolean(window.auraConsent?.analytics||window.auraConsent?.marketing);
   const sendAnalyticsEvent=(name,parameters={})=>{
-    if(!analyticsAllowed()||typeof window.gtag!=="function")return false;
+    if(typeof window.gtag!=="function")return false;
     loadGoogleTag();
     window.gtag("event",String(name),debugMode?{...parameters,debug_mode:true,traffic_type:"internal_test"}:parameters);
     return true;
   };
   window.AURAAnalytics={
     event(name,parameters={}){
-      if(sendAnalyticsEvent(name,parameters))return true;
-      if(!saved())pendingAnalytics.push([name,parameters]);
-      return false;
+      return sendAnalyticsEvent(name,parameters);
     }
   };
   const apply=preferences=>{
     window.auraConsent={...defaults,...preferences};
     updateGoogleConsent(window.auraConsent);
     captureAttribution(window.auraConsent);
-    if(analyticsAllowed())while(pendingAnalytics.length)sendAnalyticsEvent(...pendingAnalytics.shift());
-    else if(saved())pendingAnalytics.length=0;
     window.dispatchEvent(new CustomEvent("aura:consent",{detail:window.auraConsent}));
   };
   const save=preferences=>{
