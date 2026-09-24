@@ -101,8 +101,8 @@ test("Glacier Blue's 60-board stock is held for two hours and paid orders count 
   assert.throws(()=>reserveCheckoutIdentity(state,{requestId:"stock-test-3",items:[{variant,quantity:2}],now:17202}),/different cart/);
 });
 
-test("full-payment webhook is ready for dispatch and requires no final invoice",()=>{
-  const state={},event={id:"evt_stock_full",type:"checkout.session.completed",created:10000,data:{object:{id:"cs_live_stock_full",payment_status:"paid",amount_total:82800,currency:"aud",metadata:{aura_items:"AP734955:1",aura_order_number:"APO10001",aura_tracking_token:"secure_tracking_token_stock",aura_order_mode:"available",aura_payment_stage:"paid_in_full",aura_shipping_amount:"7900"}}}};
+test("full-payment webhook records Stripe delivery address and is ready for dispatch",()=>{
+  const state={},event={id:"evt_stock_full",type:"checkout.session.completed",created:10000,data:{object:{id:"cs_live_stock_full",payment_status:"paid",amount_total:82800,currency:"aud",collected_information:{shipping_details:{name:"Alex Buyer",address:{line1:"10 Beach Road",line2:"Unit 2",city:"Gold Coast",state:"QLD",postal_code:"4217",country:"AU"}}},metadata:{aura_items:"AP734955:1",aura_order_number:"APO10001",aura_tracking_token:"secure_tracking_token_stock",aura_order_mode:"available",aura_payment_stage:"paid_in_full",aura_shipping_amount:"7900"}}}};
   applyStripeEvent(state,event);
   const order=state.orders.cs_live_stock_full,view=publicOrderView(order),admin=adminOrderList(state,catalog)[0];
   assert.equal(order.fulfilmentStatus,"preparing_for_dispatch");
@@ -111,6 +111,8 @@ test("full-payment webhook is ready for dispatch and requires no final invoice",
   assert.equal(view.progress.length,4);
   assert.equal(admin.remainingProductBalance,0);
   assert.equal(admin.paymentStage,"paid_in_full");
+  assert.equal(admin.deliveryAddress.line1,"10 Beach Road");
+  assert.equal(admin.deliveryAddress.postalCode,"4217");
   const email=customerOrderEmailContent({...order,kind:"customer_confirmation"},{catalog,siteUrl:"https://www.aurapaddle.com"});
   assert.match(email.text,/full payment/i);
   assert.match(email.text,/Within 1 business day/);
@@ -562,11 +564,11 @@ test("paid checkout queues one customer confirmation and one internal order noti
 });
 
 test("order emails include payment, dispatch and secure operational links",()=>{
-  const entry={sessionId:"cs_live_mail",kind:"customer_confirmation",recipient:"buyer@example.com",orderNumber:"APO48227",trackingToken:"secure_tracking_token_48227",paymentIntentId:"pi_live_mail",items:[{sku:"AP734955",quantity:1}],amountTotal:37450,currency:"aud",paymentStage:"initial_50_percent",shippingLabel:"Local pickup — Gold Coast, QLD",shippingAmount:0,shippingQuoteRequired:false,customerName:"Alex Buyer",customerEmail:"buyer@example.com",customerPhone:"+61400000000"};
+  const entry={sessionId:"cs_live_mail",kind:"customer_confirmation",recipient:"buyer@example.com",orderNumber:"APO48227",trackingToken:"secure_tracking_token_48227",paymentIntentId:"pi_live_mail",items:[{sku:"AP734955",quantity:1}],amountTotal:37450,currency:"aud",paymentStage:"initial_50_percent",shippingLabel:"Gold Coast / Brisbane",shippingAmount:2500,shippingQuoteRequired:false,customerName:"Alex Buyer",customerEmail:"buyer@example.com",customerPhone:"+61400000000",deliveryAddress:{line1:"10 Beach Road",line2:"Unit 2",city:"Gold Coast",state:"QLD",postalCode:"4217",country:"AU"}};
   const customer=customerOrderEmailContent(entry,{catalog,siteUrl:"https://www.aurapaddle.com"});
   assert.match(customer.subject,/APO48227/);assert.match(customer.text,/AUD \$374\.50/);assert.match(customer.text,/Confirmed in your secure order updates/);assert.match(customer.text,/order\/\?order=APO48227&token=secure_tracking_token_48227/);assert.match(customer.text,/within 48 hours/);
   const admin=adminOrderEmailContent({...entry,kind:"admin_notification",recipient:"admin@aurapaddle.com"},{catalog,siteUrl:"https://www.aurapaddle.com"});
-  assert.match(admin.subject,/New order APO48227/);assert.match(admin.text,/Alex Buyer/);assert.match(admin.text,/dashboard\.stripe\.com\/payments\/pi_live_mail/);assert.match(admin.text,/Local pickup/);
+  assert.match(admin.subject,/New order APO48227/);assert.match(admin.text,/Alex Buyer/);assert.match(admin.text,/dashboard\.stripe\.com\/payments\/pi_live_mail/);assert.match(admin.text,/10 Beach Road/);assert.match(admin.text,/Gold Coast QLD 4217/);
   const milestone=milestoneOrderEmailContent({...entry,kind:"dispatched",carrier:"Mainfreight",trackingNumber:"MF123",trackingUrl:"https://example.com/track/MF123"},{siteUrl:"https://www.aurapaddle.com"});
   assert.match(milestone.subject,/dispatched/);assert.match(milestone.text,/MF123/);assert.match(milestone.text,/secure_tracking_token_48227/);
 });

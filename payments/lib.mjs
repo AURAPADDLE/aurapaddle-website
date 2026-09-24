@@ -331,6 +331,14 @@ function parseMetadataItems(metadata){
   return [];
 }
 
+function checkoutShippingDetails(object={}){
+  const details=object.collected_information?.shipping_details||object.shipping_details||{};
+  const address=details.address||{};
+  const clean=value=>String(value||"").trim().slice(0,160);
+  const deliveryAddress={line1:clean(address.line1),line2:clean(address.line2),city:clean(address.city),state:clean(address.state),postalCode:clean(address.postal_code),country:clean(address.country).toUpperCase()};
+  return {deliveryName:clean(details.name),deliveryAddress:Object.values(deliveryAddress).some(Boolean)?deliveryAddress:null};
+}
+
 export function verifyStripeSignature(payload,header,secret,toleranceSeconds=300,now=Math.floor(Date.now()/1000)){
   if(!header||!secret)return false;
   const entries=header.split(",").map(part=>part.trim().split("="));
@@ -554,6 +562,8 @@ export function adminOrderList(state,catalog){
     customerName:order.customerName||"",
     customerEmail:order.customerEmail||"",
     customerPhone:order.customerPhone||"",
+    deliveryName:order.deliveryName||"",
+    deliveryAddress:order.deliveryAddress||null,
     items:(order.items||[]).map(item=>({sku:item.sku,quantity:Number(item.quantity||0),name:catalog?.bySku?.get(item.sku)?.productName||item.sku})),
     quantity:Number(order.quantity||0),
     currency:String(order.currency||"aud").toUpperCase(),
@@ -601,6 +611,7 @@ export function applyStripeEvent(state,event){
   const object=event.data?.object||{};
   if(["checkout.session.completed","checkout.session.async_payment_succeeded"].includes(event.type)&&object.payment_status==="paid"){
     const metadata=object.metadata||{},items=parseMetadataItems(metadata),quantity=items.reduce((sum,item)=>sum+item.quantity,0);
+    const {deliveryName,deliveryAddress}=checkoutShippingDetails(object);
     const reservation=Object.values(state.checkoutRequests||{}).find(item=>item?.orderNumber===metadata.aura_order_number);
     const attribution=reservation?.attribution?normaliseAttribution(reservation.attribution):attributionFromMetadata(metadata);
     state.orders[object.id]={
@@ -631,6 +642,8 @@ export function applyStripeEvent(state,event){
       customerEmail:object.customer_details?.email||object.customer_email||"",
       customerName:object.customer_details?.name||"",
       customerPhone:object.customer_details?.phone||"",
+      deliveryName,
+      deliveryAddress,
       attribution,
       orderConfirmedAt:object.created||event.created,
       ...(metadata.aura_payment_stage==="paid_in_full"?{balancePaidAt:object.created||event.created,preparingForDispatchAt:object.created||event.created}:{}),
@@ -693,6 +706,7 @@ export function queueOrderEmails(state,event,{adminEmail="admin@aurapaddle.com"}
     items:structuredClone(order.items||[]),amountTotal:Number(order.amountTotal||0),currency:order.currency||"aud",paymentStage:order.paymentStage||"initial_50_percent",
     shippingRegion:order.shippingRegion||"",shippingLabel:order.shippingLabel||"",shippingAmount:order.shippingAmount,shippingQuoteRequired:order.shippingQuoteRequired===true,
     customerName:object.customer_details?.name||order.customerName||"",customerEmail,customerPhone:object.customer_details?.phone||order.customerPhone||"",
+    deliveryName:order.deliveryName||"",deliveryAddress:structuredClone(order.deliveryAddress||null),
     status:"pending",attempts:0,nextAttemptAt:0,createdAt:now,updatedAt:now
   };
   let queued=false;
