@@ -84,6 +84,23 @@ test("in-stock checkout collects full payment and shipping, pre-fills email and 
   assert.equal(params.get("after_expiration[recovery][allow_promotion_codes]"),"false");
 });
 
+test("full-payment Checkout generates one paid tax invoice with inclusive GST instead of a second payment",()=>{
+  const items=normaliseCheckoutItems([{sku:"AP734955",quantity:1}],catalog);
+  const params=buildCheckoutParams({items,priceBySku:stripeMap.bySku,siteUrl:"http://localhost:4242",returnPath:"/cart/",shipping:shippingFor(items),orderInvoicesEnabled:true,gstTaxRateId:"txr_GST10",orderNumber:"APO88685"});
+  assert.equal(params.get("invoice_creation[enabled]"),"true");
+  assert.equal(params.get("invoice_creation[invoice_data][metadata][aura_order_number]"),"APO88685");
+  assert.equal(params.get("line_items[0][tax_rates][0]"),"txr_GST10");
+  assert.equal(params.get("line_items[1][tax_rates][0]"),"txr_GST10");
+  assert.equal(params.get("metadata[aura_payment_stage]"),"paid_in_full");
+});
+
+test("preorder Checkout does not issue a premature full-order invoice",()=>{
+  const items=normaliseCheckoutItems([{sku:"AP233694",quantity:1}],catalog);
+  const params=buildCheckoutParams({items,priceBySku:stripeMap.bySku,siteUrl:"http://localhost:4242",returnPath:"/cart/",shipping:shippingFor(items),orderInvoicesEnabled:true,gstTaxRateId:"txr_GST10"});
+  assert.equal(params.get("invoice_creation[enabled]"),null);
+  assert.equal(params.get("line_items[0][tax_rates][0]"),null);
+});
+
 test("Checkout expires after two hours so Stripe can produce a recovery URL",()=>{
   const items=normaliseCheckoutItems([{sku:"AP734955",quantity:1}],catalog),now=1_800_000_000;
   const params=buildCheckoutParams({items,priceBySku:new Map(),siteUrl:"http://localhost:4242",returnPath:"/cart/",shipping:shippingFor(items),now});

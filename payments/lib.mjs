@@ -265,7 +265,7 @@ function appendObject(params,prefix,object){
   for(const [key,value] of Object.entries(object))params.set(`${prefix}[${key}]`,String(value));
 }
 
-export function buildCheckoutParams({items,priceBySku,siteUrl,returnPath,shipping,attribution,customerEmail,recoveryEmailConsent=false,orderNumber="APO00000",trackingToken="test-tracking-token",integrationIdentifier="aura_cart_abcdefgh",now=Math.floor(Date.now()/1000)}){
+export function buildCheckoutParams({items,priceBySku,siteUrl,returnPath,shipping,attribution,customerEmail,recoveryEmailConsent=false,orderInvoicesEnabled=false,gstTaxRateId="",orderNumber="APO00000",trackingToken="test-tracking-token",integrationIdentifier="aura_cart_abcdefgh",now=Math.floor(Date.now()/1000)}){
   const params=new URLSearchParams();
   if(!shipping?.regionId)throw new Error("Shipping region is required for checkout.");
   if(!/^APO\d{5}$/.test(orderNumber))throw new Error("Invalid AURA order number.");
@@ -278,6 +278,14 @@ export function buildCheckoutParams({items,priceBySku,siteUrl,returnPath,shippin
   cancelUrl.searchParams.set("checkout","cancelled");
 
   params.set("mode","payment");
+  if(orderInvoicesEnabled&&metadata.aura_payment_stage==="paid_in_full"){
+    if(!/^txr_[A-Za-z0-9]+$/.test(gstTaxRateId))throw new Error("A valid inclusive GST tax rate is required for post-payment invoices.");
+    params.set("invoice_creation[enabled]","true");
+    params.set("invoice_creation[invoice_data][description]",`AURA PADDLE ${orderNumber} order tax invoice`);
+    params.set("invoice_creation[invoice_data][footer]","Prices are in Australian dollars and include GST.");
+    params.set("invoice_creation[invoice_data][metadata][aura_order_number]",orderNumber);
+    params.set("invoice_creation[invoice_data][metadata][aura_invoice_type]","order_tax_invoice");
+  }
   const email=normaliseRecoveryEmail(customerEmail);
   if(email)params.set("customer_email",email);
   params.set("adaptive_pricing[enabled]","false");
@@ -291,6 +299,7 @@ export function buildCheckoutParams({items,priceBySku,siteUrl,returnPath,shippin
     else{params.set(`${prefix}[price_data][product_data][name]`,`${variant.productName} · ${orderNumber}`);params.set(`${prefix}[price_data][product_data][description]`,sourceItem.bundleApplied?"Fishing Rack — Angler Fishing bundle price":variant.kind==="accessory"?"Fishing Rack accessory":`${variant.shortName} · ${variant.size} · ${variant.colour} · ${variant.sku}`);params.set(`${prefix}[price_data][product_data][metadata][aura_sku]`,variant.sku)}
     params.set(`${prefix}[price_data][unit_amount]`,String(paymentAmount));
     params.set(`${prefix}[quantity]`,String(quantity));
+    if(orderInvoicesEnabled&&metadata.aura_payment_stage==="paid_in_full")params.set(`${prefix}[tax_rates][0]`,gstTaxRateId);
   });
   if(inStock&&shipping.amount>0){
     const prefix=`line_items[${items.length}]`;
@@ -298,6 +307,7 @@ export function buildCheckoutParams({items,priceBySku,siteUrl,returnPath,shippin
     params.set(`${prefix}[price_data][product_data][name]`,`Shipping · ${shipping.label}`);
     params.set(`${prefix}[price_data][unit_amount]`,String(shipping.amount));
     params.set(`${prefix}[quantity]`,"1");
+    if(orderInvoicesEnabled&&metadata.aura_payment_stage==="paid_in_full")params.set(`${prefix}[tax_rates][0]`,gstTaxRateId);
   }
   const cartReference=crypto.createHash("sha256").update(metadata.aura_items).digest("hex").slice(0,24);
   params.set("client_reference_id",items.length===1?items[0].variant.sku:`cart-${cartReference}`);

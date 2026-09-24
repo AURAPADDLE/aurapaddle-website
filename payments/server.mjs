@@ -121,6 +121,14 @@ async function syncPaidCheckoutToOrderInvoice(event){
   const session=event.data.object,orderNumber=session.metadata?.aura_order_number;
   const order=Object.values((await store.read()).orders||{}).find(item=>item.orderNumber===orderNumber);
   if(!order)return;
+  if(order.paymentStage==="paid_in_full"&&(session.invoice||session.invoice_creation?.enabled===true)){
+    const checkoutInvoiceId=session.invoice||((await stripeRequest(`/v1/checkout/sessions/${encodeURIComponent(session.id)}`)).invoice);
+    if(!checkoutInvoiceId)throw new Error(`Checkout invoice is not ready for paid order ${order.orderNumber}; no replacement invoice was created.`);
+    const invoice=await stripeRequest(`/v1/invoices/${encodeURIComponent(checkoutInvoiceId)}`);
+    if(invoice.status!=="paid"||Number(invoice.amount_paid)!==Number(order.amountTotal||0))throw new Error(`Checkout invoice ${invoice.id} does not match paid order ${order.orderNumber}.`);
+    await store.mutate(state=>{const target=Object.values(state.orders||{}).find(item=>item.orderNumber===order.orderNumber);if(target){target.orderInvoiceId=invoice.id;target.orderInvoiceStatus=invoice.status;target.orderInvoiceUrl=invoice.hosted_invoice_url||"";target.orderInvoicePdf=invoice.invoice_pdf||"";target.updated=Math.floor(Date.now()/1000)}});
+    return;
+  }
   let invoice=await ensureOrderInvoice(order);
   if(order.paymentStage==="paid_in_full"){
     if(invoice.status==="draft")invoice=await stripeRequest(`/v1/invoices/${invoice.id}/finalize`,{method:"POST",headers:{"Content-Type":"application/x-www-form-urlencoded","Idempotency-Key":`${order.orderNumber}-finalize-order-invoice-v1`},body:new URLSearchParams()});
@@ -146,7 +154,7 @@ async function checkout(req,res){
   const requestId=/^[a-zA-Z0-9_-]{8,80}$/.test(body.requestId||"")?body.requestId:`${Date.now()}-${Math.random().toString(36).slice(2)}`;
   const attribution=normaliseAttribution(body.attribution);
   const identity=await createOrderIdentity(requestId,attribution,customerEmail,items);
-  const params=buildCheckoutParams({items,priceBySku:stripeMap.bySku,siteUrl,returnPath,shipping,attribution,customerEmail,recoveryEmailConsent:body.recoveryEmailConsent===true,...identity});
+  const params=buildCheckoutParams({items,priceBySku:stripeMap.bySku,siteUrl,returnPath,shipping,attribution,customerEmail,recoveryEmailConsent:body.recoveryEmailConsent===true,orderInvoicesEnabled,gstTaxRateId,...identity});
   const session=await stripeRequest("/v1/checkout/sessions",{method:"POST",headers:{"Content-Type":"application/x-www-form-urlencoded","Idempotency-Key":`aura-${requestId}`},body:params});
   send(res,200,{id:session.id,url:session.url,orderNumber:identity.orderNumber,testMode:!session.livemode});
 }
