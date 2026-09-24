@@ -13,11 +13,13 @@
   const readAttribution=()=>{try{const value=JSON.parse(localStorage.getItem(attributionKey)||"null"),expiresAt=Date.parse(value?.expiresAt||"");if(!value||!Number.isFinite(expiresAt)||Date.now()>=expiresAt)return null;return value}catch{return null}};
   const writeAttribution=value=>{try{const now=new Date();localStorage.setItem(attributionKey,JSON.stringify({...value,updatedAt:now.toISOString(),expiresAt:value.expiresAt||new Date(now.getTime()+attributionMaxAge).toISOString()}))}catch{}};
   const removeAttribution=()=>{try{localStorage.removeItem(attributionKey)}catch{}};
-  const externalReferrer=()=>{try{const referrer=new URL(document.referrer);return referrer.hostname===location.hostname?"":clean(referrer.hostname.toLowerCase(),160)}catch{return ""}};
+  const normalHost=value=>String(value||"").toLowerCase().replace(/^www\./,"");
+  const externalReferrer=()=>{try{const host=normalHost(new URL(document.referrer).hostname);return host===normalHost(location.hostname)||host==="stripe.com"||host.endsWith(".stripe.com")||host==="link.com"||host.endsWith(".link.com")?"":clean(host,160)}catch{return ""}};
+  const searchSource=host=>/^(www\.)?google\.(com|com\.au|co\.nz|co\.uk)$/.test(host)?"google":host==="bing.com"?"bing":host==="duckduckgo.com"?"duckduckgo":"";
   const trimTouch=(touch,preferences)=>{
     if(!touch||typeof touch!=="object")return null;
     const next={capturedAt:touch.capturedAt};
-    if(preferences.analytics)for(const key of ["source","medium","campaign","campaignId","content","term","landingPath","referrerHost"])if(touch[key])next[key]=touch[key];
+    if(preferences.analytics)for(const key of ["source","medium","campaign","campaignId","content","term","landingPath","referrerHost","evidence"])if(touch[key])next[key]=touch[key];
     if(preferences.marketing)for(const key of ["clickType","clickId","gadSource"])if(touch[key])next[key]=touch[key];
     return Object.keys(next).length>1?next:null;
   };
@@ -27,8 +29,11 @@
     const params=new URL(location.href).searchParams,referrerHost=externalReferrer();
     const touch={capturedAt:new Date().toISOString()};
     if(analytics){
-      touch.source=clean(params.get("utm_source")||(referrerHost?referrerHost:"direct"),100);
-      touch.medium=clean(params.get("utm_medium")||(referrerHost?"referral":"none"),100);
+      const tagged=["utm_source","utm_medium","utm_campaign","utm_id","utm_content","utm_term"].some(key=>Boolean(params.get(key)));
+      const adClick=marketing&&["gclid","gbraid","wbraid"].some(key=>Boolean(params.get(key))),search=searchSource(referrerHost);
+      touch.source=clean(params.get("utm_source")||(adClick?"google":search||referrerHost||"direct"),100);
+      touch.medium=clean(params.get("utm_medium")||(adClick?"cpc":search?"organic":referrerHost?"referral":"none"),100);
+      touch.evidence=tagged?"utm":adClick?"google_click_id":referrerHost?"referrer":"no_referrer";
       touch.campaign=clean(params.get("utm_campaign"),160);
       touch.campaignId=clean(params.get("utm_id"),100);
       touch.content=clean(params.get("utm_content"),160);
@@ -41,11 +46,12 @@
       touch.gadSource=clean(params.get("gad_source"),40).replace(/[^A-Za-z0-9._~-]/g,"");
     }
     for(const key of Object.keys(touch))if(!touch[key])delete touch[key];
-    const explicitCampaign=["utm_source","utm_medium","utm_campaign","utm_id","utm_content","utm_term","gclid","gbraid","wbraid","gad_source"].some(key=>params.has(key));
+    const explicitCampaign=Boolean(touch.campaign||touch.campaignId||touch.content||touch.term||touch.clickId||touch.evidence==="utm");
     const current=readAttribution()||{version:1,expiresAt:new Date(Date.now()+attributionMaxAge).toISOString()};
     current.first=trimTouch(current.first,preferences)||touch;
-    current.last=explicitCampaign||!current.last?touch:trimTouch(current.last,preferences);
-    if(explicitCampaign)current.expiresAt=new Date(Date.now()+attributionMaxAge).toISOString();
+    const previousLast=trimTouch(current.last,preferences),newNonDirect=explicitCampaign||(analytics&&Boolean(referrerHost));
+    current.last=newNonDirect||!previousLast?touch:previousLast;
+    if(newNonDirect)current.expiresAt=new Date(Date.now()+attributionMaxAge).toISOString();
     current.consent={analytics,marketing,updatedAt:preferences.updatedAt||new Date().toISOString()};
     if(!analytics&&!marketing){delete current.analyticsClientId;delete current.analyticsSessionId}
     writeAttribution(current);
@@ -81,21 +87,19 @@
     const timer=setTimeout(()=>finish(""),2500);
     try{window.gtag("get",measurementId,name,finish)}catch{finish("")}
   });
-  const fallbackClientId=()=>{
-    const values=new Uint32Array(2);
-    if(window.crypto?.getRandomValues)window.crypto.getRandomValues(values);
-    else{values[0]=Math.floor(Math.random()*4_294_967_295);values[1]=Math.floor(Math.random()*4_294_967_295)}
-    return `${values[0]||1}.${values[1]||1}`;
-  };
   const refreshAnalyticsIds=async preferences=>{
     if(!preferences.analytics&&!preferences.marketing)return captureAttribution(preferences);
     loadGoogleTag();
     const [clientId,sessionId]=await Promise.all([getGoogleTagValue("client_id"),getGoogleTagValue("session_id")]);
+    // Respect a withdrawal made while the asynchronous Google tag lookup ran.
+    preferences=window.auraConsent||preferences;
+    if(!preferences.analytics&&!preferences.marketing)return captureAttribution(preferences);
     const current=captureAttribution(preferences)||{version:1,consent:{analytics:Boolean(preferences.analytics),marketing:Boolean(preferences.marketing)}};
-    const resolvedClientId=/^\d+\.\d+$/.test(String(clientId||""))?String(clientId):/^\d+\.\d+$/.test(String(current.analyticsClientId||""))?String(current.analyticsClientId):fallbackClientId();
-    const resolvedSessionId=/^\d+$/.test(String(sessionId||""))?String(sessionId):/^\d+$/.test(String(current.analyticsSessionId||""))?String(current.analyticsSessionId):String(Math.floor(Date.now()/1000));
-    current.analyticsClientId=resolvedClientId;
-    current.analyticsSessionId=resolvedSessionId;
+    // Never manufacture a GA identity or reuse a potentially stale session.
+    // Missing tag IDs must remain visible as missing, not create false stitching.
+    delete current.analyticsClientId;delete current.analyticsSessionId;
+    if(/^\d+\.\d+$/.test(String(clientId||"")))current.analyticsClientId=String(clientId);
+    if(/^\d+$/.test(String(sessionId||"")))current.analyticsSessionId=String(sessionId);
     writeAttribution(current);
     return current;
   };

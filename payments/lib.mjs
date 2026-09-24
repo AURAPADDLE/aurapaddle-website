@@ -2,6 +2,7 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import {fileURLToPath} from "node:url";
+import {orderAttributionAudit} from "./attribution-audit.mjs";
 
 const here=path.dirname(fileURLToPath(import.meta.url));
 const catalogPath=path.join(here,"catalog.json");
@@ -115,6 +116,7 @@ function normaliseAttributionTouch(value,{analytics,marketing}){
     touch.term=attributionText(value.term,160);
     touch.landingPath=attributionText(value.landingPath,240).startsWith("/")?attributionText(value.landingPath,240):"";
     touch.referrerHost=attributionText(value.referrerHost,160).toLowerCase().replace(/[^a-z0-9.-]/g,"");
+    if(["utm","google_click_id","referrer","no_referrer"].includes(value.evidence))touch.evidence=value.evidence;
   }
   if(marketing){
     const clickType=attributionText(value.clickType,16).toLowerCase();
@@ -566,9 +568,10 @@ export function publicOrderView(order){
   };
 }
 
-export function adminOrderList(state,catalog){
+export function adminOrderList(state,catalog,analyticsConfiguration={}){
   return Object.values(state.orders||{}).sort((a,b)=>Number(b.created||0)-Number(a.created||0)).map(order=>({
     orderNumber:order.orderNumber,
+    attributionAudit:orderAttributionAudit(order,state,analyticsConfiguration),
     customerName:order.customerName||"",
     customerEmail:order.customerEmail||"",
     customerPhone:order.customerPhone||"",

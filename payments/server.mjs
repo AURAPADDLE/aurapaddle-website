@@ -5,6 +5,7 @@ import crypto from "node:crypto";
 import {fileURLToPath} from "node:url";
 import {abandonedCheckoutList,adminOrderList,applyStripeEvent,buildCheckoutParams,buildOrderInvoiceLines,calculateShipping,campaignProgress,isStripeHostedInvoiceUrl,loadCatalog,loadShippingRates,loadStripeMap,normaliseAttribution,normaliseCheckoutItems,normaliseQuantity,parseRequestUrl,prepareBalanceRequest,publicOrderView,queueOrderEmails,queueOrderMilestoneEmail,reserveCheckoutIdentity,safeReturnPath,unsubscribeRecoveryEmail,updateOrderProgress,verifyStripeSignature} from "./lib.mjs";
 import {enqueueStripeAnalytics,measurementPayload} from "./analytics.mjs";
+import {markAnalyticsDelivery} from "./attribution-audit.mjs";
 import {ensureRecoveryInbox,sendRecoveryEmail} from "./recovery-email.mjs";
 import {sendOrderEmail} from "./order-email.mjs";
 import {createStateStore} from "./state-store.mjs";
@@ -244,7 +245,7 @@ async function updateProgress(req,res){
 
 async function orders(req,res){
   if(!requireAdmin(req))return send(res,401,{error:"Admin authorisation required."});
-  send(res,200,{generatedAt:Math.floor(Date.now()/1000),items:adminOrderList(await store.read(),catalog)});
+  send(res,200,{generatedAt:Math.floor(Date.now()/1000),items:adminOrderList(await store.read(),catalog,{configured:Boolean(ga4ApiSecret),serverEventsEnabled:analyticsDispatchEnabled,validationMode:analyticsValidationMode})});
 }
 
 async function abandonedCheckouts(req,res){
@@ -272,7 +273,7 @@ async function claimAnalyticsEntry(){
   });
 }
 async function completeAnalyticsEntry(key){
-  await store.mutate(state=>{const entry=state.analyticsOutbox?.[key];if(entry){entry.status="sent";entry.sentAt=Math.floor(Date.now()/1000);delete entry.lastError;delete entry.claimedAt}});
+  await store.mutate(state=>markAnalyticsDelivery(state.analyticsOutbox?.[key],{validationMode:analyticsValidationMode}));
 }
 async function retryAnalyticsEntry(key,error){
   await store.mutate(state=>{const entry=state.analyticsOutbox?.[key];if(!entry)return;const delay=Math.min(3600,30*2**Math.min(Number(entry.attempts||1)-1,7));entry.status=Number(entry.attempts||0)>=12?"failed":"retry";entry.nextAttemptAt=Math.floor(Date.now()/1000)+delay;entry.lastError=String(error?.message||error||"Analytics delivery failed").slice(0,240);delete entry.claimedAt});
