@@ -193,7 +193,7 @@
         <div id="preorderOfferCopy">
           <p class="preorder-offer__value">Use this code at checkout:</p>
           <button class="preorder-offer__code" type="button" data-promo-code-copy aria-label="Copy promo code YOGAFREESHIP"><strong>YOGAFREESHIP</strong><span>Copy code</span></button>
-          <p class="preorder-offer__copy">Order by 26 September 2026. Eligible metro and coastal delivery regions only. In-stock boards dispatch within 1 business day after successful payment.</p>
+          <p class="preorder-offer__copy">Order by 30 September 2026. Eligible metro and coastal delivery regions only. In-stock boards dispatch within 1 business day after successful payment.</p>
         </div>
         <div class="preorder-offer__actions">
           <a class="btn btn-primary" href="products/yoga-cruiser.html?colour=glacier" data-preorder-offer-shop>Shop Glacier Blue</a>
@@ -211,6 +211,6 @@
     const heroBatch=document.querySelector("[data-hero-batch]"),heroBatchTarget=50,heroBatchAllocation=20;const updateHeroBatch=reserved=>{const committed=Math.min(heroBatchTarget,heroBatchAllocation+Math.max(0,Number(reserved)||0)),percent=Math.min(100,Math.round(committed/heroBatchTarget*100)),remaining=Math.max(0,heroBatchTarget-committed);heroBatch.querySelector("[data-hero-batch-count]").textContent=`${committed} / ${heroBatchTarget}`;heroBatch.querySelector("[data-hero-batch-bar]").style.width=`${percent}%`;heroBatch.querySelector("[role=progressbar]").setAttribute("aria-valuenow",String(committed));heroBatch.querySelector("[data-hero-batch-remaining]").textContent=remaining?`${remaining} more to production.`:"Production target reached."};const refreshHeroBatch=async()=>{if(location.protocol==="file:")return;try{const response=await fetch("/api/preorder-progress",{cache:"no-store",headers:{Accept:"application/json"}});if(!response.ok)return;const payload=await response.json(),campaign=(payload.campaigns||[]).find(item=>item.id==="paddle-launch-batch-01");updateHeroBatch(campaign?.reserved)}catch{}};updateHeroBatch(0);refreshHeroBatch();window.setInterval(refreshHeroBatch,60000);
     document.getElementById("newsletterForm").addEventListener("submit",async e=>{e.preventDefault();const form=e.currentTarget,status=document.getElementById("newsletterStatus"),button=form.querySelector("button[type=submit]");status.style.display="block";status.textContent="Joining…";button.disabled=true;let response;try{response=await fetch(form.action,{method:"POST",body:new FormData(form),headers:{Accept:"application/json"}});if(!response.ok)throw new Error();window.AURATracking?.event("sign_up",{method:"newsletter",form_location:"homepage"});status.textContent="Thank you — you are on the AURA PADDLE list.";form.reset()}catch{window.AURATracking?.event("form_submit_error",{form_type:"newsletter",error_code:window.AURATracking?.errorCode(response)||"request_failed"});status.textContent="We could not save your subscription. Please email admin@aurapaddle.com."}finally{button.disabled=false}});
   </script>
-  <script src="home-offer.js?v=20260920-yoga-free-shipping"></script>
+  <script src="home-offer.js?v=20260927-yoga-free-shipping-extension"></script>
 </body>
 </html>

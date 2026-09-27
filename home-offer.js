@@ -3,7 +3,7 @@
   if(!offer)return;
   const promotion={promotion_id:"yoga_glacier_free_shipping_202609",promotion_name:"Yoga Cruiser Glacier Blue free shipping",creative_slot:"homepage_modal"};
   const promotionStarts=Date.parse("2026-09-20T00:00:00+10:00");
-  const promotionEnds=Date.parse("2026-09-27T00:00:00+10:00");
+  const promotionEnds=Date.parse("2026-10-01T00:00:00+10:00");
   const storageKey="aura-home-promo-yoga-glacier-202609";
   const track=(name,params={})=>window.AURATracking?.event(name,{...promotion,...params});
   const isActive=()=>Date.now()>=promotionStarts&&Date.now()<promotionEnds;
