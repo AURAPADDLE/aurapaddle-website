@@ -176,16 +176,16 @@ test("shipping regions use the approved iSUP and surfboard prices",()=>{
   assert.equal(shippingFor([{variant:gannetVariant,quantity:2}],"qld-nsw-main").quoteRequired,true);
 });
 
-test("Yoga Cruiser Glacier Blue launch promotion waives eligible shipping through 30 September",()=>{
+test("Yoga Cruiser Glacier Blue launch promotion ends at the start of 30 September AEST",()=>{
   const items=normaliseCheckoutItems([{sku:"AP734955",quantity:1}],catalog);
-  const active=shippingFor(items,"qld-nsw-main",Date.parse("2026-09-30T23:59:00+10:00")," yogafreeship ");
+  const active=shippingFor(items,"qld-nsw-main",Date.parse("2026-09-29T23:59:00+10:00")," yogafreeship ");
   assert.equal(active.amount,0);
   assert.deepEqual(active.promotionIds,["yoga-glacier-launch-free-shipping"]);
   assert.equal(active.promotionCode,"YOGAFREESHIP");
   assert.equal(shippingFor(items,"qld-nsw-main",Date.parse("2026-09-26T12:00:00+10:00")).amount,4500);
   assert.equal(shippingFor(items,"qld-nsw-main",Date.parse("2026-09-26T12:00:00+10:00"),"NOT-A-CODE").amount,4500);
   assert.equal(shippingFor(items,"adelaide",Date.parse("2026-09-26T12:00:00+10:00")).amount,12900);
-  assert.equal(shippingFor(items,"qld-nsw-main",Date.parse("2026-10-01T00:00:00+10:00"),"YOGAFREESHIP").amount,4500);
+  assert.equal(shippingFor(items,"qld-nsw-main",Date.parse("2026-09-30T00:00:00+10:00"),"YOGAFREESHIP").amount,4500);
 });
 
 test("in-stock Checkout charges shipping today; quote-required region requires contact",()=>{

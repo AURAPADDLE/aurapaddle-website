@@ -45,7 +45,7 @@
   document.getElementById("beforeDispatch").parentElement.after(totalRow);
   const promoBlock=document.createElement("div");
   promoBlock.className="promo-code";
-  promoBlock.innerHTML='<label for="promoCode">Promo code</label><div class="promo-code-controls"><input id="promoCode" name="promoCode" autocomplete="off" maxlength="32" placeholder="Enter promo code"><button id="applyPromoCode" type="button">Apply</button></div><p id="promoHelp">Yoga Cruiser Glacier Blue: use YOGAFREESHIP for eligible free shipping through 30 September.</p>';
+  promoBlock.innerHTML='<label for="promoCode">Promo code</label><div class="promo-code-controls"><input id="promoCode" name="promoCode" autocomplete="off" maxlength="32" placeholder="Enter promo code"><button id="applyPromoCode" type="button">Apply</button></div><p id="promoHelp">Yoga Cruiser Glacier Blue: use YOGAFREESHIP for eligible free shipping through 29 September.</p>';
   document.querySelector(".shipping-choice").after(promoBlock);
   const promoInput=document.getElementById("promoCode"),applyPromoButton=document.getElementById("applyPromoCode"),promoHelp=document.getElementById("promoHelp");
   let appliedPromoCode="";
@@ -61,7 +61,7 @@
   };
   const isupSlugs=new Set(["yoga-cruiser","angler-fishing","touring-performance","coast-go"]);
   const surfboardSlugs=new Set(["gannet","current","meridian"]);
-  const yogaLaunchPromotion={code:"YOGAFREESHIP",sku:"AP734955",startsAt:Date.parse("2026-09-20T00:00:00+10:00"),endsAt:Date.parse("2026-10-01T00:00:00+10:00"),regionIds:new Set(["gold-coast-brisbane","qld-nsw-main"])};
+  const yogaLaunchPromotion={code:"YOGAFREESHIP",sku:"AP734955",startsAt:Date.parse("2026-09-20T00:00:00+10:00"),endsAt:Date.parse("2026-09-30T00:00:00+10:00"),regionIds:new Set(["gold-coast-brisbane","qld-nsw-main"])};
   const launchPromotionActive=()=>Date.now()>=yogaLaunchPromotion.startsAt&&Date.now()<yogaLaunchPromotion.endsAt;
   const launchPromotionInCart=items=>launchPromotionActive()&&items.some(item=>item.sku===yogaLaunchPromotion.sku);
   let launchPromotionAutoTracked=false;
@@ -118,6 +118,8 @@
 
   function render(){
     const items=cart.read();
+    promoBlock.hidden=!launchPromotionActive();
+    promoBlock.style.display=promoBlock.hidden?"none":"";
     if(!appliedPromoCode&&launchPromotionInCart(items)){
       appliedPromoCode=yogaLaunchPromotion.code;
       promoInput.value=yogaLaunchPromotion.code;
@@ -168,12 +170,12 @@
     }else{
       shippingAmount.textContent=shipping.promotionApplied?"Free — promo applied":money(shipping.total);
       beforeDispatch.textContent=availableOnly?"Paid today":money(remaining+shipping.total);
-      shippingHelp.textContent=shipping.promotionApplied?"YOGAFREESHIP applied. Free shipping ends 30 September 2026 for eligible regions.":availableOnly?"This shipping amount is included in today's secure payment.":"This shipping amount is recorded now and paid with the remaining product balance before dispatch.";
+      shippingHelp.textContent=shipping.promotionApplied?"YOGAFREESHIP applied. Free shipping ends 29 September 2026 for eligible regions.":availableOnly?"This shipping amount is included in today's secure payment.":"This shipping amount is recorded now and paid with the remaining product balance before dispatch.";
     }
     const autoPromoPending=appliedPromoCode===yogaLaunchPromotion.code&&launchPromotionInCart(items)&&!shipping.selected;
     const promoValid=appliedPromoCode===yogaLaunchPromotion.code&&shipping.promotionApplied;
     promoHelp.className=promoValid?"success":autoPromoPending?"":appliedPromoCode?"error":"";
-    promoHelp.textContent=promoValid?"YOGAFREESHIP automatically applied — this order qualifies for free shipping.":autoPromoPending?"YOGAFREESHIP is ready — select an eligible delivery region to apply free shipping.":appliedPromoCode?"YOGAFREESHIP is not available for the current product, region or date.":"Yoga Cruiser Glacier Blue: use YOGAFREESHIP for eligible free shipping through 30 September.";
+    promoHelp.textContent=promoValid?"YOGAFREESHIP automatically applied — this order qualifies for free shipping.":autoPromoPending?"YOGAFREESHIP is ready — select an eligible delivery region to apply free shipping.":appliedPromoCode?"YOGAFREESHIP is not available for the current product, region or date.":"Yoga Cruiser Glacier Blue: use YOGAFREESHIP for eligible free shipping through 29 September.";
     checkout.textContent=availableOnly?"PAY IN FULL SECURELY":"PAY 50% SECURELY";
     checkout.disabled=checkoutPending||location.protocol==="file:"||config.enabled===false||!shipping.selected||(hasPreorder&&hasAvailable)||(availableOnly&&shipping.quoteRequired);
     regionSelect.disabled=checkoutPending;
@@ -289,6 +291,7 @@
   });
   checkoutEmail.addEventListener("input",()=>checkoutEmail.setCustomValidity(""));
   render();
+  window.setTimeout(render,Math.max(0,yogaLaunchPromotion.endsAt-Date.now()));
   const viewedItems=cart.read();
   if(viewedItems.length){
     const pricing=bundlePricing(viewedItems),items=viewedItems.map(item=>analyticsItem(item,pricing.lineTotal(item)/item.quantity/100));
