@@ -31,7 +31,7 @@
       </div>
     </section>
   </main>
-  <script src="cart.js"></script>
+  <script src="coastgo-offer.js?v=20260929-launch"></script><script src="cart.js"></script>
   <script src="cookie-consent.js?v=20260921-consent-mode-debug"></script>
   <script src="site-analytics.js?v=20260825-key-events"></script>
   <script>
@@ -46,6 +46,10 @@
       document.querySelector("h1").textContent=paidInFull?"Full payment received.":"Initial payment received.";
       document.getElementById("statusCopy").textContent=paid?paidInFull?"Stripe confirms your full payment, including published shipping. We are preparing your in-stock board for dispatch.":"Stripe confirms that the 50% initial payment succeeded and the pre-order is reserved.":`Stripe payment status: ${session.paymentStatus}.`;
       document.getElementById("nextSteps").textContent=paidInFull?"Glacier Blue dispatches within 1 business day after successful payment. Delivery transit time varies by destination; follow progress from your secure order link.":"AURA PADDLE will send a separate secure Stripe invoice for the remaining 50% and confirmed shipping charge before dispatch.";
+      if(paidInFull&&items.some(item=>window.AURACoastGo.isCoastGo(item.sku))){
+        document.getElementById("statusCopy").textContent=paid?"Stripe confirms your full payment, including published shipping. No remaining product balance is due.":`Stripe payment status: ${session.paymentStatus}.`;
+        document.getElementById("nextSteps").textContent=`${window.AURACoastGo.dispatch()} Standard transit: 21–40 days; eligible-region express: 7–11 days. Transit excludes preparation time. Follow your secure order link for updates.`;
+      }
       document.getElementById("orderNumber").textContent=`Order ${session.orderNumber}`;
       document.getElementById("orderSku").textContent=items.length>1?`${items.length} SKUs · ${session.quantity} items`:items.length?`${items[0].sku} · Quantity ${items[0].quantity}`:`${session.sku} · Quantity ${session.quantity}`;
       document.getElementById("orderDetails").textContent=`AUD $${(session.amountTotal/100).toFixed(2)} ${paidInFull?"paid in full including shipping":"initial payment"} · ${session.orderMode==="preorder"?"Pre-order reserved":"Available product"} · ${session.customerEmail}`;

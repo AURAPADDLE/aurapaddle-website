@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-16T21:41:29.879Z",
+  "generatedAt": "2026-09-29T09:41:18.551Z",
   "currency": "aud",
   "variants": [
     {
@@ -331,20 +331,13 @@
       "currency": "aud",
       "retailAmount": 34900,
       "checkoutAmount": 29900,
-      "depositAmount": 14950,
-      "orderMode": "preorder",
-      "available": false,
+      "depositAmount": 29900,
+      "orderMode": "available",
+      "available": true,
+      "launchAt": "2026-10-08T00:00:00+10:00",
+      "dispatchLeadDays": 2,
       "productUrl": "https://www.aurapaddle.com/products/coast-go.html?size=10'6%22&colour=blueorange",
-      "campaign": {
-        "id": "coastgo-confirmed-preorder",
-        "name": "Confirmed Production Pre-order",
-        "target": 0,
-        "thresholdRequired": false,
-        "deadline": "Not applicable",
-        "deadlineISO": "",
-        "estimatedDelivery": "30 October 2026",
-        "discountAmount": 5000
-      }
+      "campaign": null
     },
     {
       "sku": "AP730047",
@@ -358,20 +351,13 @@
       "currency": "aud",
       "retailAmount": 34900,
       "checkoutAmount": 29900,
-      "depositAmount": 14950,
-      "orderMode": "preorder",
-      "available": false,
+      "depositAmount": 29900,
+      "orderMode": "available",
+      "available": true,
+      "launchAt": "2026-10-08T00:00:00+10:00",
+      "dispatchLeadDays": 2,
       "productUrl": "https://www.aurapaddle.com/products/coast-go.html?size=10'6%22&colour=mintgrey",
-      "campaign": {
-        "id": "coastgo-confirmed-preorder",
-        "name": "Confirmed Production Pre-order",
-        "target": 0,
-        "thresholdRequired": false,
-        "deadline": "Not applicable",
-        "deadlineISO": "",
-        "estimatedDelivery": "30 October 2026",
-        "discountAmount": 5000
-      }
+      "campaign": null
     },
     {
       "sku": "AP388238",
@@ -385,20 +371,13 @@
       "currency": "aud",
       "retailAmount": 34900,
       "checkoutAmount": 29900,
-      "depositAmount": 14950,
-      "orderMode": "preorder",
-      "available": false,
+      "depositAmount": 29900,
+      "orderMode": "available",
+      "available": true,
+      "launchAt": "2026-10-08T00:00:00+10:00",
+      "dispatchLeadDays": 2,
       "productUrl": "https://www.aurapaddle.com/products/coast-go.html?size=10'6%22&colour=bluecoral",
-      "campaign": {
-        "id": "coastgo-confirmed-preorder",
-        "name": "Confirmed Production Pre-order",
-        "target": 0,
-        "thresholdRequired": false,
-        "deadline": "Not applicable",
-        "deadlineISO": "",
-        "estimatedDelivery": "30 October 2026",
-        "discountAmount": 5000
-      }
+      "campaign": null
     },
     {
       "sku": "AP428330",

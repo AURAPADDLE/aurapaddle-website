@@ -9,6 +9,8 @@ import {markAnalyticsDelivery} from "./attribution-audit.mjs";
 import {ensureRecoveryInbox,sendRecoveryEmail} from "./recovery-email.mjs";
 import {sendOrderEmail} from "./order-email.mjs";
 import {createStateStore} from "./state-store.mjs";
+import coastGoOffer from "../coastgo-offer.js";
+import {renderCoastGoPage,renderCoastGoFeed} from "./coastgo-content.mjs";
 
 const here=path.dirname(fileURLToPath(import.meta.url));
 const siteDir=path.resolve(here,"..");
@@ -146,9 +148,10 @@ async function checkout(req,res){
   if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(customerEmail)||customerEmail.length>254)return send(res,400,{error:"Enter a valid email address before continuing to secure payment."});
   const rawItems=Array.isArray(body.items)?body.items:[{sku:body.sku,quantity:normaliseQuantity(body.quantity)}];
   const items=normaliseCheckoutItems(rawItems,catalog);
+  if(items.some(item=>coastGoOffer.isCoastGo(item.variant.sku)&&!(Array.isArray(body.coastGoPrices)&&body.coastGoPrices.some(price=>price?.sku===item.variant.sku&&price.unitAmount===item.variant.checkoutAmount))))return send(res,409,{error:"CoastGo pricing has changed. Refresh your cart and review the full-payment total before continuing."});
   const promoCode=String(body.promoCode||"").trim().toUpperCase();
   const shipping=calculateShipping(items,body.shippingRegion,shippingRates,Date.now(),promoCode);
-  if(promoCode&&!shipping.promotionCode)return send(res,400,{error:"This promo code is invalid or not available for this order, region or date."});
+  if(promoCode&&!shipping.promotionCode&&promoCode!==coastGoOffer.codeFor(items))return send(res,400,{error:"This promo code is invalid or not available for this order, region or date."});
   if(items.some(item=>item.variant.orderMode==="available")&&shipping.quoteRequired)return send(res,400,{error:"Contact AURA PADDLE for a freight quote before ordering this in-stock board."});
   const fallback=items.length===1?items[0].variant:"/cart-preview.html";
   const returnPath=safeReturnPath(body.returnPath,fallback);
@@ -365,6 +368,10 @@ function staticFile(req,res,url){
   if(!target.startsWith(`${siteDir}${path.sep}`))return send(res,403,"Forbidden");
   let stat;try{stat=fs.statSync(target);if(stat.isDirectory()){target=path.join(target,"index.html");stat=fs.statSync(target)}}catch{return send(res,404,"Not found")}
   if(!stat.isFile())return send(res,404,"Not found");
+  if(pathname==="/merchant-feed.xml"||pathname==="/products/coast-go.html"){
+    const raw=fs.readFileSync(target,"utf8"),body=Buffer.from(pathname.endsWith(".xml")?renderCoastGoFeed(raw):renderCoastGoPage(raw));
+    res.writeHead(200,{"Content-Type":mime[path.extname(target).toLowerCase()],"Content-Length":body.length,"Cache-Control":"no-store"});return res.end(req.method==="HEAD"?undefined:body);
+  }
   res.writeHead(200,{"Content-Type":mime[path.extname(target).toLowerCase()]||"application/octet-stream","Content-Length":stat.size,"Cache-Control":pathname.startsWith("/assets/")?"public, max-age=3600":"no-cache"});
   if(req.method==="HEAD")return res.end();
   fs.createReadStream(target).pipe(res);

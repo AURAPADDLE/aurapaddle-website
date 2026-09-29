@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import {fileURLToPath} from "node:url";
+import {renderCoastGoPage,renderCoastGoFeed} from "../payments/coastgo-content.mjs";
 
 const scriptDir=path.dirname(fileURLToPath(import.meta.url));
 const siteDir=path.resolve(scriptDir,"..");
@@ -220,7 +221,7 @@ Object.assign(products.find(product=>product.slug==="vela-wakeboard"),{
 Object.assign(products.find(product=>product.slug==="angler-fishing"),{accessories:[{sku:"AP667703",name:"Fishing Rack",description:"A removable fishing rack for organising rods and essential gear on the Angler Fishing board.",image:"../assets/products/angler-fishing/accessories/AP667703_fishing-rack.png",cartImage:"assets/products/angler-fishing/accessories/AP667703_fishing-rack-cart.png",retailAUD:129,bundleAUD:69,bundleWith:"angler-fishing",discountAUD:0}]});
 
 Object.assign(products.find(product=>product.slug==="yoga-cruiser"),{status:"Glacier Blue in stock · 3 colours on pre-order",stock:"In stock · Dispatch within 1 business day after payment"});
-Object.assign(products.find(product=>product.slug==="coast-go"),{status:"All 3 colours on confirmed pre-order",stock:"Pre-order · 50% due today"});
+Object.assign(products.find(product=>product.slug==="coast-go"),{status:"All 3 colours · Official release 8 October",stock:"Pay in full · Dispatch within 2 days of order confirmation, from release on 8 October 2026"});
 Object.assign(products.find(product=>product.slug==="yoga-cruiser").images,{
   sandstone:[
     "../assets/products/yoga-cruiser/matte-sandstone/AP505002_yoga-cruiser_11ft_matte-sandstone_hero-01.jpg",
@@ -274,6 +275,10 @@ Object.assign(products.find(product=>product.slug==="touring-performance"),{imag
   coral:["../assets/products/touring-performance/coral-white/AP168023_touring-performance_14ft_coral-white_hero-01.webp","../assets/products/touring-performance/coral-white/AP168023_touring-performance_14ft_coral-white_deck-02.webp","../assets/products/touring-performance/coral-white/AP168023_touring-performance_14ft_coral-white_bottom-03.webp","../assets/products/touring-performance/coral-white/AP168023_touring-performance_14ft_coral-white_side-04.webp","../assets/products/touring-performance/coral-white/AP168023_touring-performance_14ft_coral-white_three-quarter-05.webp","../assets/products/touring-performance/coral-white/AP168023_touring-performance_14ft_coral-white_nose-hull-detail-06.webp","../assets/products/touring-performance/coral-white/AP168023_touring-performance_14ft_coral-white_full-kit-08.jpg","../assets/products/touring-performance/coral-white/AP168023_touring-performance_14ft_coral-white_touring-lineup-09.webp"]
 },photoNeed:"Detailed studio imagery, full-kit and range-lineup views are available for all four catalogue colours. On-water touring photography can be added when available."});
 products.find(product=>product.slug==="coast-go").images.mintgrey[0]="../assets/products/coast-go/mint-grey/AP730047_coast-go-isup_10ft6in_mint-grey_hero-01.jpg";
+Object.assign(products.find(product=>product.slug==="coast-go"),{
+  images:JSON.parse(fs.readFileSync(path.join(scriptDir,"coastgo-gallery.json"),"utf8")),
+  photoNeed:"Product, lifestyle, complete-kit, dimensions, detail and fin views are available for all three CoastGo colours."
+});
 Object.assign(products.find(product=>product.slug==="inflatable-hydrofoil"),{images:{
   foil:["../assets/products/inflatable-hydrofoil/carbon-and-teal/AP428330_inflatable-hydrofoil_5ft8in_carbon-and-teal_hero-01.webp","../assets/products/inflatable-hydrofoil/carbon-and-teal/AP428330_inflatable-hydrofoil_5ft8in_carbon-and-teal_deck-02.webp","../assets/products/inflatable-hydrofoil/carbon-and-teal/AP428330_inflatable-hydrofoil_5ft8in_carbon-and-teal_bottom-03.webp","../assets/products/inflatable-hydrofoil/carbon-and-teal/AP428330_inflatable-hydrofoil_5ft8in_carbon-and-teal_side-04.webp","../assets/products/inflatable-hydrofoil/carbon-and-teal/AP428330_inflatable-hydrofoil_5ft8in_carbon-and-teal_foil-connection-detail-05.webp"]
 },photoNeed:"Detailed board studio imagery and foil-connection detail are available. Complete assembled-system, verified kit flat lay, packed-bag and on-water action photography are still required."});
@@ -326,7 +331,7 @@ function getVariants(product){
       return name.endsWith(`— ${colour.catalogue}`);
     });
     if(!row)throw new Error(`Missing SKU for ${product.slug} / ${size} / ${colour.catalogue}`);
-    const available=product.slug==="yoga-cruiser"&&key==="glacier";
+    const available=product.slug==="coast-go"||(product.slug==="yoga-cruiser"&&key==="glacier");
     const preorder=available?null:product.slug==="coast-go"?confirmedPreorderFor(product):campaignFor(product);
     const sizeSpec=sizeSpecFor(product,size);
     return {
@@ -337,7 +342,8 @@ function getVariants(product){
       specification:sizeSpec?`${sizeSpec.size} × ${sizeSpec.width} × ${sizeSpec.thickness}; ${sizeSpec.volume}; ${colour.catalogueDisplay||colour.catalogue}`:row[6],
       purchaseUSD:row[7],
       retailAUD:rrpOverrides[row[2]]??row[8],
-      ...(available?{saleAUD:749,stockQuantity:60,dispatchLeadBusinessDays:1}:{}),
+      ...(available&&product.slug!=="coast-go"?{saleAUD:749,stockQuantity:60,dispatchLeadBusinessDays:1}:{}),
+      ...(product.slug==="coast-go"?{retailAUD:349,saleAUD:299,launchAt:"2026-10-08T00:00:00+10:00",dispatchLeadDays:2}:{}),
       available,
       orderMode:available?"available":"preorder",
       preorder
@@ -393,7 +399,7 @@ ${accessoryMarkup}<div class="qty-row"><p class="section-label" style="margin:0"
 <section class="more-range"><div class="wrap"><p class="eyebrow">Keep exploring</p><h2>Find the right board for your water.</h2><div class="more-actions"><a class="btn btn-dark" href="../shop-preview.html#products">Back to all products</a><a class="btn btn-outline" href="../redesign-preview.html#finder">Use the board finder</a></div></div></section></main>
 <footer><div class="wrap footer-row"><span>© 2026 AURA Paddle Pty Ltd · ABN 46 697 865 759 · ACN 697 865 759</span><span><a href="../shop-preview.html">Shop</a> · <a href="../contact.html">Contact</a> · <a href="../policies/#shipping">Shipping</a> · <a href="../policies/#returns">Returns</a> · Australia-only offline preview</span></div></footer>
 <dialog id="stripeDialog"><div class="modal"><div class="modal-top"><div><p class="eyebrow" id="checkoutEyebrow">Secure Stripe checkout</p><h2 id="checkoutTitle">Review your order</h2></div><button class="modal-close" type="button" aria-label="Close">×</button></div><p id="checkoutSummary"></p><div class="checkout-status" id="checkoutStatus"><strong>Secure checkout:</strong> Your order and payment amount will be securely verified before continuing to Stripe.</div><button class="btn btn-dark" id="checkoutButton" type="button" style="width:100%;margin-top:1rem">Continue to secure checkout</button></div></dialog>
-<script id="product-data" type="application/json">${JSON.stringify(pageData).replaceAll("<","\\u003c")}</script><script src="../cart.js?v=20260917-instock"></script><script src="../stripe-config.js"></script><script src="../product-page.js?v=20260917-instock"></script><script src="../cookie-consent.js?v=20260902-consent-form-noise"></script><script src="../site-analytics.js?v=20260825-key-events"></script></body></html>`;
+<script id="product-data" type="application/json">${JSON.stringify(pageData).replaceAll("<","\\u003c")}</script><script src="../coastgo-offer.js?v=20260929-launch"></script><script src="../cart.js?v=20260917-instock"></script><script src="../stripe-config.js"></script><script src="../product-page.js?v=20260917-instock"></script><script src="../cookie-consent.js?v=20260902-consent-form-noise"></script><script src="../site-analytics.js?v=20260825-key-events"></script></body></html>`;
 }
 
 fs.mkdirSync(path.join(siteDir,"products"),{recursive:true});
@@ -413,6 +419,7 @@ const paymentCatalogue=products.flatMap(product=>getVariants(product).filter(var
   depositAmount:variant.orderMode==="preorder"?sellingPrice(variant)*50:sellingPrice(variant)*100,
   orderMode:variant.orderMode,
   available:variant.available,
+  ...(variant.launchAt?{launchAt:variant.launchAt,dispatchLeadDays:variant.dispatchLeadDays}:{}),
   ...(variant.stockQuantity?{stockQuantity:variant.stockQuantity,dispatchLeadBusinessDays:variant.dispatchLeadBusinessDays}:{}),
   productUrl:`https://www.aurapaddle.com/products/${product.slug}.html?size=${encodeURIComponent(variant.size)}&colour=${variant.colourKey}`,
   campaign:variant.preorder?{
@@ -446,8 +453,10 @@ function productionHtml(product){
     .replaceAll("../policy-preview.html","../policies/")
     .replace("Australia-only offline preview","Australia-wide online store");
 }
-for(const product of productsToWrite)fs.writeFileSync(path.join(siteDir,"products",`${product.slug}.html`),productionHtml(product));
-fs.writeFileSync(path.join(siteDir,"payments","catalog.json"),`${JSON.stringify({generatedAt:new Date().toISOString(),currency:"aud",variants:paymentCatalogue},null,2)}\n`);
+for(const product of productsToWrite)fs.writeFileSync(path.join(siteDir,"products",`${product.slug}.html`),renderCoastGoPage(productionHtml(product)));
+const existingCatalog=JSON.parse(fs.readFileSync(path.join(siteDir,"payments","catalog.json"),"utf8"));
+const catalogOutput=requestedProductSlugs.size?existingCatalog.variants.map(v=>requestedProductSlugs.has(v.slug)?paymentCatalogue.find(next=>next.sku===v.sku)||v:v):paymentCatalogue;
+fs.writeFileSync(path.join(siteDir,"payments","catalog.json"),`${JSON.stringify({generatedAt:new Date().toISOString(),currency:"aud",variants:catalogOutput},null,2)}\n`);
 const xml=value=>esc(value).replaceAll("'","&apos;");
 const merchantAvailabilityDate=value=>{
   const months={January:"01",February:"02",March:"03",April:"04",May:"05",June:"06",July:"07",August:"08",September:"09",October:"10",November:"11",December:"12"};
@@ -484,5 +493,11 @@ const feedItems=paymentCatalogue.filter(item=>item.kind!=="accessory").map(item=
   const labels=isGlacierHero?"<g:custom_label_0>Yoga Hero</g:custom_label_0><g:custom_label_1>In Stock</g:custom_label_1><g:shipping_label>yoga_glacier_in_stock</g:shipping_label>":"";
   return `<item><g:id>${xml(item.sku)}</g:id><title>${xml(title)}</title><description>${xml(description)}</description><link>${xml(item.productUrl)}</link><g:image_link>${xml(image)}</g:image_link>${additionalImages}<g:availability>${item.available?"in_stock":"preorder"}</g:availability>${availabilityDate?`<g:availability_date>${availabilityDate}</g:availability_date>`:""}<g:price>${(item.retailAmount/100).toFixed(2)} AUD</g:price><g:sale_price>${(item.checkoutAmount/100).toFixed(2)} AUD</g:sale_price><g:sale_price_effective_date>2026-08-18T01:18:00+10:00/2026-09-30T23:59:59+10:00</g:sale_price_effective_date><g:brand>AURA PADDLE</g:brand><g:condition>new</g:condition><g:color>${xml(item.colour)}</g:color><g:size>${xml(item.size)}</g:size>${labels}<g:identifier_exists>yes</g:identifier_exists></item>`;
 }).join("");
-fs.writeFileSync(path.join(siteDir,"merchant-feed.xml"),`<?xml version="1.0" encoding="UTF-8"?><rss xmlns:g="http://base.google.com/ns/1.0" version="2.0"><channel><title>AURA PADDLE Australia</title><link>https://www.aurapaddle.com/</link><description>AURA PADDLE product feed</description>${feedItems}</channel></rss>\n`);
+let feedOutput=`<?xml version="1.0" encoding="UTF-8"?><rss xmlns:g="http://base.google.com/ns/1.0" version="2.0"><channel><title>AURA PADDLE Australia</title><link>https://www.aurapaddle.com/</link><description>AURA PADDLE product feed</description>${feedItems}</channel></rss>\n`;
+if(requestedProductSlugs.size){
+  const selectedSkus=new Set(paymentCatalogue.filter(v=>requestedProductSlugs.has(v.slug)).map(v=>v.sku));
+  const updates=new Map([...feedOutput.matchAll(/<item>[\s\S]*?<\/item>/g)].map(match=>[match[0].match(/<g:id>(.*?)<\/g:id>/)[1],match[0]]));
+  feedOutput=fs.readFileSync(path.join(siteDir,"merchant-feed.xml"),"utf8").replace(/<item>[\s\S]*?<\/item>/g,item=>{const sku=item.match(/<g:id>(.*?)<\/g:id>/)[1];return selectedSkus.has(sku)?updates.get(sku)||item:item});
+}
+fs.writeFileSync(path.join(siteDir,"merchant-feed.xml"),renderCoastGoFeed(feedOutput));
 console.log(`Built ${products.length} product pages, ${paymentCatalogue.length} Stripe-ready SKU records and Merchant Center feed from ${rows.length} catalogue rows.`);

@@ -3,6 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import {fileURLToPath} from "node:url";
 import {orderAttributionAudit} from "./attribution-audit.mjs";
+import coastGoOffer from "../coastgo-offer.js";
 
 const here=path.dirname(fileURLToPath(import.meta.url));
 const catalogPath=path.join(here,"catalog.json");
@@ -30,6 +31,7 @@ export function loadShippingRates(){
   for(const region of parsed.regions){
     if(!/^[a-z0-9-]+$/.test(region.id)||byId.has(region.id))throw new Error(`Invalid or duplicate shipping region: ${region.id}`);
     if(!region.quoteRequired&&(!Number.isInteger(region.isup)||!Number.isInteger(region.surfboard)||("yogaCruiser" in region&&!Number.isInteger(region.yogaCruiser))))throw new Error(`Invalid shipping prices for ${region.id}`);
+    if(region.coastGoOnly&&(!Number.isInteger(region.coastGo)||region.coastGo<0))throw new Error(`Invalid CoastGo shipping price for ${region.id}`);
     byId.set(region.id,Object.freeze(region));
   }
   return {...parsed,byId};
@@ -40,6 +42,12 @@ export function calculateShipping(items,regionId,rates=loadShippingRates(),now=D
   const region=requestedRegion?.aliasTo?rates.byId.get(requestedRegion.aliasTo):requestedRegion;
   if(!region)throw new Error("Select a valid Australian delivery region.");
   if(region.id==="local-pickup")return {regionId:region.id,label:region.label,amount:0,quoteRequired:false,pickup:true};
+  const hasCoastGo=items.some(item=>item.variant.slug==="coast-go");
+  if(hasCoastGo&&!region.coastGoOnly)throw new Error("Select a CoastGo delivery region to confirm the current shipping rate.");
+  if(region.coastGoOnly){
+    const quoteRequired=!items.length||items.some(item=>item.variant.slug!=="coast-go");
+    return {regionId:region.id,label:region.label,amount:quoteRequired?null:items.reduce((sum,item)=>sum+region.coastGo*item.quantity,0),quoteRequired,pickup:false};
+  }
   if(region.quoteRequired)return {regionId:region.id,label:region.label,amount:null,quoteRequired:true,pickup:false};
   const isup=new Set(rates.classes.isup),surfboard=new Set(rates.classes.surfboard);
   const hasAngler=items.some(item=>item.variant.slug==="angler-fishing");
@@ -189,12 +197,13 @@ export function reserveCheckoutIdentity(state,{requestId,attribution,customerEma
   return {orderNumber,trackingToken,integrationIdentifier:identity.integrationIdentifier};
 }
 
-export function normaliseCheckoutItems(rawItems,catalog){
+export function normaliseCheckoutItems(rawItems,catalog,now=Date.now()){
   if(!Array.isArray(rawItems)||rawItems.length<1||rawItems.length>20)throw new Error("A cart must contain between 1 and 20 distinct products.");
   const merged=new Map();
   for(const raw of rawItems){
-    const sku=String(raw?.sku||"").toUpperCase(),variant=catalog.bySku.get(sku);
-    if(!variant)throw new Error(`SKU ${sku||"(missing)"} is not enabled for Stripe Checkout.`);
+    const sku=String(raw?.sku||"").toUpperCase(),catalogVariant=catalog.bySku.get(sku);
+    if(!catalogVariant)throw new Error(`SKU ${sku||"(missing)"} is not enabled for Stripe Checkout.`);
+    const variant=coastGoOffer.variant(catalogVariant,now);
     const quantity=normaliseQuantity(raw.quantity);
     merged.set(sku,{variant,quantity:(merged.get(sku)?.quantity||0)+quantity});
   }
@@ -239,7 +248,8 @@ function orderMetadata(items,shipping,orderNumber,trackingToken,attribution,reco
     aura_shipping_region:shipping.regionId,
     aura_shipping_label:shipping.label,
     aura_shipping_amount:shipping.amount===null?"quote_required":String(shipping.amount),
-    aura_promotion_code:shipping.promotionCode||"",
+    aura_promotion_code:items.some(item=>coastGoOffer.isCoastGo(item.variant.sku)&&item.variant.checkoutAmount===28900)?coastGoOffer.code:shipping.promotionCode||"",
+    aura_product_discount_amount:String(items.reduce((sum,item)=>sum+(coastGoOffer.isCoastGo(item.variant.sku)?Math.max(0,29900-item.variant.checkoutAmount)*item.quantity:0),0)),
     aura_shipping_stage:hasPreorder?"pay_before_dispatch":"paid_at_checkout",
     aura_order_number:orderNumber,
     aura_tracking_token:trackingToken,
@@ -328,6 +338,7 @@ export function buildCheckoutParams({items,priceBySku,siteUrl,returnPath,shippin
   params.set("cancel_url",cancelUrl.toString());
   const freightCopy=shipping.quoteRequired?`${shipping.label}: freight quote required.`:shipping.pickup?"Free local pickup in Gold Coast, QLD. Exact pickup address is provided after order confirmation.":shipping.promotionCode?`${shipping.label}: free shipping with promo code ${shipping.promotionCode}.`:`${shipping.label}: AUD $${(shipping.amount/100).toFixed(2)} shipping.`;
   params.set("custom_text[submit][message]",inStock?`This Checkout collects the full product price and published shipping. ${freightCopy} In-stock orders dispatch within 1 business day after successful payment. Transit time is additional. See our returns policy; Australian Consumer Law rights are not limited.`:`This Checkout collects the 50% initial product payment only. ${freightCopy} The remaining product balance and any shipping charge are payable before dispatch. Change of mind: full refund within 48 hours; conditional orders remain cancellable until AURA PADDLE confirms production in writing. Australian Consumer Law rights are not limited.`);
+  if(items.some(item=>coastGoOffer.isCoastGo(item.variant.sku)))params.set("custom_text[submit][message]",`${metadata.aura_promotion_code===coastGoOffer.code?"COASTGO10 applied: AUD $299 less $10 per CoastGo = AUD $289, plus shipping. ":""}Full payment including published shipping; no later product balance. ${coastGoOffer.dispatch(now*1000)} Transit: standard 21–40 days; eligible-region express 7–11 days, excluding preparation. See returns policy; Australian Consumer Law rights are not limited.`);
   if(!shipping.pickup)params.set("custom_text[shipping_address][message]",inStock?`${freightCopy} Shipping is included in today's payment.`:`${freightCopy} AURA PADDLE will request this amount with the remaining product balance before dispatch.`);
   appendObject(params,"metadata",metadata);
   appendObject(params,"payment_intent_data[metadata]",metadata);
@@ -509,7 +520,7 @@ export function orderProgress(order){
   if(order.paymentStage==="paid_in_full"){
     const steps=[
       {id:"order_confirmed",label:"Order confirmed",description:"Your full payment, including published shipping, has been received.",completedAt:Number(order.orderConfirmedAt||order.created||0)},
-      {id:"preparing_for_dispatch",label:"Preparing for dispatch",description:"In-stock board: dispatch within 1 business day after successful payment.",completedAt:Number(order.preparingForDispatchAt||0)},
+      {id:"preparing_for_dispatch",label:"Preparing for dispatch",description:(order.items||[]).some(item=>coastGoOffer.isCoastGo(item.sku))?coastGoOffer.dispatch(Number(order.created||0)*1000):"In-stock board: dispatch within 1 business day after successful payment.",completedAt:Number(order.preparingForDispatchAt||0)},
       {id:"dispatched",label:"Dispatched",description:"Your order has left AURA PADDLE.",completedAt:Number(order.dispatchedAt||0)},
       {id:"delivered",label:"Delivered",description:"Your order has been marked as delivered.",completedAt:Number(order.deliveredAt||0)}
     ];

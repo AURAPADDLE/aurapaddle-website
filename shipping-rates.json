@@ -1,17 +1,21 @@
 {
   "currency": "AUD",
   "origin": "Gold Coast, QLD",
-  "localPickupNote": "Gold Coast, QLD — exact pickup address provided after order confirmation.",
   "longboardSurcharge": 5000,
   "regions": [
-    {"id":"local-pickup","label":"Local pickup — Gold Coast, QLD","isup":0,"yogaCruiser":0,"surfboard":0},
     {"id":"gold-coast-brisbane","label":"Gold Coast / Brisbane Metro","isup":4900,"yogaCruiser":2500,"surfboard":7900},
     {"id":"qld-nsw-main","label":"QLD / NSW / ACT major cities, coastal areas & Melbourne Metro","isup":9900,"yogaCruiser":4500,"surfboard":14900},
     {"id":"canberra-melbourne","label":"Canberra / Melbourne Metro","aliasTo":"qld-nsw-main","hidden":true,"isup":9900,"yogaCruiser":4500,"surfboard":14900},
     {"id":"adelaide","label":"Adelaide Metro","isup":12900,"yogaCruiser":12900,"surfboard":17900},
     {"id":"perth","label":"Perth Metro","isup":17900,"yogaCruiser":17900,"surfboard":22900},
     {"id":"tasmania","label":"Tasmania","isup":14900,"yogaCruiser":14900,"surfboard":22900},
-    {"id":"remote","label":"NT, regional, remote and island destinations","quoteRequired":true}
+    {"id":"remote","label":"NT, regional, remote and island destinations","quoteRequired":true},
+    {"id":"coastgo-metro","label":"Standard — ACT / Sydney / Melbourne","coastGo":3000,"coastGoOnly":true,"quoteRequired":true,"service":"Standard","transitDays":"21–40","details":"Australian Capital Territory; Sydney; Melbourne."},
+    {"id":"coastgo-standard","label":"Standard — Adelaide / Perth / other NSW / QLD near country & coastal cities / VIC near country / Tasmania","coastGo":3500,"coastGoOnly":true,"quoteRequired":true,"service":"Standard","transitDays":"21–40","details":"Adelaide; Perth; NSW: Gosford, north country, Newcastle, Tweed Heads, Wollongong, south country; QLD: near country, Brisbane, Gold Coast, Coolangatta, Ipswich, Sunshine Coast; VIC: Geelong, near country, Ballarat; Tasmania."},
+    {"id":"coastgo-country","label":"Standard — SA country / WA near country / QLD central country / VIC far country","coastGo":7500,"coastGoOnly":true,"quoteRequired":true,"service":"Standard","transitDays":"21–40","details":"South Australia country; Western Australia near country; Queensland central country; Victoria far country."},
+    {"id":"coastgo-remote-north","label":"Standard — NT near country / QLD far country","coastGo":12000,"coastGoOnly":true,"quoteRequired":true,"service":"Standard","transitDays":"21–40","details":"Northern Territory near country; Queensland far country."},
+    {"id":"coastgo-remote-west","label":"Standard — NT far country / WA far country","coastGo":12000,"coastGoOnly":true,"quoteRequired":true,"service":"Standard","transitDays":"21–40","details":"Northern Territory far country; Western Australia far country."},
+    {"id":"coastgo-express","label":"Express — ACT / Adelaide / Perth / Sydney / Brisbane / Gold Coast / Melbourne","coastGo":12000,"coastGoOnly":true,"quoteRequired":true,"service":"Express","transitDays":"7–11","details":"Express is available only in ACT, Adelaide, Perth, Sydney, Brisbane, Gold Coast and Melbourne. Other regions are not eligible for express shipping."}
   ],
   "classes": {
     "isup": ["yoga-cruiser", "angler-fishing", "touring-performance", "coast-go"],

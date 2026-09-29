@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import crypto from "node:crypto";
 import test from "node:test";
+import coastGoOffer from "../coastgo-offer.js";
 import {abandonedCheckoutList,adminOrderList,applyStripeEvent,buildCheckoutParams,buildOrderInvoiceLines,calculateShipping,campaignProgress,isStripeHostedInvoiceUrl,loadCatalog,loadShippingRates,loadStripeMap,normaliseAttribution,normaliseCheckoutItems,normaliseQuantity,orderProgress,parseRequestUrl,prepareBalanceRequest,publicOrderView,queueOrderEmails,queueOrderMilestoneEmail,reserveCheckoutIdentity,unsubscribeRecoveryEmail,updateOrderProgress,verifyStripeSignature} from "./lib.mjs";
 import {enqueueStripeAnalytics,hashUserData,measurementPayload} from "./analytics.mjs";
 import {recoveryEmailContent} from "./recovery-email.mjs";
@@ -11,6 +12,37 @@ const shippingRates=loadShippingRates();
 const stripeMap=loadStripeMap(catalog);
 const shippingFor=(items,regionId="gold-coast-brisbane",now=Date.parse("2026-09-28T00:00:00+10:00"),promoCode="")=>calculateShipping(items,regionId,shippingRates,now,promoCode);
 
+test("CoastGo region tariff charges per board with full product and shipping payment",()=>{
+  const tariff={"coastgo-metro":3000,"coastgo-standard":3500,"coastgo-country":7500,"coastgo-remote-north":12000,"coastgo-remote-west":12000,"coastgo-express":12000};
+  for(const sku of ["AP081165","AP730047","AP388238"]){
+    for(const quantity of [1,2,20])for(const [region,rate] of Object.entries(tariff)){
+      const items=normaliseCheckoutItems([{sku,quantity}],catalog),shipping=shippingFor(items,region);
+      assert.equal(shipping.amount,rate*quantity);assert.equal(shipping.quoteRequired,false);
+      assert.equal(shippingRates.byId.get(region).transitDays,region==="coastgo-express"?"7–11":"21–40");
+      const params=buildCheckoutParams({items,priceBySku:stripeMap.bySku,siteUrl:"http://localhost:4242",returnPath:"/cart/",shipping});
+      assert.equal(params.get("metadata[aura_shipping_amount]"),String(rate*quantity));
+      assert.equal(params.get("metadata[aura_payment_stage]"),"paid_in_full");
+      assert.equal(items[0].variant.depositAmount,coastGoOffer.price());
+      assert.equal(params.get("line_items[0][price_data][unit_amount]"),String(coastGoOffer.price()));
+      assert.equal(params.get("line_items[1][price_data][unit_amount]"),String(rate*quantity));
+      assert.equal(params.get("metadata[aura_shipping_stage]"),"paid_at_checkout");
+    }
+  }
+});
+
+test("CoastGo rejects old region selections and cannot grant its tariff to other products",()=>{
+  const coast=normaliseCheckoutItems([{sku:"AP081165",quantity:1}],catalog);
+  for(const region of shippingRates.regions.filter(region=>!region.coastGoOnly&&region.id!=="local-pickup"))assert.throws(()=>shippingFor(coast,region.id),/CoastGo delivery region/);
+  assert.throws(()=>shippingFor(coast,"local-pickup"),/region/i);
+  const yoga=normaliseCheckoutItems([{sku:"AP734955",quantity:1}],catalog);
+  assert.equal(shippingFor(yoga,"gold-coast-brisbane").amount,2500);
+  assert.equal(shippingFor(yoga,"coastgo-metro").quoteRequired,true);
+  assert.equal(shippingFor([...coast,...yoga],"coastgo-standard").amount,null);
+  const colours=normaliseCheckoutItems([{sku:"AP081165",quantity:2},{sku:"AP730047",quantity:1}],catalog);
+  assert.equal(shippingFor(colours,"coastgo-standard").amount,10500);
+  assert.equal(shippingFor(coast,"coastgo-standard",Date.parse("2026-09-28T00:00:00+10:00"),"YOGAFREESHIP").amount,3500);
+});
+
 test("request URL parsing rejects malformed paths without escaping the server error handler",()=>{
   assert.equal(parseRequestUrl("/api/health","https://www.aurapaddle.com").pathname,"/api/health");
   assert.throws(()=>parseRequestUrl("//","https://www.aurapaddle.com"),/Invalid request URL/);
@@ -19,9 +51,9 @@ test("request URL parsing rejects malformed paths without escaping the server er
 test("catalogue contains 77 board SKUs and the Fishing Rack accessory",()=>{
   assert.equal(catalog.variants.length,78);
   assert.equal(catalog.bySku.size,78);
-  assert.equal(catalog.variants.filter(item=>item.orderMode==="available").length,1);
-  assert.equal(catalog.variants.filter(item=>item.orderMode==="preorder").length,77);
-  assert.equal(catalog.variants.filter(item=>item.campaign?.thresholdRequired===false).length,3);
+  assert.equal(catalog.variants.filter(item=>item.orderMode==="available").length,4);
+  assert.equal(catalog.variants.filter(item=>item.orderMode==="preorder").length,74);
+  assert.equal(catalog.variants.filter(item=>item.campaign?.thresholdRequired===false).length,0);
   assert.equal(catalog.bySku.get("AP734955").stockQuantity,60);
   assert.equal(stripeMap.bySku.size,76);
   const rack=catalog.bySku.get("AP667703");assert.equal(rack.checkoutAmount,12900);assert.equal(rack.depositAmount,6450);assert.equal(rack.retailAmount-rack.checkoutAmount,0);assert.equal(rack.bundle.unitAmount,6900);
@@ -159,7 +191,7 @@ test("multi-SKU pre-order cart is merged; mixed stock and pre-order is rejected"
 
 test("shipping regions use the approved iSUP and surfboard prices",()=>{
   const isup=normaliseCheckoutItems([{sku:"AP734955",quantity:1}],catalog);
-  assert.equal(shippingFor(isup,"local-pickup").amount,0);
+  assert.throws(()=>shippingFor(isup,"local-pickup"),/region/i);
   assert.equal(shippingFor(isup,"gold-coast-brisbane").amount,2500);
   assert.equal(shippingFor(isup,"qld-nsw-main").amount,4500);
   assert.equal(shippingFor(isup,"canberra-melbourne").amount,4500);
@@ -197,8 +229,7 @@ test("in-stock Checkout charges shipping today; quote-required region requires c
   assert.equal(params.get("line_items[1][price_data][unit_amount]"),"4500");
   assert.match(params.get("custom_text[submit][message]"),/full product price and published shipping/);
   assert.throws(()=>buildCheckoutParams({items,siteUrl:"http://localhost:4242",returnPath:"/cart/",shipping:shippingFor(items,"remote")}),/freight quote/);
-  const pickup=shippingFor(items,"local-pickup"),pickupParams=buildCheckoutParams({items,priceBySku:stripeMap.bySku,siteUrl:"http://localhost:4242",returnPath:"/cart-preview.html",shipping:pickup});
-  assert.equal(pickupParams.get("shipping_address_collection[allowed_countries][0]"),null);
+  assert.throws(()=>shippingFor(items,"local-pickup"),/region/i);
 });
 
 test("free-shipping promo is recorded in Stripe metadata and omits the shipping line",()=>{

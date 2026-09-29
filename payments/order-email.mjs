@@ -18,7 +18,7 @@ function orderDetails(entry,catalog){
       name:variant?.productName||item.sku,
       size:variant?.size||"",
       colour:variant?.colour||"",
-      estimatedDispatch:entry.paymentStage==="paid_in_full"&&variant?.dispatchLeadBusinessDays?`Within ${variant.dispatchLeadBusinessDays} business day after successful payment`:variant?.campaign?.estimatedDelivery||"Confirmed in your secure order updates"
+      estimatedDispatch:entry.paymentStage==="paid_in_full"&&variant?.slug==="coast-go"?"Official release 8 October 2026. Advance orders dispatch within 2 days from release; subsequent orders dispatch within 2 days of order confirmation.":entry.paymentStage==="paid_in_full"&&variant?.dispatchLeadBusinessDays?`Within ${variant.dispatchLeadBusinessDays} business day after successful payment`:variant?.campaign?.estimatedDelivery||"Confirmed in your secure order updates"
     };
   });
 }
