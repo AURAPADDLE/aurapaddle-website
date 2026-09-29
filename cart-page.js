@@ -167,6 +167,7 @@
     const subtotal=items.reduce((sum,item)=>sum+pricing.lineTotal(item),0);
     const coastDiscount=items.reduce((sum,item)=>sum+(window.AURACoastGo.isCoastGo(item.sku)?(29900-item.unitAmount)*item.quantity:0),0);
     coastDiscountRow.hidden=coastDiscount===0;
+    coastDiscountRow.style.display=coastDiscount===0?"none":"";
     document.getElementById("coastDiscount").textContent=`−${money(coastDiscount)}`;
     list.querySelectorAll('[data-sku]').forEach(row=>{
       const item=items.find(item=>item.sku===row.dataset.sku);
