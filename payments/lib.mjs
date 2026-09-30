@@ -577,7 +577,6 @@ export function updateOrderProgress(order,input={},now=Math.floor(Date.now()/100
 
 export function publicOrderView(order){
   const dispatched=order.dispatchedAt?new Date(order.dispatchedAt*1000):null;
-  const estimatedArrival=dispatched?new Date(dispatched.getTime()+28*86400000):null;
   const balancePaymentUrl=["requested","payment_failed"].includes(order.balancePaymentStatus)&&isStripeHostedInvoiceUrl(order.balanceInvoiceUrl)?order.balanceInvoiceUrl:"";
   return {
     orderNumber:order.orderNumber,items:order.items,quantity:order.quantity,currency:order.currency,
@@ -586,7 +585,7 @@ export function publicOrderView(order){
     balancePaymentStatus:order.paymentStage==="paid_in_full"&&order.initialPaymentStatus==="paid"?"paid":order.balancePaymentStatus,balanceRequestedAmount:order.balanceRequestedAmount||null,balancePaymentUrl,
     shippingLabel:order.shippingLabel,shippingAmount:order.shippingAmount,orderStatus:order.orderStatus,fulfilmentStatus:order.fulfilmentStatus,
     progress:orderProgress(order),estimatedDispatchDate:order.estimatedDispatchDate||"",carrier:order.carrier||"",trackingNumber:order.trackingNumber||"",trackingUrl:safeTrackingUrl(order.trackingUrl),
-    dispatchedAt:dispatched?.toISOString()||null,estimatedArrival:estimatedArrival?.toISOString()||null,updated:order.updated
+    dispatchedAt:dispatched?.toISOString()||null,estimatedArrival:null,updated:order.updated
   };
 }
 

@@ -423,6 +423,7 @@ test("legacy full-payment orders can record their actual dispatch date without a
   updateOrderProgress(order,{stage:"dispatched",carrier:"Aramex",trackingNumber:"MP0095012186",trackingUrl:"https://www.aramex.com.au/tools/track?l=MP0095012186",dispatchDate:"2026-09-25"},Math.floor(Date.parse("2026-09-30T15:00:00+10:00")/1000));
   assert.equal(new Date(order.dispatchedAt*1000).toISOString(),"2026-09-25T02:00:00.000Z");
   assert.equal(publicOrderView(order).progress.find(item=>item.id==="dispatched").state,"current");
+  assert.equal(publicOrderView(order).estimatedArrival,null);
 });
 
 test("milestone notifications are queued once without exposing unsafe tracking links",()=>{
