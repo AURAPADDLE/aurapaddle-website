@@ -238,11 +238,11 @@ async function updateProgress(req,res){
     const target=Object.values(state.orders||{}).find(item=>item.orderNumber===body.orderNumber);
     if(!target)return null;
     updateOrderProgress(target,body);
-    if(body.stage==="dispatched")queueOrderMilestoneEmail(state,target,"dispatched",target.updated);
+    if(body.stage==="dispatched"&&body.notifyCustomer!==false)queueOrderMilestoneEmail(state,target,"dispatched",target.updated);
     return target;
   });
   if(!order)return send(res,404,{error:"Order not found."});
-  if(body.stage==="dispatched")void flushOrderEmailOutbox().catch(error=>console.error("Dispatch email flush failed",error));
+  if(body.stage==="dispatched"&&body.notifyCustomer!==false)void flushOrderEmailOutbox().catch(error=>console.error("Dispatch email flush failed",error));
   send(res,200,publicOrderView(order));
 }
 

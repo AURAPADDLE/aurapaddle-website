@@ -414,6 +414,17 @@ test("manual order progress enforces payment and secure tracking rules",()=>{
   updateOrderProgress(order,{stage:"delivered"},40);assert.equal(order.fulfilmentStatus,"delivered");assert.equal(order.deliveredAt,40);
 });
 
+test("legacy full-payment orders can record their actual dispatch date without a second invoice",()=>{
+  const order={orderNumber:"APO88685",paymentStage:"paid_in_full",initialPaymentStatus:"paid",balancePaymentStatus:"not_requested",fulfilmentStatus:"preparing_for_dispatch",created:Math.floor(Date.parse("2026-09-24T13:32:00+10:00")/1000),updated:0,items:[]};
+  const before=adminOrderList({orders:{legacy:order}},catalog)[0];
+  assert.equal(before.balancePaymentStatus,"paid");
+  assert.equal(before.remainingProductBalance,0);
+  assert.throws(()=>updateOrderProgress(order,{stage:"dispatched",carrier:"Aramex",trackingNumber:"MP0095012186",dispatchDate:"2026-09-31"},Math.floor(Date.parse("2026-09-30T15:00:00+10:00")/1000)),/actual dispatch date/i);
+  updateOrderProgress(order,{stage:"dispatched",carrier:"Aramex",trackingNumber:"MP0095012186",trackingUrl:"https://www.aramex.com.au/tools/track?l=MP0095012186",dispatchDate:"2026-09-25"},Math.floor(Date.parse("2026-09-30T15:00:00+10:00")/1000));
+  assert.equal(new Date(order.dispatchedAt*1000).toISOString(),"2026-09-25T02:00:00.000Z");
+  assert.equal(publicOrderView(order).progress.find(item=>item.id==="dispatched").state,"current");
+});
+
 test("milestone notifications are queued once without exposing unsafe tracking links",()=>{
   const state={transactionalEmailOutbox:{}},order={sessionId:"cs_live_progress",orderNumber:"APO48228",trackingToken:"secure_tracking_token_48228",customerEmail:"Buyer@Example.com",customerName:"Alex Buyer",items:[{sku:"AP734955",quantity:1}],amountTotal:37450,currency:"aud",balanceRequestedAmount:45350,balanceInvoiceUrl:"https://invoice.stripe.com/i/test",trackingUrl:"javascript:alert(1)"};
   assert.equal(queueOrderMilestoneEmail(state,order,"balance_requested",20),true);

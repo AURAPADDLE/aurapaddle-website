@@ -550,11 +550,22 @@ export function updateOrderProgress(order,input={},now=Math.floor(Date.now()/100
     if(!["awaiting_balance","preparing_for_dispatch","dispatched","delivered"].includes(order.fulfilmentStatus)){order.fulfilmentStatus="production_confirmed";order.orderStatus="production_confirmed"}
   }
   if(stage==="dispatched"){
-    if(order.balancePaymentStatus!=="paid")throw new Error("Final payment must be received before dispatch.");
+    const paymentComplete=order.initialPaymentStatus==="paid"&&(order.paymentStage==="paid_in_full"||order.balancePaymentStatus==="paid");
+    if(!paymentComplete)throw new Error("Final payment must be received before dispatch.");
     const carrier=String(input.carrier||"").trim().slice(0,80),trackingNumber=String(input.trackingNumber||"").trim().slice(0,100),trackingUrl=String(input.trackingUrl||"").trim();
     if(!carrier||!trackingNumber)throw new Error("Carrier and tracking number are required for dispatch.");
     if(trackingUrl&&!safeTrackingUrl(trackingUrl))throw new Error("Tracking link must be a secure HTTPS URL.");
-    order.carrier=carrier;order.trackingNumber=trackingNumber;order.trackingUrl=safeTrackingUrl(trackingUrl);order.dispatchedAt=Number(order.dispatchedAt||now);order.fulfilmentStatus="dispatched";order.orderStatus="dispatched";
+    const dispatchDate=String(input.dispatchDate||"").trim();
+    let dispatchedAt=now;
+    if(dispatchDate){
+      const parsedDate=new Date(`${dispatchDate}T12:00:00+10:00`);
+      if(!/^\d{4}-\d{2}-\d{2}$/.test(dispatchDate)||Number.isNaN(parsedDate.getTime())||new Date(`${dispatchDate}T00:00:00Z`).toISOString().slice(0,10)!==dispatchDate)throw new Error("Enter a valid actual dispatch date.");
+      dispatchedAt=Math.floor(parsedDate.getTime()/1000);
+      const orderDate=new Intl.DateTimeFormat("en-CA",{timeZone:"Australia/Brisbane",year:"numeric",month:"2-digit",day:"2-digit"}).format(new Date(Number(order.created||0)*1000));
+      const today=new Intl.DateTimeFormat("en-CA",{timeZone:"Australia/Brisbane",year:"numeric",month:"2-digit",day:"2-digit"}).format(new Date(now*1000));
+      if(dispatchDate<orderDate||dispatchDate>today)throw new Error("Actual dispatch date must be on or after the order date and not in the future.");
+    }
+    order.carrier=carrier;order.trackingNumber=trackingNumber;order.trackingUrl=safeTrackingUrl(trackingUrl);order.dispatchedAt=Number(order.dispatchedAt||dispatchedAt);order.fulfilmentStatus="dispatched";order.orderStatus="dispatched";
   }
   if(stage==="delivered"){
     if(!order.dispatchedAt&&order.fulfilmentStatus!=="dispatched")throw new Error("Mark the order as dispatched before delivered.");
@@ -572,7 +583,7 @@ export function publicOrderView(order){
     orderNumber:order.orderNumber,items:order.items,quantity:order.quantity,currency:order.currency,
     paymentStage:order.paymentStage||"initial_50_percent",
     initialPaymentAmount:order.amountTotal,initialPaymentStatus:order.initialPaymentStatus,
-    balancePaymentStatus:order.balancePaymentStatus,balanceRequestedAmount:order.balanceRequestedAmount||null,balancePaymentUrl,
+    balancePaymentStatus:order.paymentStage==="paid_in_full"&&order.initialPaymentStatus==="paid"?"paid":order.balancePaymentStatus,balanceRequestedAmount:order.balanceRequestedAmount||null,balancePaymentUrl,
     shippingLabel:order.shippingLabel,shippingAmount:order.shippingAmount,orderStatus:order.orderStatus,fulfilmentStatus:order.fulfilmentStatus,
     progress:orderProgress(order),estimatedDispatchDate:order.estimatedDispatchDate||"",carrier:order.carrier||"",trackingNumber:order.trackingNumber||"",trackingUrl:safeTrackingUrl(order.trackingUrl),
     dispatchedAt:dispatched?.toISOString()||null,estimatedArrival:estimatedArrival?.toISOString()||null,updated:order.updated
@@ -599,7 +610,7 @@ export function adminOrderList(state,catalog,analyticsConfiguration={}){
     shippingLabel:order.shippingLabel||"",
     shippingAmount:Number.isInteger(order.shippingAmount)?order.shippingAmount:null,
     shippingQuoteRequired:order.shippingQuoteRequired===true,
-    balancePaymentStatus:order.balancePaymentStatus||"not_requested",
+    balancePaymentStatus:order.paymentStage==="paid_in_full"&&order.initialPaymentStatus==="paid"?"paid":order.balancePaymentStatus||"not_requested",
     balanceRequestedAmount:Number.isInteger(order.balanceRequestedAmount)?order.balanceRequestedAmount:null,
     balanceInvoiceUrl:isStripeHostedInvoiceUrl(order.balanceInvoiceUrl)?order.balanceInvoiceUrl:"",
     orderStatus:order.orderStatus||"",

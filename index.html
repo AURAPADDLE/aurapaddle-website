@@ -77,8 +77,8 @@
     @media(max-width:650px){.hero-batch-proof{margin-top:1.6rem}.hero-batch-proof__foot{align-items:flex-start;flex-direction:column;gap:.25rem}}
     .preorder-offer{width:min(860px,calc(100% - 2rem));max-height:calc(100dvh - 2rem);overflow:auto;overscroll-behavior:contain;background:#fff;color:var(--deep);border:0}
     .preorder-offer__inner{display:grid;grid-template-columns:.92fr 1.08fr;padding:0;background:#fff}
-    .preorder-offer__visual{min-height:510px;display:grid;place-items:center;padding:1.5rem;background:linear-gradient(150deg,#e9f7f5,#d9eff0)}
-    .preorder-offer__visual img{display:block;width:100%;height:100%;max-height:480px;object-fit:contain}
+    .preorder-offer__visual{min-height:510px;display:grid;place-items:center;padding:1.5rem;overflow:hidden;background:linear-gradient(150deg,#e9f7f5,#d9eff0)}
+    .preorder-offer__visual img{display:block;width:100%;height:100%;max-height:480px;min-height:0;object-fit:contain}
     .preorder-offer__content{padding:clamp(2rem,5vw,3.3rem);align-self:center}
     .preorder-offer__close{z-index:2;background:#fff;color:var(--deep);border-color:rgba(7,31,45,.18);box-shadow:0 8px 30px rgba(7,31,45,.12)}
     .preorder-offer__eyebrow{color:var(--ocean)}
@@ -93,7 +93,7 @@
     .preorder-offer__copy{color:var(--muted)}
     .preorder-offer__actions{margin-top:1.5rem}
     .preorder-offer__later{color:var(--deep);border-color:rgba(7,31,45,.22)}
-    @media(max-width:700px){.preorder-offer__inner{grid-template-columns:1fr}.preorder-offer__visual{min-height:190px;height:31vh;max-height:240px;padding:1rem 3rem}.preorder-offer__content{padding:1.4rem 1.25rem 1.5rem}.preorder-offer h2{font-size:2.15rem}.preorder-offer__value{font-size:1rem}.preorder-offer__copy{font-size:.82rem}.preorder-offer__actions{display:grid}.preorder-offer__actions .btn,.preorder-offer__later{width:100%}}
+    @media(max-width:700px){.preorder-offer__inner{grid-template-columns:minmax(0,1fr);grid-template-rows:180px auto}.preorder-offer__visual{min-height:0;height:180px;padding:.75rem 3rem;overflow:hidden}.preorder-offer__visual img{width:100%;height:100%;max-height:100%;min-height:0;object-fit:contain}.preorder-offer__content{min-width:0;padding:1.4rem 1.25rem 1.5rem}.preorder-offer h2{font-size:2.15rem}.preorder-offer__value{font-size:1rem}.preorder-offer__copy{font-size:.82rem}.preorder-offer__actions{display:grid}.preorder-offer__actions .btn,.preorder-offer__later{width:100%}}
   </style>
 <link rel="stylesheet" href="conversion-review.css?v=20260907"></head>
 <body>
