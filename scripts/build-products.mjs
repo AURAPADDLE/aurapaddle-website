@@ -441,7 +441,11 @@ function productionHtml(product){
   let html=htmlFor(product);
   if(product.slug==="yoga-cruiser"){
     const review=fs.readFileSync(path.join(scriptDir,"published-review-yoga-cruiser.html"),"utf8").trim();
-    html=html.replace(/<article class="reviews-summary">[\s\S]*?<\/article>/,review);
+    const ratingLink='<a class="product-rating-link" href="#reviews" aria-label="Rated 5.0 out of 5 from 1 customer review. Read review"><span class="rating-stars" aria-hidden="true">★★★★★</span><strong>5.0 <span>/ 5</span></strong><span>1 review</span><span class="rating-read">Read review →</span></a>';
+    const ratingSummary='<div class="review-score-summary" aria-label="Overall rating: 5.0 out of 5, based on 1 customer review"><span class="review-score-label">Overall rating</span><strong>5.0 <small>/ 5</small></strong><span class="rating-stars" aria-hidden="true">★★★★★</span><span class="review-score-count">1 customer review</span></div>';
+    html=html.replace(/<article class="reviews-summary">[\s\S]*?<\/article>/,review)
+      .replace('</div><p class="price-note" id="priceNote">',`</div>${ratingLink}<p class="price-note" id="priceNote">`)
+      .replace('<div class="reviews-grid">',`${ratingSummary}<div class="reviews-grid">`);
   }
   const readyHtml=product.slug==="yoga-cruiser"?html
     .replace('Australia-wide shipping is confirmed and included with the remaining-balance request before dispatch. See the', 'For in-stock Glacier Blue, the confirmed shipping charge is paid with the board at checkout; quote-required destinations need a shipping quote before payment. Other colours remain pre-orders, with shipping and the remaining balance requested before dispatch. See the')

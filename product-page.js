@@ -323,7 +323,7 @@
     document.body.classList.add("yoga-conversion");
     const layout=document.querySelector(".product-layout"),info=document.querySelector(".product-info"),intro=document.createElement("div");
     intro.className="product-intro";
-    for(const selector of [".breadcrumb",".eyebrow","h1",".subtitle","#availability",".price-row","#priceNote"]){const el=info.querySelector(selector);if(el)intro.append(el)}
+    for(const selector of [".breadcrumb",".eyebrow","h1",".subtitle","#availability",".price-row",".product-rating-link","#priceNote"]){const el=info.querySelector(selector);if(el)intro.append(el)}
     intro.querySelector("h1").textContent="Yoga Cruiser";
     intro.querySelector(".subtitle").textContent=yogaCruiserDescription;
     const kit=document.createElement("p");kit.className="kit-summary";kit.textContent="Electric pump · Wheeled carry bag · Adjustable paddle included";intro.append(kit);
