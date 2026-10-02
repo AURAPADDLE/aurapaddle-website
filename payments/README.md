@@ -33,6 +33,16 @@ The server also exposes:
 - `GET /api/preorder-progress`
 - `GET /api/admin/abandoned-checkouts` (Bearer `ADMIN_API_TOKEN` required)
 - `GET /api/recovery/unsubscribe?token=...`
+- `POST /api/reviews` and `GET /api/reviews?product=...`
+- `GET /api/admin/reviews` and `POST /api/admin/reviews` (Bearer `ADMIN_API_TOKEN` required)
+
+## Customer reviews
+
+- Every product page submits reviews to the checkout server rather than Formspree. Submissions are stored as `pending` in the existing order state store; they never appear publicly before approval.
+- A new submission queues an internal email to `ORDER_NOTIFICATION_EMAIL` with retry and idempotency when AgentMail is configured. The admin queue remains authoritative if email delivery is delayed.
+- Review moderation is available at `/admin/reviews/` with the existing administrator token. Publish and reject/unpublish actions update the server-side state, and product pages calculate the average and count from published reviews on each request. Rejected reviews are excluded.
+- The already-approved Oscar Yoga Cruiser review is seeded once into the persistent store. Existing Formspree emails are not imported automatically; review them separately before any manual import.
+- Public responses and rendered pages omit reviewer email addresses. A rating is displayed only when at least one approved review exists; products without reviews do not receive fabricated scores.
 
 ## Consented abandoned-checkout recovery
 

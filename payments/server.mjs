@@ -6,11 +6,12 @@ import {fileURLToPath} from "node:url";
 import {abandonedCheckoutList,adminOrderList,applyStripeEvent,buildCheckoutParams,buildOrderInvoiceLines,calculateShipping,campaignProgress,isStripeHostedInvoiceUrl,loadCatalog,loadShippingRates,loadStripeMap,normaliseAttribution,normaliseCheckoutItems,normaliseQuantity,parseRequestUrl,prepareBalanceRequest,publicOrderView,queueOrderEmails,queueOrderMilestoneEmail,reserveCheckoutIdentity,safeReturnPath,unsubscribeRecoveryEmail,updateOrderProgress,verifyStripeSignature} from "./lib.mjs";
 import {enqueueStripeAnalytics,measurementPayload} from "./analytics.mjs";
 import {markAnalyticsDelivery} from "./attribution-audit.mjs";
-import {ensureRecoveryInbox,sendRecoveryEmail} from "./recovery-email.mjs";
+import {ensureRecoveryInbox,sendAgentMailMessage,sendRecoveryEmail} from "./recovery-email.mjs";
 import {sendOrderEmail} from "./order-email.mjs";
 import {createStateStore} from "./state-store.mjs";
 import coastGoOffer from "../coastgo-offer.js";
 import {renderCoastGoPage,renderCoastGoFeed} from "./coastgo-content.mjs";
+import {ensureReviewState,moderateReview,publicReviewData,renderReviews,submitReview} from "./reviews.mjs";
 
 const here=path.dirname(fileURLToPath(import.meta.url));
 const siteDir=path.resolve(here,"..");
@@ -48,6 +49,14 @@ const enhancedConversionsEnabled=process.env.ENHANCED_CONVERSIONS_ENABLED==="tru
 const agentMailApiKey=process.env.AGENTMAIL_AGENTMAIL_API_KEY||process.env.AGENTMAIL_API_KEY||"";
 const orderNotificationEmail=process.env.ORDER_NOTIFICATION_EMAIL||"admin@aurapaddle.com";
 const catalog=loadCatalog();
+const reviewCatalog={bySku:new Map(catalog.bySku)};
+for(const filename of fs.readdirSync(path.join(siteDir,"products")).filter(name=>/^[a-z0-9-]+\.html$/.test(name))){
+  const markup=fs.readFileSync(path.join(siteDir,"products",filename),"utf8");
+  const json=markup.match(/<script id="product-data" type="application\/json">([\s\S]*?)<\/script>/)?.[1];
+  if(!json)continue;
+  const product=JSON.parse(json);
+  for(const variant of product.variants||[])reviewCatalog.bySku.set(variant.sku,{slug:product.slug});
+}
 const shippingRates=loadShippingRates();
 const configuredStripeAccount=process.env.STRIPE_ACCOUNT_ID||"";
 const sandboxStripeMap=loadStripeMap(catalog);
@@ -57,6 +66,7 @@ const stripeMap=allowLive
     ? {accountId:configuredStripeAccount,mode:"sandbox-inline",bySku:new Map()}
     : sandboxStripeMap;
 const store=createStateStore({databaseUrl,statePath});
+const reviewThrottle=new Map();
 const mime={".html":"text/html; charset=utf-8",".js":"text/javascript; charset=utf-8",".mjs":"text/javascript; charset=utf-8",".css":"text/css; charset=utf-8",".json":"application/json; charset=utf-8",".png":"image/png",".jpg":"image/jpeg",".jpeg":"image/jpeg",".webp":"image/webp",".svg":"image/svg+xml",".txt":"text/plain; charset=utf-8",".xml":"application/xml; charset=utf-8"};
 
 function send(res,status,body,headers={}){
@@ -256,6 +266,36 @@ async function abandonedCheckouts(req,res){
   send(res,200,{generatedAt:Math.floor(Date.now()/1000),items:abandonedCheckoutList(await store.read(),catalog)});
 }
 
+async function receiveReview(req,res){
+  const forwarded=process.env.RENDER?String(req.headers["x-forwarded-for"]||"").split(",")[0].trim():"";
+  const address=forwarded||String(req.socket.remoteAddress||"unknown"),now=Date.now(),recent=(reviewThrottle.get(address)||[]).filter(value=>now-value<60*60*1000);
+  if(recent.length>=5)return send(res,429,{error:"Too many review submissions. Please try again later."});
+  const body=JSON.parse((await readBody(req,20_000)).toString("utf8")||"{}");
+  const result=await store.mutate(state=>submitReview(state,body,reviewCatalog));
+  reviewThrottle.set(address,[...recent,now]);
+  void flushReviewNotifications().catch(error=>console.error("Review notification flush failed",error));
+  send(res,202,result);
+}
+
+async function listReviews(req,res,url){
+  const slug=String(url.searchParams.get("product")||"");
+  if(!/^[a-z0-9-]{1,80}$/.test(slug))return send(res,400,{error:"A valid product is required."});
+  send(res,200,publicReviewData(await store.read(),slug));
+}
+
+async function adminReviews(req,res){
+  if(!requireAdmin(req))return send(res,401,{error:"Admin authorisation required."});
+  const state=await store.read();
+  send(res,200,{items:Object.values(ensureReviewState(state)).sort((a,b)=>String(b.createdAt).localeCompare(String(a.createdAt)))});
+}
+
+async function setReviewStatus(req,res){
+  if(!requireAdmin(req))return send(res,401,{error:"Admin authorisation required."});
+  const body=JSON.parse((await readBody(req,20_000)).toString("utf8")||"{}");
+  const review=await store.mutate(state=>moderateReview(state,body));
+  send(res,200,{id:review.id,status:review.status});
+}
+
 async function unsubscribeRecovery(req,res,url){
   const removed=await store.mutate(state=>unsubscribeRecoveryEmail(state,url.searchParams.get("token")));
   const title=removed?"Email preference updated":"This link is no longer valid";
@@ -349,6 +389,31 @@ async function flushOrderEmailOutbox(){
   orderEmailFlushActive=true;
   try{for(let count=0;count<10;count+=1){const entry=await claimOrderEmail();if(!entry)break;try{await completeOrderEmail(entry.key,await sendOrderEmail(entry,{apiKey:agentMailApiKey,catalog,siteUrl}))}catch(error){await retryOrderEmail(entry.key,error)}}}finally{orderEmailFlushActive=false}
 }
+let reviewNotificationFlushActive=false;
+async function flushReviewNotifications(){
+  if(reviewNotificationFlushActive||!agentMailApiKey)return;
+  reviewNotificationFlushActive=true;
+  try{
+    for(let count=0;count<10;count+=1){
+      const entry=await store.mutate(state=>{
+        const now=Math.floor(Date.now()/1000),outbox=state.reviewNotificationOutbox||{};
+        for(const item of Object.values(outbox))if(item.status==="sending"&&now-Number(item.claimedAt||0)>300)item.status="retry";
+        const item=Object.values(outbox).find(value=>["pending","retry"].includes(value.status)&&Number(value.nextAttemptAt||0)<=now);
+        if(!item)return null;
+        item.status="sending";item.claimedAt=now;item.attempts=Number(item.attempts||0)+1;
+        return {...item,review:structuredClone(state.reviews[item.key])};
+      });
+      if(!entry)break;
+      try{
+        const review=entry.review,inbox=await ensureRecoveryInbox(agentMailApiKey);
+        await sendAgentMailMessage(agentMailApiKey,inbox.inbox_id,{idempotencyKey:`aura-review-${entry.key}`,body:{to:[orderNotificationEmail],reply_to:[review.email],subject:`New ${review.slug} review awaiting approval — ${review.rating}/5`,text:[`Product: ${review.slug} (${review.sku})`,`Rating: ${review.rating}/5`,`From: ${review.name} <${review.email}>`,`Title: ${review.title}`,"",review.body,"",`${siteUrl}/admin/reviews/`].join("\n"),labels:["product-reviews"]}});
+        await store.mutate(state=>{const item=state.reviewNotificationOutbox?.[entry.key];if(item){item.status="sent";item.sentAt=Math.floor(Date.now()/1000);delete item.claimedAt}});
+      }catch(error){
+        await store.mutate(state=>{const item=state.reviewNotificationOutbox?.[entry.key];if(!item)return;item.status=Number(item.attempts||0)>=12?"failed":"retry";item.nextAttemptAt=Math.floor(Date.now()/1000)+Math.min(3600,30*2**Math.min(Number(item.attempts||1)-1,7));item.lastError=String(error?.message||error).slice(0,240);delete item.claimedAt});
+      }
+    }
+  }finally{reviewNotificationFlushActive=false}
+}
 async function webhook(req,res){
   const raw=await readBody(req);
   if(!verifyStripeSignature(raw.toString("utf8"),req.headers["stripe-signature"],webhookSecret))return send(res,400,{error:"Invalid Stripe webhook signature."});
@@ -360,7 +425,7 @@ async function webhook(req,res){
   void flushOrderEmailOutbox().catch(error=>console.error("Order email outbox flush failed",error));
   send(res,200,{received:true});
 }
-function staticFile(req,res,url){
+async function staticFile(req,res,url){
   let pathname=decodeURIComponent(url.pathname);
   if(pathname==="/")pathname="/index.html";
   if(pathname.startsWith("/payments/")||pathname.startsWith("/scripts/")||pathname.split("/").some(part=>part.startsWith(".")))return send(res,404,"Not found");
@@ -368,8 +433,10 @@ function staticFile(req,res,url){
   if(!target.startsWith(`${siteDir}${path.sep}`))return send(res,403,"Forbidden");
   let stat;try{stat=fs.statSync(target);if(stat.isDirectory()){target=path.join(target,"index.html");stat=fs.statSync(target)}}catch{return send(res,404,"Not found")}
   if(!stat.isFile())return send(res,404,"Not found");
-  if(pathname==="/merchant-feed.xml"||pathname==="/products/coast-go.html"){
-    const raw=fs.readFileSync(target,"utf8"),body=Buffer.from(pathname.endsWith(".xml")?renderCoastGoFeed(raw):renderCoastGoPage(raw));
+  if(pathname==="/merchant-feed.xml"||/^\/products\/[a-z0-9-]+\.html$/.test(pathname)){
+    const raw=fs.readFileSync(target,"utf8"),slug=path.basename(pathname,".html");
+    const html=pathname.endsWith(".xml")?renderCoastGoFeed(raw):renderReviews(slug==="coast-go"?renderCoastGoPage(raw):raw,publicReviewData(await store.read(),slug));
+    const body=Buffer.from(html);
     res.writeHead(200,{"Content-Type":mime[path.extname(target).toLowerCase()],"Content-Length":body.length,"Cache-Control":"no-store"});return res.end(req.method==="HEAD"?undefined:body);
   }
   res.writeHead(200,{"Content-Type":mime[path.extname(target).toLowerCase()]||"application/octet-stream","Content-Length":stat.size,"Cache-Control":pathname.startsWith("/assets/")?"public, max-age=3600":"no-cache"});
@@ -384,6 +451,10 @@ const server=http.createServer(async(req,res)=>{
     if(req.method==="POST"&&url.pathname==="/api/checkout")return await checkout(req,res);
     if(req.method==="GET"&&url.pathname==="/api/checkout-session")return await sessionSummary(req,res,url);
     if(req.method==="GET"&&url.pathname==="/api/order")return await orderStatus(req,res,url);
+    if(req.method==="POST"&&url.pathname==="/api/reviews")return await receiveReview(req,res);
+    if(req.method==="GET"&&url.pathname==="/api/reviews")return await listReviews(req,res,url);
+    if(req.method==="GET"&&url.pathname==="/api/admin/reviews")return await adminReviews(req,res);
+    if(req.method==="POST"&&url.pathname==="/api/admin/reviews")return await setReviewStatus(req,res);
     if(req.method==="POST"&&url.pathname==="/api/admin/request-balance")return await requestBalance(req,res);
     if(req.method==="POST"&&url.pathname==="/api/admin/order-progress")return await updateProgress(req,res);
     if(req.method==="POST"&&url.pathname==="/api/admin/order-status")return await updateFulfilment(req,res);
@@ -398,11 +469,15 @@ const server=http.createServer(async(req,res)=>{
 });
 
 await store.init();
+await store.mutate(state=>{ensureReviewState(state)});
 setInterval(()=>void flushAnalyticsOutbox().catch(error=>console.error("GA4 outbox flush failed",error)),60_000).unref();
 setInterval(()=>void flushRecoveryEmailOutbox().catch(error=>console.error("Recovery email outbox flush failed",error)),60_000).unref();
 setInterval(()=>void flushOrderEmailOutbox().catch(error=>console.error("Order email outbox flush failed",error)),60_000).unref();
+setInterval(()=>void flushReviewNotifications().catch(error=>console.error("Review notification flush failed",error)),60_000).unref();
+setInterval(()=>{const cutoff=Date.now()-60*60*1000;for(const [address,times] of reviewThrottle){const recent=times.filter(value=>value>cutoff);if(recent.length)reviewThrottle.set(address,recent);else reviewThrottle.delete(address)}},60*60*1000).unref();
 setTimeout(()=>void flushAnalyticsOutbox().catch(error=>console.error("GA4 initial outbox flush failed",error)),2_000).unref();
 setTimeout(()=>void initialiseRecoveryEmail().then(()=>Promise.all([flushRecoveryEmailOutbox(),flushOrderEmailOutbox()])).catch(error=>console.error("Transactional email initialisation failed",error)),3_000).unref();
+setTimeout(()=>void flushReviewNotifications().catch(error=>console.error("Initial review notification flush failed",error)),4_000).unref();
 server.listen(port,host,()=>{
   console.log(`AURA Stripe review server: ${siteUrl}`);
   console.log(`Stripe mode: ${allowLive?"LIVE ENABLED":"sandbox only"}; key configured: ${Boolean(stripeKey)}; webhook configured: ${Boolean(webhookSecret)}`);

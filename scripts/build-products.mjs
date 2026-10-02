@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import {fileURLToPath} from "node:url";
 import {renderCoastGoPage,renderCoastGoFeed} from "../payments/coastgo-content.mjs";
+import {publicReviewData,renderReviews} from "../payments/reviews.mjs";
 
 const scriptDir=path.dirname(fileURLToPath(import.meta.url));
 const siteDir=path.resolve(scriptDir,"..");
@@ -439,19 +440,18 @@ const productsToWrite=requestedProductSlugs.size?products.filter(product=>reques
 if(requestedProductSlugs.size&&productsToWrite.length!==requestedProductSlugs.size)throw new Error("One or more requested product slugs were not found.");
 function productionHtml(product){
   let html=htmlFor(product);
-  if(product.slug==="yoga-cruiser"){
-    const review=fs.readFileSync(path.join(scriptDir,"published-review-yoga-cruiser.html"),"utf8").trim();
-    const ratingLink='<a class="product-rating-link" href="#reviews" aria-label="Rated 5.0 out of 5 from 1 customer review. Read review"><span class="rating-stars" aria-hidden="true">★★★★★</span><strong>5.0 <span>/ 5</span></strong><span>1 review</span><span class="rating-read">Read review →</span></a>';
-    const ratingSummary='<div class="review-score-summary" aria-label="Overall rating: 5.0 out of 5, based on 1 customer review"><span class="review-score-label">Overall rating</span><strong>5.0 <small>/ 5</small></strong><span class="rating-stars" aria-hidden="true">★★★★★</span><span class="review-score-count">1 customer review</span></div>';
-    html=html.replace(/<article class="reviews-summary">[\s\S]*?<\/article>/,review)
-      .replace('</div><p class="price-note" id="priceNote">',`</div>${ratingLink}<p class="price-note" id="priceNote">`)
-      .replace('<div class="reviews-grid">',`${ratingSummary}<div class="reviews-grid">`);
-  }
+  html=html.replace('</div><p class="price-note" id="priceNote">','</div><!-- AURA_REVIEW_RATING_START --><!-- AURA_REVIEW_RATING_END --><p class="price-note" id="priceNote">')
+    .replace('<div class="reviews-grid">','<!-- AURA_REVIEW_SUMMARY_START --><!-- AURA_REVIEW_SUMMARY_END --><div class="reviews-grid">')
+    .replace(/<article class="reviews-summary">[\s\S]*?<\/article>/,'<!-- AURA_REVIEW_LIST_START --><!-- AURA_REVIEW_LIST_END -->')
+    .replace('action="https://formspree.io/f/xaqrowoy"','action="/api/reviews"');
+  html=renderReviews(html,publicReviewData({},product.slug));
   const readyHtml=product.slug==="yoga-cruiser"?html
     .replace('Australia-wide shipping is confirmed and included with the remaining-balance request before dispatch. See the', 'For in-stock Glacier Blue, the confirmed shipping charge is paid with the board at checkout; quote-required destinations need a shipping quote before payment. Other colours remain pre-orders, with shipping and the remaining balance requested before dispatch. See the')
     .replace('Australia-only range · Shipping calculated separately · See policy terms', 'Glacier Blue in stock · Pay in full at checkout · Dispatch within 1 business day after payment')
     :html;
   return readyHtml
+    .replace('product-page.css?v=20260920-gallery-zoom','product-page.css?v=20261002-reviews')
+    .replace('product-page.js?v=20260917-instock','product-page.js?v=20261002-reviews')
     .replaceAll("../redesign-preview.html","../")
     .replaceAll("../shop-preview.html","../shop/")
     .replaceAll("../cart-preview.html","../cart/")

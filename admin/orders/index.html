@@ -7,7 +7,7 @@
   </style>
 </head>
 <body>
-  <header><strong>AURA PADDLE</strong><span>Internal orders · <a href="../abandoned-checkouts/">Abandoned checkouts</a></span></header>
+  <header><strong>AURA PADDLE</strong><span>Internal orders · <a href="../abandoned-checkouts/">Abandoned checkouts</a> · <a href="../reviews/">Review moderation</a></span></header>
   <main>
     <section class="auth" id="auth"><h1>Order operations</h1><p>Enter the existing administrator API token. It remains in this browser tab and is never placed in a URL.</p><label for="token">Administrator token</label><input id="token" type="password" autocomplete="off"><button id="open" type="button">Open orders</button><p id="authStatus" role="status"></p></section>
     <section class="panel hidden" id="panel"><div class="toolbar"><div><h1>Paid orders</h1><div class="summary" id="summary" role="status" aria-live="polite"></div></div><button id="refresh" type="button">Refresh</button></div><div class="orders" id="orders"></div><div class="empty hidden" id="empty">No paid orders have been recorded.</div></section>

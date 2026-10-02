@@ -475,8 +475,8 @@
     button.disabled=true;button.textContent="Submitting…";status.classList.remove("error");status.textContent="";
     let response;
     try{
-      response=await fetch(form.action,{method:"POST",body:reviewData,headers:{Accept:"application/json"}});
-      if(!response.ok)throw new Error("Your review could not be submitted.");
+      response=await fetch(form.action,{method:"POST",headers:{"Content-Type":"application/json","Accept":"application/json"},body:JSON.stringify({...Object.fromEntries(reviewData),slug:data.slug})});
+      if(!response.ok){const payload=await response.json().catch(()=>({}));throw new Error(payload.error||"Your review could not be submitted.")}
       track("submit_review",{item_id:variant().sku,item_name:data.name,rating:Number(reviewData.get("rating")||0)});
       form.reset();status.textContent="Thank you. Your review has been received and will be checked before publication.";
     }catch(error){
