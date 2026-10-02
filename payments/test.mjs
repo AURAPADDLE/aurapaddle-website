@@ -369,6 +369,17 @@ test("admin order list contains operational totals without exposing the customer
   assert.equal(order.remainingProductBalance,37450);assert.equal(order.shippingAmount,7900);assert.equal(order.items[0].name,"AURA PADDLE Yoga Cruiser");assert.equal("trackingToken" in order,false);
 });
 
+test("admin order list distinguishes a paid final balance from the original product balance",()=>{
+  const state={orders:{cs_paid:{orderNumber:"APO48229",trackingToken:"private",items:[{sku:"AP734955",quantity:1}],quantity:1,currency:"aud",amountTotal:37450,initialPaymentStatus:"paid",paymentStage:"initial_50_percent",balancePaymentStatus:"paid",balanceRequestedAmount:45350,balancePaidAmount:45350,balancePaidAt:1789985540,balanceInvoiceUrl:"https://invoice.stripe.com/i/example",shippingAmount:7900,fulfilmentStatus:"preparing_for_dispatch",customerEmail:"buyer@example.com",created:1,updated:2}}};
+  const [order]=adminOrderList(state,catalog);
+  assert.equal(order.balancePaymentStatus,"paid");
+  assert.equal(order.balancePaidAmount,45350);
+  assert.equal(order.balancePaidAt,1789985540);
+  assert.equal(order.balanceRequestedAmount,45350);
+  assert.equal(order.balanceInvoiceUrl,"https://invoice.stripe.com/i/example");
+  assert.equal("trackingToken" in order,false);
+});
+
 test("final balance approval locks published freight and accepts a confirmed quote only when required",()=>{
   const fixed={amountTotal:37450,shippingAmount:7900,shippingQuoteRequired:false};
   assert.deepEqual(prepareBalanceRequest(fixed,{productReady:true,finalShippingConfirmed:true,shippingAmount:1}),{shippingAmount:7900,dueAmount:45350});

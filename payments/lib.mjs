@@ -611,6 +611,8 @@ export function adminOrderList(state,catalog,analyticsConfiguration={}){
     shippingQuoteRequired:order.shippingQuoteRequired===true,
     balancePaymentStatus:order.paymentStage==="paid_in_full"&&order.initialPaymentStatus==="paid"?"paid":order.balancePaymentStatus||"not_requested",
     balanceRequestedAmount:Number.isInteger(order.balanceRequestedAmount)?order.balanceRequestedAmount:null,
+    balancePaidAmount:Number.isInteger(order.balancePaidAmount)?order.balancePaidAmount:null,
+    balancePaidAt:Number(order.balancePaidAt||0),
     balanceInvoiceUrl:isStripeHostedInvoiceUrl(order.balanceInvoiceUrl)?order.balanceInvoiceUrl:"",
     orderStatus:order.orderStatus||"",
     fulfilmentStatus:order.fulfilmentStatus||"",
