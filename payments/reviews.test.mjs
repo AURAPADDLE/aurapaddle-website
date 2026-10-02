@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import {ensureReviewState,moderateReview,publicReviewData,renderReviews,submitReview} from "./reviews.mjs";
+import {adminReviewData,attachReviewEmail,ensureReviewState,moderateReview,publicReviewData,renderReviews,submitReview} from "./reviews.mjs";
 
 const catalog={bySku:new Map([["AP734955",{slug:"yoga-cruiser"}],["AP081165",{slug:"coast-go"}]])};
 const input={slug:"coast-go",product_sku:"AP081165",reviewer_name:"Alex",reviewer_email:"alex@example.com",rating:"4",review_title:"Great first board",review_body:"Stable and easy to paddle on our weekend trip.",publication_consent:"yes"};
@@ -32,6 +32,38 @@ test("invalid product and unconsented reviews are not stored",()=>{
   assert.throws(()=>submitReview(state,{...input,slug:"yoga-cruiser"},catalog));
   assert.throws(()=>submitReview(state,{...input,publication_consent:""},catalog));
   assert.equal(Object.keys(state.reviews||{}).length,0);
+});
+
+test("admin queue links only a paid matching email, SKU and supplied order number",()=>{
+  const state={orders:{paid:{orderNumber:"APO12345",customerEmail:"ALEX@example.com",customerName:"Alex Buyer",customerPhone:"0400000000",items:[{sku:"AP081165"}],initialPaymentStatus:"paid",amountTotal:29900,amountRefunded:0,fulfilmentStatus:"dispatched"},other:{orderNumber:"APO99999",customerEmail:"alex@example.com",items:[{sku:"AP734955"}],initialPaymentStatus:"paid",amountTotal:74900}}};
+  const id=submitReview(state,{...input,order_number:"apo12345"},catalog).id;
+  const [review]=adminReviewData(state).filter(item=>item.id===id);
+  assert.equal(review.orderNumber,"APO12345");
+  assert.equal(review.orderVerification,"matched");
+  assert.deepEqual(review.orderMatches.map(order=>order.orderNumber),["APO12345"]);
+  assert.equal(review.orderMatches[0].customerPhone,"0400000000");
+  moderateReview(state,{id,status:"published"});
+  const publicData=publicReviewData(state,"coast-go");
+  assert.equal(publicData.reviews[0].orderNumber,undefined);
+  assert.equal(publicData.reviews[0].email,undefined);
+  assert.equal(publicData.reviews[0].customerPhone,undefined);
+});
+
+test("unmatched and legacy reviews are not claimed as verified purchases",()=>{
+  const state={orders:{one:{orderNumber:"APO12345",customerEmail:"other@example.com",items:[{sku:"AP081165"}],initialPaymentStatus:"paid",amountTotal:29900}}};
+  const id=submitReview(state,{...input,order_number:"APO12345"},catalog).id;
+  assert.equal(adminReviewData(state).find(item=>item.id===id).orderVerification,"not_matched");
+  assert.equal(adminReviewData(state).find(item=>item.id==="legacy-yoga-oscar-20261002").orderVerification,"no_email");
+  assert.throws(()=>submitReview(state,{...input,order_number:"12345"},catalog));
+});
+
+test("original contact can be added to a legacy review without exposing it publicly",()=>{
+  const state={orders:{one:{orderNumber:"APO94961",customerEmail:"oscar@example.com",items:[{sku:"AP734955"}],initialPaymentStatus:"paid",paymentStage:"initial_50_percent",balancePaymentStatus:"not_requested",amountTotal:37450}}};
+  const review=attachReviewEmail(state,{id:"legacy-yoga-oscar-20261002",email:"Oscar@Example.com"});
+  assert.equal(review.email,"oscar@example.com");
+  assert.equal(adminReviewData(state).find(item=>item.id===review.id).orderMatches[0].orderNumber,"APO94961");
+  assert.equal(publicReviewData(state,"yoga-cruiser").reviews[0].email,undefined);
+  assert.throws(()=>attachReviewEmail(state,{id:review.id,email:"another@example.com"}));
 });
 
 test("review markup escapes customer text",()=>{

@@ -11,7 +11,7 @@ import {sendOrderEmail} from "./order-email.mjs";
 import {createStateStore} from "./state-store.mjs";
 import coastGoOffer from "../coastgo-offer.js";
 import {renderCoastGoPage,renderCoastGoFeed} from "./coastgo-content.mjs";
-import {ensureReviewState,moderateReview,publicReviewData,renderReviews,submitReview} from "./reviews.mjs";
+import {adminReviewData,attachReviewEmail,ensureReviewState,moderateReview,publicReviewData,renderReviews,submitReview} from "./reviews.mjs";
 
 const here=path.dirname(fileURLToPath(import.meta.url));
 const siteDir=path.resolve(here,"..");
@@ -286,7 +286,7 @@ async function listReviews(req,res,url){
 async function adminReviews(req,res){
   if(!requireAdmin(req))return send(res,401,{error:"Admin authorisation required."});
   const state=await store.read();
-  send(res,200,{items:Object.values(ensureReviewState(state)).sort((a,b)=>String(b.createdAt).localeCompare(String(a.createdAt)))});
+  send(res,200,{items:adminReviewData(state)});
 }
 
 async function setReviewStatus(req,res){
@@ -294,6 +294,13 @@ async function setReviewStatus(req,res){
   const body=JSON.parse((await readBody(req,20_000)).toString("utf8")||"{}");
   const review=await store.mutate(state=>moderateReview(state,body));
   send(res,200,{id:review.id,status:review.status});
+}
+
+async function backfillReviewEmail(req,res){
+  if(!requireAdmin(req))return send(res,401,{error:"Admin authorisation required."});
+  const body=JSON.parse((await readBody(req,20_000)).toString("utf8")||"{}");
+  const review=await store.mutate(state=>attachReviewEmail(state,body));
+  send(res,200,{id:review.id,contactSource:review.contactSource});
 }
 
 async function unsubscribeRecovery(req,res,url){
@@ -406,7 +413,7 @@ async function flushReviewNotifications(){
       if(!entry)break;
       try{
         const review=entry.review,inbox=await ensureRecoveryInbox(agentMailApiKey);
-        await sendAgentMailMessage(agentMailApiKey,inbox.inbox_id,{idempotencyKey:`aura-review-${entry.key}`,body:{to:[orderNotificationEmail],reply_to:[review.email],subject:`New ${review.slug} review awaiting approval — ${review.rating}/5`,text:[`Product: ${review.slug} (${review.sku})`,`Rating: ${review.rating}/5`,`From: ${review.name} <${review.email}>`,`Title: ${review.title}`,"",review.body,"",`${siteUrl}/admin/reviews/`].join("\n"),labels:["product-reviews"]}});
+        await sendAgentMailMessage(agentMailApiKey,inbox.inbox_id,{idempotencyKey:`aura-review-${entry.key}`,body:{to:[orderNotificationEmail],reply_to:[review.email],subject:`New ${review.slug} review awaiting approval — ${review.rating}/5`,text:[`Product: ${review.slug} (${review.sku})`,`Rating: ${review.rating}/5`,`From: ${review.name} <${review.email}>`,`Order number supplied: ${review.orderNumber||"None"} (verify in admin queue)`,`Title: ${review.title}`,"",review.body,"",`${siteUrl}/admin/reviews/`].join("\n"),labels:["product-reviews"]}});
         await store.mutate(state=>{const item=state.reviewNotificationOutbox?.[entry.key];if(item){item.status="sent";item.sentAt=Math.floor(Date.now()/1000);delete item.claimedAt}});
       }catch(error){
         await store.mutate(state=>{const item=state.reviewNotificationOutbox?.[entry.key];if(!item)return;item.status=Number(item.attempts||0)>=12?"failed":"retry";item.nextAttemptAt=Math.floor(Date.now()/1000)+Math.min(3600,30*2**Math.min(Number(item.attempts||1)-1,7));item.lastError=String(error?.message||error).slice(0,240);delete item.claimedAt});
@@ -455,6 +462,7 @@ const server=http.createServer(async(req,res)=>{
     if(req.method==="GET"&&url.pathname==="/api/reviews")return await listReviews(req,res,url);
     if(req.method==="GET"&&url.pathname==="/api/admin/reviews")return await adminReviews(req,res);
     if(req.method==="POST"&&url.pathname==="/api/admin/reviews")return await setReviewStatus(req,res);
+    if(req.method==="POST"&&url.pathname==="/api/admin/reviews/contact")return await backfillReviewEmail(req,res);
     if(req.method==="POST"&&url.pathname==="/api/admin/request-balance")return await requestBalance(req,res);
     if(req.method==="POST"&&url.pathname==="/api/admin/order-progress")return await updateProgress(req,res);
     if(req.method==="POST"&&url.pathname==="/api/admin/order-status")return await updateFulfilment(req,res);

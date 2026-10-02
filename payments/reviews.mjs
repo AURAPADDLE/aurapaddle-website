@@ -20,12 +20,13 @@ export function submitReview(state,input,catalog){
   const slug=trim(input.slug,80),sku=trim(input.product_sku,32);
   const variant=catalog.bySku.get(sku);
   if(!variant||variant.slug!==slug)throw new Error("Choose a valid product before submitting a review.");
-  const rating=Number(input.rating),name=trim(input.reviewer_name,80),email=trim(input.reviewer_email,254).toLowerCase(),title=trim(input.review_title,80),body=trim(input.review_body,1500);
+  const rating=Number(input.rating),name=trim(input.reviewer_name,80),email=trim(input.reviewer_email,254).toLowerCase(),title=trim(input.review_title,80),body=trim(input.review_body,1500),orderNumber=trim(input.order_number,32).toUpperCase();
   if(!Number.isInteger(rating)||rating<1||rating>5||name.length<2||!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)||title.length<3||body.length<20||input.publication_consent!=="yes")throw new Error("Complete all review fields and publication consent.");
+  if(orderNumber&&!/^APO\d{5}$/.test(orderNumber))throw new Error("Enter an AURA order number in the format APO12345, or leave it blank.");
   // Honeypot is deliberately accepted without storing anything to avoid helping bots tune submissions.
   if(trim(input._gotcha,200))return {received:true};
   const now=new Date().toISOString(),id=crypto.randomUUID();
-  ensureReviewState(state)[id]={id,slug,sku,name,email,rating,title,body,consent:true,status:"pending",createdAt:now};
+  ensureReviewState(state)[id]={id,slug,sku,name,email,orderNumber,rating,title,body,consent:true,status:"pending",createdAt:now};
   state.reviewNotificationOutbox??={};
   state.reviewNotificationOutbox[id]={key:id,status:"pending",attempts:0,nextAttemptAt:0};
   return {received:true,id};
@@ -39,6 +40,33 @@ export function moderateReview(state,{id,status}){
   review.updatedAt=new Date().toISOString();
   if(status==="published")review.publishedAt??=review.updatedAt;
   return review;
+}
+
+export function attachReviewEmail(state,{id,email}){
+  const review=ensureReviewState(state)[String(id||"")];
+  if(!review)throw new Error("Review not found.");
+  if(review.email)throw new Error("This review already has a contact email.");
+  const normalized=trim(email,254).toLowerCase();
+  if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalized))throw new Error("Enter the email from the original review submission.");
+  review.email=normalized;
+  review.contactSource="admin_backfill_from_original_submission";
+  review.contactUpdatedAt=new Date().toISOString();
+  return review;
+}
+
+export function adminReviewData(state){
+  const orders=Object.values(state.orders||{});
+  return Object.values(ensureReviewState(state)).sort((a,b)=>String(b.createdAt).localeCompare(String(a.createdAt))).map(review=>{
+    const email=String(review.email||"").trim().toLowerCase();
+    const matches=email?orders.filter(order=>
+      String(order.customerEmail||"").trim().toLowerCase()===email&&
+      (!review.orderNumber||order.orderNumber===review.orderNumber)&&
+      (order.items||[]).some(item=>item.sku===review.sku)&&
+      order.initialPaymentStatus==="paid"&&
+      Number(order.amountRefunded||0)<Number(order.amountTotal||0)
+    ).map(order=>({orderNumber:order.orderNumber,customerName:order.customerName||"",customerEmail:order.customerEmail||"",customerPhone:order.customerPhone||"",paymentStatus:order.initialPaymentStatus,paymentStage:order.paymentStage||"",balancePaymentStatus:order.balancePaymentStatus||"",fulfilmentStatus:order.fulfilmentStatus||""})):[];
+    return {...review,orderMatches:matches,orderVerification:matches.length?"matched":email?"not_matched":"no_email"};
+  });
 }
 
 export function publicReviewData(state,slug){
