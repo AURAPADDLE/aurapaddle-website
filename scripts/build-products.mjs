@@ -438,7 +438,11 @@ const requestedProductSlugs=new Set(String(process.env.AURA_PRODUCT_SLUGS||"").s
 const productsToWrite=requestedProductSlugs.size?products.filter(product=>requestedProductSlugs.has(product.slug)):products;
 if(requestedProductSlugs.size&&productsToWrite.length!==requestedProductSlugs.size)throw new Error("One or more requested product slugs were not found.");
 function productionHtml(product){
-  const html=htmlFor(product);
+  let html=htmlFor(product);
+  if(product.slug==="yoga-cruiser"){
+    const review=fs.readFileSync(path.join(scriptDir,"published-review-yoga-cruiser.html"),"utf8").trim();
+    html=html.replace(/<article class="reviews-summary">[\s\S]*?<\/article>/,review);
+  }
   const readyHtml=product.slug==="yoga-cruiser"?html
     .replace('Australia-wide shipping is confirmed and included with the remaining-balance request before dispatch. See the', 'For in-stock Glacier Blue, the confirmed shipping charge is paid with the board at checkout; quote-required destinations need a shipping quote before payment. Other colours remain pre-orders, with shipping and the remaining balance requested before dispatch. See the')
     .replace('Australia-only range · Shipping calculated separately · See policy terms', 'Glacier Blue in stock · Pay in full at checkout · Dispatch within 1 business day after payment')
