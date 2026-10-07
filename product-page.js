@@ -207,25 +207,26 @@
       try{const saved=sessionStorage.getItem(shippingRegionKey),normalisedSaved=saved==="canberra-melbourne"?"qld-nsw-main":saved;if(visibleRegions.some(region=>region.id===normalisedSaved))select.value=normalisedSaved;if(saved!==normalisedSaved&&normalisedSaved)sessionStorage.setItem(shippingRegionKey,normalisedSaved)}catch{}
     }
     const region=shippingRates.regions.find(item=>item.id===select.value),shippingClass=productShippingClass();
-    if(!region){result.textContent="Shipping is additional. Choose a region to see your total before payment.";quote.hidden=true;return}
+    if(!region){result.textContent=data.slug==="coast-go"&&coastGo.freeShippingActive()?"FREE standard shipping to eligible regions through 21 October (Queensland time). Express extra; remote quote. Choose your region to confirm.":"Shipping is additional. Choose a region to see your total before payment.";quote.hidden=true;return}
     const multiSurfboard=shippingClass==="surfboard"&&quantity>1;
     const coastGoRate=data.slug==="coast-go"&&region.coastGoOnly&&Number.isInteger(region.coastGo);
-    const quoteRequired=(region.quoteRequired&&!coastGoRate)||shippingClass==="quoteOnly"||multiSurfboard;
+    const coastGoFree=coastGoRate&&coastGo.freeShippingFor(region.id);
+    const quoteRequired=(region.quoteRequired&&!coastGoRate)||shippingClass==="quoteOnly"||multiSurfboard||(coastGoRate&&coastGo.remoteQuoteFor(region.id));
     if(quoteRequired){
       const reason=multiSurfboard?"Orders with two or more hard surfboards are quoted for the complete consignment.":"This product or destination needs an individual freight quote.";
-      result.innerHTML=`<strong>Quote required</strong><span>${reason}${preorder?"":" Contact us to confirm freight and payment before the 1-business-day dispatch window starts."}</span>`;
+      result.innerHTML=`<strong>Quote required</strong><span>${reason}${preorder?"":data.slug==="coast-go"?" Contact us to confirm freight and payment before ordering.":" Contact us to confirm freight and payment before the 1-business-day dispatch window starts."}</span>`;
       quote.hidden=false;
       return;
     }
     const promotion=activeShippingPromotion(region.id);
     const baseRate=coastGoRate?region.coastGo:data.slug==="yoga-cruiser"&&Number.isInteger(region.yogaCruiser)?region.yogaCruiser:region[shippingClass];
-    let amount=promotion&&!promotion.requiresCode?0:Number(baseRate||0)*quantity;
+    let amount=coastGoFree||(promotion&&!promotion.requiresCode)?0:Number(baseRate||0)*quantity;
     const lengthFeet=Number((selectedSize.match(/^(\d+)/)||[])[1]||0);
     if(shippingClass==="surfboard"&&lengthFeet>=9)amount+=Number(shippingRates.longboardSurcharge||0)*quantity;
     if(!preorder){factsLabel.textContent="Total due today incl. shipping";$("clarityDueToday").textContent=moneyFromCents(price*quantity*100+amount)}
-    result.innerHTML=`<strong>Shipping: ${moneyFromCents(amount)} incl. GST</strong><span>${data.slug==="coast-go"&&coastGo.discounted()?"Total with COASTGO10 applied":"Total before promo code"}: ${moneyFromCents(price*quantity*100+amount)} · ${preorder?`${moneyFromCents(price*quantity*50+amount)} payable before dispatch after today's initial payment`:`${moneyFromCents(price*quantity*100+amount)} payable today`}.</span><span>${promotion?.requiresCode?`Use code ${promotion.code} in the cart for free shipping through 29 September 2026.`:promotion?"Free shipping offer ends 29 September 2026 for eligible metro and coastal regions.":region.id==="local-pickup"?shippingRates.localPickupNote:"Confirm that this region matches your delivery address in the cart."}</span>`;
+    result.innerHTML=`<strong>Shipping: ${moneyFromCents(amount)} incl. GST</strong><span>${coastGoFree?"Total with free standard shipping":data.slug==="coast-go"&&coastGo.discounted()?"Total with COASTGO10 applied":"Total before promo code"}: ${moneyFromCents(price*quantity*100+amount)} · ${preorder?`${moneyFromCents(price*quantity*50+amount)} payable before dispatch after today's initial payment`:`${moneyFromCents(price*quantity*100+amount)} payable today`}.</span><span>${promotion?.requiresCode?`Use code ${promotion.code} in the cart for free shipping through 29 September 2026.`:promotion?"Free shipping offer ends 29 September 2026 for eligible metro and coastal regions.":region.id==="local-pickup"?shippingRates.localPickupNote:"Confirm that this region matches your delivery address in the cart."}</span>`;
     quote.hidden=true;
-    if(coastGoRate){const timing=document.createElement("strong");timing.textContent=`${region.service} transit: ${region.transitDays} days after dispatch (excluding handling / preparation time).`;result.append(timing);const details=document.createElement("span");details.textContent=`${region.details} ${region.service} shipping: ${moneyFromCents(region.coastGo)} per board. ${coastGo.dispatch()} Not sure which region applies? Contact us before ordering.`;result.append(details)}
+    if(coastGoRate){const timing=document.createElement("strong");timing.textContent=`${region.service} transit: ${region.transitDays} days after dispatch (excluding handling / preparation time).`;result.append(timing);const details=document.createElement("span");details.textContent=`${region.details} ${coastGoFree?coastGo.shippingTerms:`${region.service} shipping: ${moneyFromCents(region.coastGo)} per board.`} ${coastGo.dispatch()} Not sure which region applies? Contact us before ordering.`;result.append(details)}
   }
 
   function setupPurchaseClarity(){
@@ -262,7 +263,7 @@
     $("preorderPanel").hidden=!preorder;
     if(data.slug==="coast-go"){
       $("availabilityText").textContent=coastGo.beforeLaunch()?"Advance orders open · Official release 8 October":"Available to order";
-      $("priceNote").textContent="New-product price · Pay in full · Shipping additional";
+      $("priceNote").textContent=coastGo.priceNote();
       if(assurance)assurance.textContent=`Pay in full including shipping. ${coastGo.dispatch()}`;
       const terms=$("preorderTermsBody");if(terms){terms.textContent=`${coastGo.offer()} ${coastGo.dispatch()} No 50% deposit or remaining-balance request applies to new orders. See our returns policy; Australian Consumer Law rights are not limited.`;terms.previousElementSibling.firstChild.textContent="Order & release terms ";}
     }
@@ -301,7 +302,7 @@
     const bar=$("mobilePurchaseBar");
     if(!bar)return;
     const v=variant(),campaign=v.preorder||{},price=numericPrice(v),preorder=isPreorder(v),button=bar.querySelector("button");
-    bar.querySelector("strong").textContent=data.slug==="coast-go"?`AUD $${(299*quantity).toFixed(2)}${coastGo.discounted()?" · Extra $10 off / board":""}`:price?(preorder?`AUD $${(price*quantity/2).toFixed(2)} today`:`AUD $${(price*quantity).toFixed(2)}`):"Price on request";
+    bar.querySelector("strong").textContent=data.slug==="coast-go"?`AUD $${(299*quantity).toFixed(2)}${coastGo.discounted()?" · Extra $10 off / board":coastGo.freeShippingActive()?" · FREE standard shipping*":""}`:price?(preorder?`AUD $${(price*quantity/2).toFixed(2)} today`:`AUD $${(price*quantity).toFixed(2)}`):"Price on request";
     bar.querySelector("small").textContent=v.dispatchLeadBusinessDays?`Dispatch within ${v.dispatchLeadBusinessDays} business day`:campaign.estimatedDelivery?`Est. dispatch ${campaign.estimatedDelivery}`:"Secure checkout";
     button.hidden=!price;
     button.textContent=preorder?(campaign.inventoryIncoming?"Reserve":"Pre-order"):"Buy now";
@@ -495,7 +496,7 @@
   document.querySelectorAll("[data-add-accessory]").forEach(button=>button.addEventListener("click",()=>addAccessory(button.dataset.addAccessory)));
   const menuButton=$("menuButton"),mobileMenu=$("mobileMenu");menuButton.addEventListener("click",()=>{const open=mobileMenu.classList.toggle("open");menuButton.setAttribute("aria-expanded",String(open));document.body.classList.toggle("menu-open",open)});mobileMenu.querySelectorAll("a").forEach(a=>a.addEventListener("click",()=>{mobileMenu.classList.remove("open");document.body.classList.remove("menu-open");menuButton.setAttribute("aria-expanded","false")}));
   function setupCoastGoPromotion(){
-    if(data.slug!=="coast-go"||!coastGo.discounted())return;
+    if(data.slug!=="coast-go")return;
     const style=document.createElement("style");
     style.textContent='.coast-launch-trigger{display:block;width:100%;margin:12px 0 20px;padding:17px 20px;border:0;border-radius:12px;background:#fa573f;color:#fff;text-align:left;font:800 19px/1.35 "Manrope",sans-serif;cursor:pointer}.coast-launch-trigger small{display:block;margin-top:5px;font:500 13px/1.4 "DM Sans",sans-serif}.coast-launch-dialog{box-sizing:border-box;width:min(480px,calc(100% - 32px));max-height:90vh;overflow:auto;padding:40px 28px 28px;border:0;border-radius:22px;background:#102f3b;color:white;text-align:center}.coast-launch-dialog::backdrop{background:rgba(5,24,34,.72)}.coast-launch-close{position:absolute;right:14px;top:10px;border:0;background:transparent;color:white;font-size:30px;cursor:pointer}.coast-launch-dialog .kicker{font-size:13px;letter-spacing:.16em;font-weight:700;color:#8be3d4}.coast-launch-dialog h2{margin:18px 0 10px;font:800 clamp(46px,11vw,72px)/1.05 "Manrope",sans-serif;color:#ff755f;letter-spacing:-.04em}.coast-launch-dialog .deadline{font:700 23px/1.35 "Manrope",sans-serif;margin:12px 0}.coast-launch-code{display:block;margin:22px auto 12px;padding:14px;border:1px dashed #8be3d4;border-radius:10px;color:#8be3d4;font:800 24px/1.2 monospace}.coast-launch-dialog .auto{font-size:16px;margin:0 0 24px}.coast-launch-dialog .shop{width:100%;border:0;border-radius:999px;background:#fa573f;color:#fff;padding:17px;font:800 16px/1.3 "Manrope",sans-serif;cursor:pointer}.coast-launch-dialog .terms{font-size:12px;line-height:1.5;color:#c1d3db;margin:18px 0 0}';
     document.head.append(style);
@@ -505,13 +506,28 @@
     const dialog=document.createElement("dialog");dialog.className="coast-launch-dialog";dialog.setAttribute("aria-labelledby","coastLaunchTitle");
     dialog.innerHTML='<button class="coast-launch-close" aria-label="Close CoastGo offer" type="button">×</button><p class="kicker">COASTGO LAUNCH OFFER</p><h2 id="coastLaunchTitle">SAVE $10!</h2><p class="deadline">Order by 8 October</p><strong class="coast-launch-code">COASTGO10</strong><p class="auto">Automatically applied at checkout.</p><button class="shop" type="button">SHOP COASTGO</button><p class="terms">Extra $10 off each CoastGo at the $299 new-product price.<br>Includes 8 October · Queensland time · Shipping additional.</p>';
     document.body.append(dialog);
-    const show=()=>{if(!coastGo.discounted()||document.querySelector("dialog[open]"))return;dialog.showModal();try{sessionStorage.setItem("aura-coastgo-product-offer-v1","seen")}catch{}};
+    const promotion=()=>({promotion_id:coastGo.freeShippingActive()?coastGo.shippingPromotionId:"coastgo_launch_extra10_202610",promotion_name:coastGo.freeShippingActive()?"CoastGo — free standard shipping":"CoastGo — extra AUD $10 off",creative_slot:"product_offer",currency:"AUD",items:[{item_id:variant().sku,item_name:data.name,price:coastGo.price()/100,quantity}]});
+    const refreshOffer=()=>{
+      const active=coastGo.discounted()||coastGo.freeShippingActive();trigger.hidden=!active;trigger.style.display=active?"block":"none";
+      if(!active){dialog.close();return;}
+      if(coastGo.freeShippingActive()){
+        trigger.innerHTML='FREE standard shipping*<small>AUD $299 · Through 21 October · Express extra · Remote quote →</small>';
+        dialog.querySelector('.kicker').textContent='COASTGO · AUD $299';
+        dialog.querySelector('h2').textContent='FREE STANDARD SHIPPING*';dialog.querySelector('h2').style.fontSize='42px';
+        dialog.querySelector('.deadline').textContent='9–21 October 2026 · Queensland time';
+        dialog.querySelector('.coast-launch-code').hidden=true;dialog.querySelector('.coast-launch-code').style.display='none';
+        dialog.querySelector('.auto').textContent='Automatically applied to eligible standard delivery regions.';
+        dialog.querySelector('.terms').textContent=coastGo.shippingTerms;
+      }
+    };
+    refreshOffer();
+    const show=()=>{refreshOffer();if(!(coastGo.discounted()||coastGo.freeShippingActive())||document.querySelector("dialog[open]"))return;dialog.showModal();track('view_promotion',promotion());try{sessionStorage.setItem(coastGo.freeShippingActive()?"aura-coastgo-product-free-shipping-v1":"aura-coastgo-product-offer-v1","seen")}catch{}};
     trigger.addEventListener("click",show);
     dialog.querySelector('.coast-launch-close').addEventListener("click",()=>dialog.close());
-    dialog.querySelector('.shop').addEventListener("click",()=>{dialog.close();$("purchaseActions").scrollIntoView({behavior:"smooth",block:"center"});});
+    dialog.querySelector('.shop').addEventListener("click",()=>{track('select_promotion',promotion());dialog.close();$("purchaseActions").scrollIntoView({behavior:"smooth",block:"center"});});
     dialog.addEventListener("click",event=>{if(event.target===dialog)dialog.close()});
-    window.addEventListener("aura:coastgo-change",()=>{if(!coastGo.discounted()){dialog.close();trigger.remove();}});
-    let seen=false;try{seen=sessionStorage.getItem("aura-coastgo-product-offer-v1")==="seen"}catch{}
+    window.addEventListener("aura:coastgo-change",()=>{dialog.close();refreshOffer();});
+    let seen=false;try{seen=sessionStorage.getItem(coastGo.freeShippingActive()?"aura-coastgo-product-free-shipping-v1":"aura-coastgo-product-offer-v1")==="seen"}catch{}
     if(!seen)setTimeout(show,650);
   }
   renderShippingSupport();setupSurfSizeFinder();setupPurchaseClarity();setupMobilePurchaseBar();setupConversionLayout();renderSelection();renderMobilePurchaseBar();refreshPreorderProgress();setupCoastGoPromotion();

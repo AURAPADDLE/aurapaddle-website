@@ -6,7 +6,9 @@
   const promotionEnds=Date.parse("2026-09-30T00:00:00+10:00");
   let storageKey="aura-home-promo-yoga-glacier-202609";
   const coastEnds=Date.parse("2026-10-09T00:00:00+10:00");
+  const shippingEnds=Date.parse(window.AURACoastGo.shippingEndsAt);
   let coastMode=false;
+  let shippingMode=false;
   function refreshPromotion(){
     if(Date.now()>=promotionEnds&&!coastMode){
       coastMode=true;
@@ -27,10 +29,22 @@
       img.alt="CoastGo Blue Orange complete paddleboard kit";
       const link=offer.querySelector('[data-preorder-offer-shop]');link.href="products/coast-go.html";link.textContent="Shop CoastGo";
     }
+    if(window.AURACoastGo.freeShippingActive()&&!shippingMode){
+      shippingMode=true;
+      if(offer.open)offer.close();
+      promotion={promotion_id:window.AURACoastGo.shippingPromotionId,promotion_name:"CoastGo — free standard shipping",creative_slot:"homepage_modal",currency:"AUD",items:window.AURACoastGo.skus.map(item_id=>({item_id,item_name:"AURA PADDLE CoastGo",price:299,quantity:1,promotion_id:window.AURACoastGo.shippingPromotionId,promotion_name:"CoastGo — free standard shipping",creative_slot:"homepage_modal"}))};
+      storageKey="aura-home-promo-coastgo-free-standard-202610";
+      offer.querySelector('.preorder-offer__eyebrow').textContent="CoastGo · 9–21 October · Queensland time";
+      offer.querySelector('#preorderOfferTitle').innerHTML="CoastGo<br><span>FREE STANDARD SHIPPING*</span>";
+      offer.querySelector('.preorder-offer__value').textContent="AUD $299. Free standard delivery to eligible regions.";
+      offer.querySelector('[data-promo-code-copy]').hidden=true;
+      offer.querySelector('[data-promo-code-copy]').style.display="none";
+      offer.querySelector('.preorder-offer__copy').textContent="Automatically applied through 21 October 2026 inclusive, Queensland time. Express shipping extra; remote destinations require a quote. Standard transit: 21–40 days after dispatch.";
+    }
     if(!isActive()&&offer.open)offer.close();
   }
   const track=(name,params={})=>window.AURATracking?.event(name,{...promotion,...params});
-  const isActive=()=>Date.now()>=promotionStarts&&Date.now()<coastEnds;
+  const isActive=()=>Date.now()>=promotionStarts&&Date.now()<shippingEnds;
   const hasSeen=()=>{try{return sessionStorage.getItem(storageKey)==="seen"}catch{return false}};
   const markSeen=()=>{try{sessionStorage.setItem(storageKey,"seen")}catch{}};
   const openOffer=source=>{
@@ -55,6 +69,7 @@
   offer.querySelector("[data-preorder-offer-shop]").addEventListener("click",()=>track("select_promotion"));
   const copyButton=offer.querySelector("[data-promo-code-copy]");
   copyButton?.addEventListener("click",async()=>{
+    if(shippingMode)return;
     try{
       await navigator.clipboard.writeText(coastMode?"COASTGO10":"YOGAFREESHIP");
       const label=copyButton.querySelector("span");
@@ -66,7 +81,7 @@
   offer.addEventListener("click",event=>{if(event.target===offer)dismiss("backdrop")});
   offer.addEventListener("cancel",event=>{event.preventDefault();dismiss("escape")});
   refreshPromotion();
-  for(const boundary of [promotionEnds,coastEnds]){
+  for(const boundary of [promotionEnds,coastEnds,shippingEnds]){
     const delay=boundary-Date.now();
     if(delay>0&&delay<2147483647)window.setTimeout(()=>{refreshPromotion();openOffer("promotion_transition")},delay+10);
   }

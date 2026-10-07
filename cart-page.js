@@ -103,8 +103,9 @@
     if(resolvedRegionId==="local-pickup")return {selected:true,total:0,quoteRequired:false,label:region.label,pickup:true,regionId:resolvedRegionId};
     if(items.some(item=>slugFor(item)==="coast-go")&&!region.coastGoOnly)return {selected:false,total:null,quoteRequired:false};
     if(region.coastGoOnly){
-      const quoteRequired=!items.length||items.some(item=>slugFor(item)!=="coast-go");
-      return {selected:true,total:quoteRequired?null:items.reduce((sum,item)=>sum+region.coastGo*item.quantity,0),quoteRequired,label:region.label,regionId:resolvedRegionId,details:region.details,service:region.service,transitDays:region.transitDays};
+      const quoteRequired=!items.length||items.some(item=>slugFor(item)!=="coast-go")||window.AURACoastGo.remoteQuoteFor(resolvedRegionId);
+      const promotionApplied=!quoteRequired&&window.AURACoastGo.freeShippingFor(resolvedRegionId);
+      return {selected:true,total:quoteRequired?null:promotionApplied?0:items.reduce((sum,item)=>sum+region.coastGo*item.quantity,0),quoteRequired,promotionApplied,promotionId:promotionApplied?window.AURACoastGo.shippingPromotionId:"",label:region.label,regionId:resolvedRegionId,details:region.details,service:region.service,transitDays:region.transitDays};
     }
     if(region.quoteRequired)return {selected:true,total:null,quoteRequired:true,label:region.label};
     const hasAngler=items.some(item=>slugFor(item)==="angler-fishing");
@@ -205,11 +206,11 @@
     }else if(shipping.quoteRequired){
       shippingAmount.textContent="Quote required";
       beforeDispatch.textContent=availableOnly?"Request freight quote":`${money(remaining)} + freight quote`;
-      shippingHelp.innerHTML=availableOnly?'Please <a href="mailto:admin@aurapaddle.com?subject=Glacier%20Blue%20freight%20quote">contact AURA PADDLE for a freight quote</a> before payment and the dispatch window.':"AURA PADDLE will confirm the best available freight price before dispatch.";
+      shippingHelp.innerHTML=availableOnly?`Please <a href="mailto:admin@aurapaddle.com?subject=${hasCoastGo?'CoastGo':'Glacier%20Blue'}%20freight%20quote">contact AURA PADDLE for a freight quote</a> before payment and the dispatch window.`:"AURA PADDLE will confirm the best available freight price before dispatch.";
     }else{
       shippingAmount.textContent=shipping.promotionApplied?"Free — promo applied":money(shipping.total);
       beforeDispatch.textContent=availableOnly?"Paid today":money(remaining+shipping.total);
-      shippingHelp.textContent=shipping.promotionApplied?"YOGAFREESHIP applied. Free shipping ends 29 September 2026 for eligible regions.":availableOnly?"This shipping amount is included in today's secure payment.":"This shipping amount is recorded now and paid with the remaining product balance before dispatch.";
+      shippingHelp.textContent=shipping.promotionId===window.AURACoastGo.shippingPromotionId?window.AURACoastGo.shippingTerms:shipping.promotionApplied?"YOGAFREESHIP applied. Free shipping ends 29 September 2026 for eligible regions.":availableOnly?"This shipping amount is included in today's secure payment.":"This shipping amount is recorded now and paid with the remaining product balance before dispatch.";
     }
     const autoPromoPending=appliedPromoCode===yogaLaunchPromotion.code&&launchPromotionInCart(items)&&!shipping.selected;
     if(shipping.details&&!shipping.quoteRequired)shippingHelp.textContent+=` ${shipping.service} transit: ${shipping.transitDays} days after dispatch, excluding handling / preparation time. ${window.AURACoastGo.dispatch()} ${shipping.details} Rate is per board. Contact us before ordering if your region is unclear.`;
@@ -309,12 +310,12 @@
     try{
       const attribution=await window.AURAAttribution?.snapshot?.();
       const currentShipping=shippingFor(items,shippingRegion);
-      response=await fetch(config.checkoutEndpoint||"/api/checkout",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({items:items.map(({sku,quantity})=>({sku,quantity})),coastGoPrices:items.filter(item=>window.AURACoastGo?.isCoastGo(item.sku)).map(({sku,unitAmount})=>({sku,unitAmount})),shippingRegion,promoCode:window.AURACoastGo.codeFor(items)||(currentShipping.promotionApplied?appliedPromoCode:""),returnPath:location.pathname,customerEmail,recoveryEmailConsent:recoveryConsent,requestId:globalThis.crypto?.randomUUID?.()||`${Date.now()}-${Math.random().toString(36).slice(2)}`,attribution})});
+      response=await fetch(config.checkoutEndpoint||"/api/checkout",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({items:items.map(({sku,quantity})=>({sku,quantity})),coastGoPrices:items.filter(item=>window.AURACoastGo?.isCoastGo(item.sku)).map(({sku,unitAmount})=>({sku,unitAmount})),coastGoShippingAmount:currentShipping.total,shippingRegion,promoCode:window.AURACoastGo.codeFor(items)||(currentShipping.promotionApplied?appliedPromoCode:""),returnPath:location.pathname,customerEmail,recoveryEmailConsent:recoveryConsent,requestId:globalThis.crypto?.randomUUID?.()||`${Date.now()}-${Math.random().toString(36).slice(2)}`,attribution})});
       const payload=await response.json().catch(()=>({}));
       if(!response.ok||!payload.url)throw new Error(payload.error||"Stripe Checkout could not be prepared.");
       const shipping=shippingFor(items,shippingRegion);
       track("add_shipping_info",{currency:"AUD",value:dueToday,shipping_tier:shippingRegion,shipping:Number(shipping.total||0)/100,items:pricedItems});
-      track("begin_checkout",{currency:"AUD",value:dueToday,items:pricedItems});
+      track("begin_checkout",{currency:"AUD",value:dueToday,shipping:Number(shipping.total||0)/100,shipping_tier:shippingRegion,promotion_id:shipping.promotionId||"",items:pricedItems});
       track("checkout_redirect",{currency:"AUD",value:dueToday,shipping_tier:shippingRegion,shipping:Number(shipping.total||0)/100,item_count:pricedItems.reduce((sum,item)=>sum+item.quantity,0)});
       checkoutRedirected=true;
       location.assign(payload.url);

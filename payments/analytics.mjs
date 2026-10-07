@@ -57,6 +57,7 @@ function orderItems(order,catalog){
       remainingPairedRack-=paired;
       unitAmount=Math.round((paired*3450+regular*6450)/quantity);
     }
+    if(Number.isInteger(item.invoiceUnitAmount)&&item.invoiceUnitAmount>0)unitAmount=order.paymentStage==="paid_in_full"?item.invoiceUnitAmount:item.invoiceUnitAmount/2;
     return {
       item_id:item.sku,
       item_name:variant?.productName||variant?.shortName||item.sku,
@@ -104,6 +105,8 @@ export function enqueueStripeAnalytics(state,event,catalog,{enhancedConversionsE
     key=`purchase:${order.orderNumber}`;
     eventName="purchase";
     params={transaction_id:order.orderNumber,currency:String(order.currency||"aud").toUpperCase(),value:cents(order.amountTotal),shipping:order.paymentStage==="paid_in_full"?cents(order.shippingAmount):0,payment_stage:order.paymentStage||"initial_50_percent",items:orderItems(order,catalog)};
+    if(order.shippingPromotionId)params.promotion_id=order.shippingPromotionId;
+    if(order.promotionCode)params.coupon=order.promotionCode;
   }else if(event.type==="checkout.session.expired"){
     key=`checkout_abandoned:${object.id}`;
     eventName="checkout_abandoned";

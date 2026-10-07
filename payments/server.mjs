@@ -161,6 +161,7 @@ async function checkout(req,res){
   if(items.some(item=>coastGoOffer.isCoastGo(item.variant.sku)&&!(Array.isArray(body.coastGoPrices)&&body.coastGoPrices.some(price=>price?.sku===item.variant.sku&&price.unitAmount===item.variant.checkoutAmount))))return send(res,409,{error:"CoastGo pricing has changed. Refresh your cart and review the full-payment total before continuing."});
   const promoCode=String(body.promoCode||"").trim().toUpperCase();
   const shipping=calculateShipping(items,body.shippingRegion,shippingRates,Date.now(),promoCode);
+  if(items.some(item=>coastGoOffer.isCoastGo(item.variant.sku))&&body.coastGoShippingAmount!==shipping.amount)return send(res,409,{error:"CoastGo shipping has changed. Refresh your cart and review the delivery total before continuing."});
   if(promoCode&&!shipping.promotionCode&&promoCode!==coastGoOffer.codeFor(items))return send(res,400,{error:"This promo code is invalid or not available for this order, region or date."});
   if(items.some(item=>item.variant.orderMode==="available")&&shipping.quoteRequired)return send(res,400,{error:"Contact AURA PADDLE for a freight quote before ordering this in-stock board."});
   const fallback=items.length===1?items[0].variant:"/cart-preview.html";
