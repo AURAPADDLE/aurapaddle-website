@@ -2,7 +2,10 @@ import offer from "../coastgo-offer.js";
 
 export function renderCoastGoFeed(xml,now=Date.now()){
   return xml.replace(/<item>[\s\S]*?<\/item>/g,item=>{
-    if(!offer.isCoastGo(item.match(/<g:id>(.*?)<\/g:id>/)?.[1]))return item;
+    const sku=item.match(/<g:id>(.*?)<\/g:id>/)?.[1];
+    // The current Yoga price is still AUD 749; remove the obsolete September sale window.
+    if(offer.isYoga(sku))return item.replace(/<g:sale_price_effective_date>.*?<\/g:sale_price_effective_date>/g,"");
+    if(!offer.isCoastGo(sku))return item;
     const rendered=item.replace(/<g:availability>.*?<\/g:availability>/,`<g:availability>${offer.beforeLaunch(now)?"preorder":"in_stock"}</g:availability>`)
       .replace(/<g:availability_date>.*?<\/g:availability_date>/g,"")
       .replace("</g:availability>",`</g:availability>${offer.beforeLaunch(now)?`<g:availability_date>${offer.launchAt}</g:availability_date>`:""}`)

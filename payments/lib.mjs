@@ -47,7 +47,7 @@ export function calculateShipping(items,regionId,rates=loadShippingRates(),now=D
   if(region.coastGoOnly){
     const quoteRequired=!items.length||items.some(item=>item.variant.slug!=="coast-go")||coastGoOffer.remoteQuoteFor(region.id,now);
     const promotionApplied=!quoteRequired&&coastGoOffer.freeShippingFor(region.id,now);
-    return {regionId:region.id,label:region.label,amount:quoteRequired?null:promotionApplied?0:items.reduce((sum,item)=>sum+region.coastGo*item.quantity,0),quoteRequired,pickup:false,promotionIds:promotionApplied?[coastGoOffer.shippingPromotionId]:[],promotionApplied};
+    return {regionId:region.id,label:region.label,amount:quoteRequired?null:promotionApplied?0:items.reduce((sum,item)=>sum+region.coastGo*item.quantity,0),quoteRequired,pickup:false,promotionIds:promotionApplied?[coastGoOffer.shippingPromotionId]:[],promotionApplied,promotionCode:promotionApplied?coastGoOffer.shippingCode:""};
   }
   if(region.quoteRequired)return {regionId:region.id,label:region.label,amount:null,quoteRequired:true,pickup:false};
   const isup=new Set(rates.classes.isup),surfboard=new Set(rates.classes.surfboard);
@@ -68,7 +68,8 @@ export function calculateShipping(items,regionId,rates=loadShippingRates(),now=D
       continue;
     }
     const promotion=activePromotions.find(entry=>entry.sku===item.variant.sku);
-    if(promotion)promotionIds.add(promotion.id);
+    if(coastGoOffer.yogaFreeShippingFor(item.variant.sku,region.id,now))promotionIds.add(coastGoOffer.shippingPromotionId);
+    else if(promotion)promotionIds.add(promotion.id);
     else if(slug==="yoga-cruiser"&&Number.isInteger(region.yogaCruiser))amount+=region.yogaCruiser*item.quantity;
     else if(isup.has(slug))amount+=region.isup*item.quantity;
     else if(surfboard.has(slug)){
@@ -79,7 +80,7 @@ export function calculateShipping(items,regionId,rates=loadShippingRates(),now=D
   }
   if(surfboardQuantity>1)quoteRequired=true;
   const appliedPromotions=activePromotions.filter(promotion=>promotionIds.has(promotion.id));
-  return {regionId:region.id,label:region.label,amount:quoteRequired?null:amount,quoteRequired,pickup:false,promotionIds:[...promotionIds],promotionCode:appliedPromotions.find(promotion=>promotion.code)?.code||""};
+  return {regionId:region.id,label:region.label,amount:quoteRequired?null:amount,quoteRequired,pickup:false,promotionIds:[...promotionIds],promotionApplied:promotionIds.size>0,promotionCode:promotionIds.has(coastGoOffer.shippingPromotionId)?coastGoOffer.shippingCode:appliedPromotions.find(promotion=>promotion.code)?.code||""};
 }
 
 export function loadStripeMap(catalog){
@@ -340,7 +341,7 @@ export function buildCheckoutParams({items,priceBySku,siteUrl,returnPath,shippin
   params.set("cancel_url",cancelUrl.toString());
   const freightCopy=shipping.quoteRequired?`${shipping.label}: freight quote required.`:shipping.pickup?"Free local pickup in Gold Coast, QLD. Exact pickup address is provided after order confirmation.":shipping.promotionCode?`${shipping.label}: free shipping with promo code ${shipping.promotionCode}.`:`${shipping.label}: AUD $${(shipping.amount/100).toFixed(2)} shipping.`;
   params.set("custom_text[submit][message]",inStock?`This Checkout collects the full product price and published shipping. ${freightCopy} In-stock orders dispatch within 1 business day after successful payment. Transit time is additional. See our returns policy; Australian Consumer Law rights are not limited.`:`This Checkout collects the 50% initial product payment only. ${freightCopy} The remaining product balance and any shipping charge are payable before dispatch. Change of mind: full refund within 48 hours; conditional orders remain cancellable until AURA PADDLE confirms production in writing. Australian Consumer Law rights are not limited.`);
-  if(items.some(item=>coastGoOffer.isCoastGo(item.variant.sku)))params.set("custom_text[submit][message]",`${metadata.aura_promotion_code===coastGoOffer.code?"COASTGO10 applied: AUD $299 less $10 per CoastGo = AUD $289, plus shipping. ":""}${shipping.promotionApplied?"FREE standard shipping applied through 21 October (Queensland time). Express extra; remote quote. ":""}Full payment including published shipping; no later product balance. ${coastGoOffer.dispatch(now*1000)} Transit: standard 21–40 days; eligible-region express 7–11 days, excluding preparation. See returns policy; Australian Consumer Law rights are not limited.`);
+  if(items.some(item=>coastGoOffer.isCoastGo(item.variant.sku)))params.set("custom_text[submit][message]",`${metadata.aura_promotion_code===coastGoOffer.code?"COASTGO10 applied: AUD $299 less $10 per CoastGo = AUD $289, plus shipping. ":""}${shipping.promotionApplied?"AURAFREESHIP: FREE standard shipping through 21 October (Queensland time). Express extra; remote quote. ":""}Full payment including published shipping; no later product balance. ${coastGoOffer.dispatch(now*1000)} Transit: standard 21–40 days; eligible-region express 7–11 days, excluding preparation. See returns policy; Australian Consumer Law rights are not limited.`);
   if(!shipping.pickup)params.set("custom_text[shipping_address][message]",inStock?`${freightCopy} Shipping is included in today's payment.`:`${freightCopy} AURA PADDLE will request this amount with the remaining product balance before dispatch.`);
   appendObject(params,"metadata",metadata);
   appendObject(params,"payment_intent_data[metadata]",metadata);

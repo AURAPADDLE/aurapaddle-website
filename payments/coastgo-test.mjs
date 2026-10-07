@@ -12,7 +12,7 @@ const catalog=loadCatalog(),cutoff=Date.parse(offer.endsAt),launch=Date.parse(of
 test('Queensland launch and price cutoff have exact boundaries',()=>{
   assert.equal(offer.codeFor([{sku:'AP734955'}],cutoff-1),'');
   assert.equal(offer.codeFor([],cutoff-1),'');
-  assert.equal(new Date(cutoff).toISOString(),'2026-10-08T14:00:00.000Z');
+  assert.equal(new Date(cutoff).toISOString(),'2026-10-07T20:00:00.000Z');
   for(const [now,amount] of [[cutoff-1,28900],[cutoff,29900],[cutoff+1,29900]])for(const sku of offer.skus){
     const items=normaliseCheckoutItems([{sku,quantity:2}],catalog,now),shipping=calculateShipping(items,'coastgo-standard',undefined,now);
     const params=buildCheckoutParams({items,shipping,siteUrl:'http://localhost',now:Math.floor(now/1000)});
@@ -22,7 +22,7 @@ test('Queensland launch and price cutoff have exact boundaries',()=>{
     assert.equal(params.get('line_items[1][price_data][unit_amount]'),now<cutoff?'7000':null);
     assert.equal(shipping.amount,now<cutoff?7000:0);
     assert.equal(params.get('metadata[aura_payment_stage]'),'paid_in_full');
-    assert.equal(params.get('metadata[aura_promotion_code]'),now<cutoff?'COASTGO10':'');
+    assert.equal(params.get('metadata[aura_promotion_code]'),now<cutoff?'COASTGO10':offer.shippingCode);
     assert.equal(params.get('metadata[aura_product_discount_amount]'),now<cutoff?'2000':'0');
     assert.equal(params.get('discounts[0][coupon]'),null);
     assert.equal(offer.codeFor(items,now),now<cutoff?'COASTGO10':'');
@@ -55,28 +55,18 @@ test('Merchant feed and structured data use launch date and auto-expiring sale',
   }
 });
 
-test('homepage switches from Yoga to CoastGo at midnight, then expires the extra discount',()=>{
-  let now=Date.parse('2026-09-29T23:59:59+10:00');
-  const FixedDate=class extends Date{static now(){return now}};
-  const nodes=new Map(),timers=[],events={},seen=new Map(),tracking=[];
-  const node=selector=>{if(!nodes.has(selector))nodes.set(selector,{textContent:'',innerHTML:'',style:{},setAttribute(){},addEventListener(){},querySelector(){return {textContent:''}}});return nodes.get(selector)};
+test('homepage presents both products and common code only during the promotion',()=>{
+  let now=cutoff;
+  const nodes=new Map(),events={},timers=[],tracking=[],seen=new Map();
+  const node=selector=>{if(!nodes.has(selector))nodes.set(selector,{textContent:'',innerHTML:'',style:{},setAttribute(){},addEventListener(){},after(){},append(){},querySelector(){return {textContent:''}}});return nodes.get(selector)};
   const modal={open:false,querySelector:node,querySelectorAll(){return[]},showModal(){this.open=true},close(){this.open=false},addEventListener(){}};
-  const context={Date:FixedDate,AURACoastGo:offer,document:{getElementById(){return modal},querySelectorAll(){return[]},querySelector(){return null},addEventListener(){}},sessionStorage:{getItem:k=>seen.get(k),setItem:(k,v)=>seen.set(k,v)},setTimeout:(fn,delay)=>timers.push({fn,delay}),addEventListener:(event,fn)=>events[event]=fn,AURATracking:{event:(name,params)=>tracking.push({name,...params})}};context.window=context;
-  context.AURACoastGo={...offer,freeShippingActive:()=>offer.freeShippingActive(now)};
+  const context={Date:class extends Date{static now(){return now}},document:{getElementById(){return modal},createElement:node,querySelectorAll(){return[]},querySelector(){return null},addEventListener(){}},sessionStorage:{getItem:k=>seen.get(k),setItem:(k,v)=>seen.set(k,v)},setTimeout:(fn,delay)=>timers.push({fn,delay}),addEventListener:(event,fn)=>events[event]=fn,AURATracking:{event:(name,params)=>tracking.push({name,...params})}};context.window=context;context.AURACoastGo={...offer,freeShippingActive:()=>offer.freeShippingActive(now)};
   vm.createContext(context);vm.runInContext(fs.readFileSync(new URL('../home-offer.js',import.meta.url),'utf8'),context);
-  timers.find(t=>t.delay===850).fn();assert.equal(modal.open,true);
-  assert.equal(tracking.at(-1).promotion_id,'yoga_glacier_free_shipping_202609');
-  now=Date.parse('2026-09-30T00:00:00+10:00');events.pageshow();
-  assert.equal(modal.open,true);assert.equal(tracking.at(-1).promotion_id,'coastgo_launch_extra10_202610');
-  assert.match(node('.preorder-offer__price').innerHTML,/299.*349/);
-  assert.match(node('.preorder-offer__copy').textContent,/Includes 8 October 2026/);
-  assert.equal(node('[data-promo-code-copy]').hidden,false);
-  assert.match(node('[data-promo-code-copy]').innerHTML,/COASTGO10/);
-  assert.equal(node('[data-preorder-offer-shop]').href,'products/coast-go.html');
-  now=cutoff;events.pageshow();assert.equal(modal.open,true);
-  assert.equal(tracking.at(-1).promotion_id,offer.shippingPromotionId);
-  assert.equal(node('[data-promo-code-copy]').hidden,true);
-  assert.match(node('#preorderOfferTitle').innerHTML,/FREE STANDARD SHIPPING/);
+  timers.find(t=>t.delay===850).fn();
+  assert.equal(modal.open,true);assert.equal(tracking.at(-1).promotion_id,offer.shippingPromotionId);
+  assert.match(node('[data-promo-code-copy]').innerHTML,/AURAFREESHIP/);
+  assert.match(node('.preorder-offer__eyebrow').textContent,/COASTGO \+ YOGA/);
+  assert.equal(node('a').href,'products/yoga-cruiser.html?colour=glacier');
   now=Date.parse(offer.shippingEndsAt);events.pageshow();assert.equal(modal.open,false);
 });
 
@@ -103,7 +93,7 @@ test('standard-only shipping promotion respects exact dates, quantity, remote an
   const mixed=normaliseCheckoutItems([{sku:offer.skus[0],quantity:1},{sku:'AP734955',quantity:1}],catalog,cutoff);
   assert.equal(calculateShipping(mixed,'coastgo-standard',undefined,cutoff).quoteRequired,true);
   const yoga=normaliseCheckoutItems([{sku:'AP734955',quantity:1}],catalog,cutoff);
-  assert.equal(calculateShipping(yoga,'gold-coast-brisbane',undefined,cutoff).amount,2500);
+  assert.equal(calculateShipping(yoga,'gold-coast-brisbane',undefined,cutoff).amount,0);
 });
 
 test('free standard shipping is recorded once on a genuine paid webhook payload, not inferred from today',()=>{
@@ -124,4 +114,26 @@ test('full-payment CoastGo confirmation and tracking never promise one-day dispa
   const email=customerOrderEmailContent(entry,{catalog,siteUrl:'http://localhost'});
   assert.match(email.text,/within 2 days/);assert.match(email.text,/No further product balance/);assert.doesNotMatch(email.text,/1 business day|30 October/);
   assert.match(orderProgress(entry)[1].description,/from release/);
+});
+
+test('Yoga free shipping covers both approved zones and aliases, preserves other products and expiry',()=>{
+  const end=Date.parse(offer.shippingEndsAt);
+  for(const sku of offer.yogaSkus)for(const quantity of [1,2]){
+    const items=normaliseCheckoutItems([{sku,quantity}],catalog,cutoff);
+    for(const region of offer.yogaRegionIds){
+      const shipping=calculateShipping(items,region,undefined,cutoff,offer.shippingCode);
+      assert.equal(shipping.amount,0);assert.equal(shipping.promotionCode,offer.shippingCode);
+      const params=buildCheckoutParams({items,shipping,siteUrl:'http://localhost',now:cutoff/1000});
+      assert.equal(params.get('metadata[aura_shipping_amount]'),'0');
+      assert.equal(params.get('metadata[aura_shipping_promotion_id]'),offer.shippingPromotionId);
+      assert.equal(params.get('metadata[aura_promotion_code]'),offer.shippingCode);
+      assert.equal(params.get('line_items[1][price_data][unit_amount]'),null);
+    }
+    assert.equal(calculateShipping(items,'adelaide',undefined,cutoff).amount,12900*quantity);
+    assert.equal(calculateShipping(items,'remote',undefined,cutoff).quoteRequired,true);
+    assert.equal(calculateShipping(items,'gold-coast-brisbane',undefined,end).amount,2500*quantity);
+    assert.equal(calculateShipping(items,'qld-nsw-main',undefined,end).amount,4500*quantity);
+  }
+  const others=normaliseCheckoutItems([{sku:'AP667703',quantity:1}],catalog,cutoff);
+  assert.equal(calculateShipping(others,'gold-coast-brisbane',undefined,cutoff).quoteRequired,true);
 });

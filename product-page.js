@@ -2,7 +2,7 @@
   const data=JSON.parse(document.getElementById("product-data").textContent);
   const coastGo=window.AURACoastGo;
   if(data.slug==="coast-go")data.variants=data.variants.map(v=>coastGo.variant(v));
-  window.addEventListener("aura:coastgo-change",()=>{if(data.slug==="coast-go")renderSelection()});
+  window.addEventListener("aura:coastgo-change",()=>{if(["coast-go","yoga-cruiser"].includes(data.slug))renderSelection()});
   const $=id=>document.getElementById(id);
   const yogaCruiserDescription="A spacious, confidence-inspiring iSUP created for yoga, relaxed cruising and unhurried days on the water. Its 36-inch-wide deck gives you room to move, reset your stance or bring a seated passenger while the high-volume shape keeps the ride reassuringly composed. Dual-layer UV-resistant PVC — designed for Australian UV intensity.";
   const uvConstruction={
@@ -174,6 +174,7 @@
 
   function activeShippingPromotion(regionId){
     const now=Date.now();
+    if(coastGo.yogaFreeShippingFor(variant().sku,regionId,now))return {id:coastGo.shippingPromotionId,code:coastGo.shippingCode,requiresCode:false};
     return (shippingRates?.promotions||[]).find(promotion=>
       promotion.sku===variant().sku&&promotion.regionIds?.includes(regionId)&&
       now>=Date.parse(promotion.startsAt)&&now<Date.parse(promotion.endsAt)
@@ -207,7 +208,7 @@
       try{const saved=sessionStorage.getItem(shippingRegionKey),normalisedSaved=saved==="canberra-melbourne"?"qld-nsw-main":saved;if(visibleRegions.some(region=>region.id===normalisedSaved))select.value=normalisedSaved;if(saved!==normalisedSaved&&normalisedSaved)sessionStorage.setItem(shippingRegionKey,normalisedSaved)}catch{}
     }
     const region=shippingRates.regions.find(item=>item.id===select.value),shippingClass=productShippingClass();
-    if(!region){result.textContent=data.slug==="coast-go"&&coastGo.freeShippingActive()?"FREE standard shipping to eligible regions through 21 October (Queensland time). Express extra; remote quote. Choose your region to confirm.":"Shipping is additional. Choose a region to see your total before payment.";quote.hidden=true;return}
+    if(!region){result.textContent=["coast-go","yoga-cruiser"].includes(data.slug)&&coastGo.freeShippingActive()?"AURAFREESHIP: free shipping to eligible regions through 21 October (Queensland time). Choose your region to confirm.":"Shipping is additional. Choose a region to see your total before payment.";quote.hidden=true;return}
     const multiSurfboard=shippingClass==="surfboard"&&quantity>1;
     const coastGoRate=data.slug==="coast-go"&&region.coastGoOnly&&Number.isInteger(region.coastGo);
     const coastGoFree=coastGoRate&&coastGo.freeShippingFor(region.id);
@@ -226,6 +227,7 @@
     if(!preorder){factsLabel.textContent="Total due today incl. shipping";$("clarityDueToday").textContent=moneyFromCents(price*quantity*100+amount)}
     result.innerHTML=`<strong>Shipping: ${moneyFromCents(amount)} incl. GST</strong><span>${coastGoFree?"Total with free standard shipping":data.slug==="coast-go"&&coastGo.discounted()?"Total with COASTGO10 applied":"Total before promo code"}: ${moneyFromCents(price*quantity*100+amount)} · ${preorder?`${moneyFromCents(price*quantity*50+amount)} payable before dispatch after today's initial payment`:`${moneyFromCents(price*quantity*100+amount)} payable today`}.</span><span>${promotion?.requiresCode?`Use code ${promotion.code} in the cart for free shipping through 29 September 2026.`:promotion?"Free shipping offer ends 29 September 2026 for eligible metro and coastal regions.":region.id==="local-pickup"?shippingRates.localPickupNote:"Confirm that this region matches your delivery address in the cart."}</span>`;
     quote.hidden=true;
+    if(promotion?.id===coastGo.shippingPromotionId){result.firstElementChild.textContent='Shipping: FREE — AURAFREESHIP';result.lastElementChild.textContent=coastGo.yogaShippingTerms;result.children[1].textContent=result.children[1].textContent.replace('Total before promo code','Total with free shipping');}
     if(coastGoRate){const timing=document.createElement("strong");timing.textContent=`${region.service} transit: ${region.transitDays} days after dispatch (excluding handling / preparation time).`;result.append(timing);const details=document.createElement("span");details.textContent=`${region.details} ${coastGoFree?coastGo.shippingTerms:`${region.service} shipping: ${moneyFromCents(region.coastGo)} per board.`} ${coastGo.dispatch()} Not sure which region applies? Contact us before ordering.`;result.append(details)}
   }
 
@@ -261,6 +263,7 @@
     const launchPromotion=(shippingRates?.promotions||[]).find(promotion=>promotion.sku===v.sku&&Date.now()>=Date.parse(promotion.startsAt)&&Date.now()<Date.parse(promotion.endsAt));
     $("priceNote").textContent=preorder?(v.retailAUD?`AUD $${(numericPrice(v)/2).toFixed(2)} today per ${item} · 50% initial payment. AUD $${campaign.discountAUD} incentive included in the full price.`:`Eligible ${item}s receive an AUD $${campaign.discountAUD} pre-order incentive after the standard retail price is confirmed · 50% initial payment required`):launchPromotion?.requiresCode?`New arrival offer · Use code ${launchPromotion.code} for eligible free shipping through 29 September 2026.`:launchPromotion?"New arrival offer · Free shipping to eligible metro and coastal regions through 29 September 2026.":v.saleAUD?"In-stock offer · Pay in full at checkout, including the published shipping rate.":"Australia-only range · Shipping calculated separately · See policy terms";
     $("preorderPanel").hidden=!preorder;
+    if(data.slug==="yoga-cruiser"&&coastGo.freeShippingActive())$("priceNote").textContent="AURAFREESHIP · FREE shipping to eligible regions through 21 October. Select your region below."+(preorder?" Pre-order payment and dispatch conditions still apply.":"");
     if(data.slug==="coast-go"){
       $("availabilityText").textContent=coastGo.beforeLaunch()?"Advance orders open · Official release 8 October":"Available to order";
       $("priceNote").textContent=coastGo.priceNote();
@@ -496,7 +499,8 @@
   document.querySelectorAll("[data-add-accessory]").forEach(button=>button.addEventListener("click",()=>addAccessory(button.dataset.addAccessory)));
   const menuButton=$("menuButton"),mobileMenu=$("mobileMenu");menuButton.addEventListener("click",()=>{const open=mobileMenu.classList.toggle("open");menuButton.setAttribute("aria-expanded",String(open));document.body.classList.toggle("menu-open",open)});mobileMenu.querySelectorAll("a").forEach(a=>a.addEventListener("click",()=>{mobileMenu.classList.remove("open");document.body.classList.remove("menu-open");menuButton.setAttribute("aria-expanded","false")}));
   function setupCoastGoPromotion(){
-    if(data.slug!=="coast-go")return;
+    if(!["coast-go","yoga-cruiser"].includes(data.slug))return;
+    const yoga=data.slug==="yoga-cruiser";
     const style=document.createElement("style");
     style.textContent='.coast-launch-trigger{display:block;width:100%;margin:12px 0 20px;padding:17px 20px;border:0;border-radius:12px;background:#fa573f;color:#fff;text-align:left;font:800 19px/1.35 "Manrope",sans-serif;cursor:pointer}.coast-launch-trigger small{display:block;margin-top:5px;font:500 13px/1.4 "DM Sans",sans-serif}.coast-launch-dialog{box-sizing:border-box;width:min(480px,calc(100% - 32px));max-height:90vh;overflow:auto;padding:40px 28px 28px;border:0;border-radius:22px;background:#102f3b;color:white;text-align:center}.coast-launch-dialog::backdrop{background:rgba(5,24,34,.72)}.coast-launch-close{position:absolute;right:14px;top:10px;border:0;background:transparent;color:white;font-size:30px;cursor:pointer}.coast-launch-dialog .kicker{font-size:13px;letter-spacing:.16em;font-weight:700;color:#8be3d4}.coast-launch-dialog h2{margin:18px 0 10px;font:800 clamp(46px,11vw,72px)/1.05 "Manrope",sans-serif;color:#ff755f;letter-spacing:-.04em}.coast-launch-dialog .deadline{font:700 23px/1.35 "Manrope",sans-serif;margin:12px 0}.coast-launch-code{display:block;margin:22px auto 12px;padding:14px;border:1px dashed #8be3d4;border-radius:10px;color:#8be3d4;font:800 24px/1.2 monospace}.coast-launch-dialog .auto{font-size:16px;margin:0 0 24px}.coast-launch-dialog .shop{width:100%;border:0;border-radius:999px;background:#fa573f;color:#fff;padding:17px;font:800 16px/1.3 "Manrope",sans-serif;cursor:pointer}.coast-launch-dialog .terms{font-size:12px;line-height:1.5;color:#c1d3db;margin:18px 0 0}';
     document.head.append(style);
@@ -506,18 +510,19 @@
     const dialog=document.createElement("dialog");dialog.className="coast-launch-dialog";dialog.setAttribute("aria-labelledby","coastLaunchTitle");
     dialog.innerHTML='<button class="coast-launch-close" aria-label="Close CoastGo offer" type="button">×</button><p class="kicker">COASTGO LAUNCH OFFER</p><h2 id="coastLaunchTitle">SAVE $10!</h2><p class="deadline">Order by 8 October</p><strong class="coast-launch-code">COASTGO10</strong><p class="auto">Automatically applied at checkout.</p><button class="shop" type="button">SHOP COASTGO</button><p class="terms">Extra $10 off each CoastGo at the $299 new-product price.<br>Includes 8 October · Queensland time · Shipping additional.</p>';
     document.body.append(dialog);
-    const promotion=()=>({promotion_id:coastGo.freeShippingActive()?coastGo.shippingPromotionId:"coastgo_launch_extra10_202610",promotion_name:coastGo.freeShippingActive()?"CoastGo — free standard shipping":"CoastGo — extra AUD $10 off",creative_slot:"product_offer",currency:"AUD",items:[{item_id:variant().sku,item_name:data.name,price:coastGo.price()/100,quantity}]});
+    const promotion=()=>({promotion_id:coastGo.freeShippingActive()?coastGo.shippingPromotionId:"coastgo_launch_extra10_202610",promotion_name:coastGo.freeShippingActive()?`${data.short} — free shipping`:"CoastGo — extra AUD $10 off",coupon:coastGo.freeShippingActive()?coastGo.shippingCode:coastGo.code,creative_slot:"product_offer",currency:"AUD",items:[{item_id:variant().sku,item_name:data.name,price:yoga?numericPrice(variant()):coastGo.price()/100,quantity}]});
     const refreshOffer=()=>{
-      const active=coastGo.discounted()||coastGo.freeShippingActive();trigger.hidden=!active;trigger.style.display=active?"block":"none";
+      const active=(!yoga&&coastGo.discounted())||coastGo.freeShippingActive();trigger.hidden=!active;trigger.style.display=active?"block":"none";
       if(!active){dialog.close();return;}
       if(coastGo.freeShippingActive()){
-        trigger.innerHTML='FREE standard shipping*<small>AUD $299 · Through 21 October · Express extra · Remote quote →</small>';
-        dialog.querySelector('.kicker').textContent='COASTGO · AUD $299';
-        dialog.querySelector('h2').textContent='FREE STANDARD SHIPPING*';dialog.querySelector('h2').style.fontSize='42px';
-        dialog.querySelector('.deadline').textContent='9–21 October 2026 · Queensland time';
-        dialog.querySelector('.coast-launch-code').hidden=true;dialog.querySelector('.coast-launch-code').style.display='none';
-        dialog.querySelector('.auto').textContent='Automatically applied to eligible standard delivery regions.';
-        dialog.querySelector('.terms').textContent=coastGo.shippingTerms;
+        trigger.innerHTML='FREE '+(yoga?'':'standard ')+'shipping*<small>AURAFREESHIP · Eligible regions · Through 21 October →</small>';
+        dialog.querySelector('.kicker').textContent=yoga?'YOGA CRUISER · AUD $749':'COASTGO · AUD $299';
+        dialog.querySelector('h2').textContent=yoga?'FREE SHIPPING*':'FREE STANDARD SHIPPING*';dialog.querySelector('h2').style.fontSize='42px';
+        dialog.querySelector('.deadline').textContent='Through 21 October 2026 · Queensland time';
+        dialog.querySelector('.coast-launch-code').textContent=coastGo.shippingCode;dialog.querySelector('.coast-launch-code').hidden=false;dialog.querySelector('.coast-launch-code').style.display='block';
+        dialog.querySelector('.auto').textContent='Automatically applied in the cart for eligible regions.';
+        dialog.querySelector('.terms').textContent=yoga?coastGo.yogaShippingTerms:coastGo.shippingTerms;
+        dialog.querySelector('.shop').textContent=yoga?'SHOP YOGA CRUISER':'SHOP COASTGO';
       }
     };
     refreshOffer();
