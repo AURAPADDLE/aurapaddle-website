@@ -299,6 +299,7 @@
     $("purchaseActions").querySelector("[data-buy-now]")?.addEventListener("click",buyNow);
     $("stockCopy").textContent=v.available?(v.dispatchLeadBusinessDays?`In stock · Dispatch within ${v.dispatchLeadBusinessDays} business day after payment`:data.stock):campaign.inventoryIncoming?`Incoming stock · Estimated dispatch ${campaign.estimatedDelivery}`:campaign.thresholdRequired===false?`In production · No minimum · Estimated dispatch ${campaign.estimatedDelivery}`:`${campaign.scopeLabel} · ${committedCount(campaign)}/${campaign.target} committed`;
     if(data.slug==="coast-go")$("stockCopy").textContent=coastGo.dispatch();
+    if(Number.isInteger(v.inventoryAvailable)&&v.inventoryAvailable===0){$('stockCopy').textContent='Currently unavailable · Please contact AURA PADDLE';for(const button of $('purchaseActions').querySelectorAll('button'))button.disabled=true;}
   }
 
   function renderMobilePurchaseBar(){
@@ -308,6 +309,7 @@
     bar.querySelector("strong").textContent=data.slug==="coast-go"?`AUD $${(299*quantity).toFixed(2)}${coastGo.discounted()?" · Extra $10 off / board":coastGo.freeShippingActive()?" · FREE standard shipping*":""}`:price?(preorder?`AUD $${(price*quantity/2).toFixed(2)} today`:`AUD $${(price*quantity).toFixed(2)}`):"Price on request";
     bar.querySelector("small").textContent=v.dispatchLeadBusinessDays?`Dispatch within ${v.dispatchLeadBusinessDays} business day`:campaign.estimatedDelivery?`Est. dispatch ${campaign.estimatedDelivery}`:"Secure checkout";
     button.hidden=!price;
+    button.disabled=Number.isInteger(v.inventoryAvailable)&&v.inventoryAvailable===0;
     button.textContent=preorder?(campaign.inventoryIncoming?"Reserve":"Pre-order"):"Buy now";
     if(data.slug==="coast-go")bar.querySelector("small").textContent=coastGo.beforeLaunch()?"Release 8 October · Pay in full":"Dispatch within 2 days";
   }

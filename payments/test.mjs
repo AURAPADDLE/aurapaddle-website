@@ -320,7 +320,7 @@ test("Stripe webhook signature is verified",()=>{
 
 test("paid and refunded events update preorder progress idempotently",()=>{
   const state={events:{},orders:{}};
-  const completed={id:"evt_paid",type:"checkout.session.completed",created:1,data:{object:{id:"cs_test_1",payment_status:"paid",payment_intent:"pi_test_1",amount_total:74900,currency:"aud",metadata:{aura_items:"AP233694:2",aura_order_mode:"preorder",aura_payment_stage:"initial_50_percent"}}}};
+  const completed={id:"evt_paid",type:"checkout.session.completed",created:1,data:{object:{id:"cs_live_fixture",payment_status:"paid",payment_intent:"pi_test_1",amount_total:74900,currency:"aud",metadata:{aura_items:"AP233694:2",aura_order_mode:"preorder",aura_payment_stage:"initial_50_percent"}}}};
   assert.equal(applyStripeEvent(state,completed),true);
   assert.equal(applyStripeEvent(state,completed),false);
   assert.equal(campaignProgress(state,catalog).find(item=>item.id==="paddle-launch-batch-01").reserved,2);

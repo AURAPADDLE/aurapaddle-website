@@ -12,13 +12,14 @@ function normaliseState(value){
 }
 
 function jsonStore(statePath){
+  let pending=Promise.resolve();
   const readSync=()=>{try{return normaliseState(JSON.parse(fs.readFileSync(statePath,"utf8")))}catch{return emptyState()}};
   const writeSync=state=>{fs.mkdirSync(path.dirname(statePath),{recursive:true});const tmp=`${statePath}.tmp`;fs.writeFileSync(tmp,`${JSON.stringify(normaliseState(state),null,2)}\n`);fs.renameSync(tmp,statePath)};
   return {
     kind:"json",
     async init(){},
     async read(){return readSync()},
-    async mutate(mutator){const state=readSync(),result=await mutator(state);writeSync(state);return result},
+    mutate(mutator){const operation=pending.then(async()=>{const state=readSync(),result=await mutator(state);writeSync(state);return result});pending=operation.catch(()=>{});return operation},
     async close(){}
   };
 }

@@ -4,7 +4,7 @@
   "type": "module",
   "scripts": {
     "start": "node server.mjs",
-    "test": "node --test test.mjs coastgo-test.mjs reviews.test.mjs"
+    "test": "node --test test.mjs coastgo-test.mjs reviews.test.mjs inventory.test.mjs inventory-integration.test.mjs"
   },
   "engines": {
     "node": ">=22"

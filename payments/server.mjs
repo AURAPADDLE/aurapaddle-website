@@ -9,6 +9,7 @@ import {markAnalyticsDelivery} from "./attribution-audit.mjs";
 import {ensureRecoveryInbox,sendAgentMailMessage,sendRecoveryEmail} from "./recovery-email.mjs";
 import {sendOrderEmail} from "./order-email.mjs";
 import {createStateStore} from "./state-store.mjs";
+import {initializeInventory,inventoryMovement,inventoryView,publicAvailability,reconcileInventory,fulfilInventory,suppressInternalOrder,renderInventoryContent} from './inventory.mjs';
 import coastGoOffer from "../coastgo-offer.js";
 import {renderCoastGoPage,renderCoastGoFeed} from "./coastgo-content.mjs";
 import {adminReviewData,attachReviewEmail,ensureReviewState,moderateReview,publicReviewData,renderReviews,submitReview} from "./reviews.mjs";
@@ -237,7 +238,7 @@ async function updateFulfilment(req,res){
   if(!requireAdmin(req))return send(res,401,{error:"Admin authorisation required."});
   const body=JSON.parse((await readBody(req)).toString("utf8")||"{}");
   if(body.status!=="cancelled")throw new Error("Use the customer progress action for dispatch updates.");
-  const order=await store.mutate(state=>{const target=Object.values(state.orders||{}).find(item=>item.orderNumber===body.orderNumber);if(!target)return null;target.fulfilmentStatus="cancelled";target.orderStatus="cancelled";target.updated=Math.floor(Date.now()/1000);return target});
+  const order=await store.mutate(state=>{const target=Object.values(state.orders||{}).find(item=>item.orderNumber===body.orderNumber);if(!target)return null;if(['collected','not_required','dispatched','delivered'].includes(target.fulfilmentStatus))throw Error('Completed/shipped orders require a return or refund reconciliation, not cancellation.');target.fulfilmentStatus="cancelled";target.orderStatus="cancelled";target.updated=Math.floor(Date.now()/1000);reconcileInventory(state);return target});
   if(!order)return send(res,404,{error:"Order not found."});
   send(res,200,publicOrderView(order));
 }
@@ -249,6 +250,9 @@ async function updateProgress(req,res){
     const target=Object.values(state.orders||{}).find(item=>item.orderNumber===body.orderNumber);
     if(!target)return null;
     updateOrderProgress(target,body);
+    if(['collected','dispatched'].includes(body.stage))fulfilInventory(state,target,{pickup:body.stage==='collected'});
+    if(body.stage==='internal_test')suppressInternalOrder(state,target);
+    reconcileInventory(state);
     if(body.stage==="dispatched"&&body.notifyCustomer!==false)queueOrderMilestoneEmail(state,target,"dispatched",target.updated);
     return target;
   });
@@ -260,6 +264,17 @@ async function updateProgress(req,res){
 async function orders(req,res){
   if(!requireAdmin(req))return send(res,401,{error:"Admin authorisation required."});
   send(res,200,{generatedAt:Math.floor(Date.now()/1000),items:adminOrderList(await store.read(),catalog,{configured:Boolean(ga4ApiSecret),serverEventsEnabled:analyticsDispatchEnabled,validationMode:analyticsValidationMode})});
+}
+
+async function inventoryAdmin(req,res){
+  if(!requireAdmin(req))return send(res,401,{error:'Admin authorisation required.'});
+  if(req.method==='GET')return send(res,200,inventoryView(await store.read()));
+  const body=JSON.parse((await readBody(req)).toString('utf8')||'{}');
+  const result=await store.mutate(state=>{
+    if(body.action==='initialize')return initializeInventory(state,body,catalog);
+    if(body.action==='movement'){inventoryMovement(state,body);return inventoryView(state);}
+    throw Error('Unknown inventory action.');
+  });send(res,200,result);
 }
 
 async function abandonedCheckouts(req,res){
@@ -426,7 +441,7 @@ async function webhook(req,res){
   const raw=await readBody(req);
   if(!verifyStripeSignature(raw.toString("utf8"),req.headers["stripe-signature"],webhookSecret))return send(res,400,{error:"Invalid Stripe webhook signature."});
   const event=JSON.parse(raw.toString("utf8"));
-  await store.mutate(state=>{const applied=applyStripeEvent(state,event);enqueueStripeAnalytics(state,event,catalog,{enhancedConversionsEnabled});queueOrderEmails(state,event,{adminEmail:orderNotificationEmail});if(applied&&event.type==="invoice.paid"){const target=Object.values(state.orders||{}).find(item=>item.orderNumber===event.data?.object?.metadata?.aura_order_number);if(target?.balancePaymentStatus==="paid")queueOrderMilestoneEmail(state,target,"balance_paid",event.created)}return applied});
+  await store.mutate(state=>{const applied=applyStripeEvent(state,event);reconcileInventory(state);enqueueStripeAnalytics(state,event,catalog,{enhancedConversionsEnabled});queueOrderEmails(state,event,{adminEmail:orderNotificationEmail});if(applied&&event.type==="invoice.paid"){const target=Object.values(state.orders||{}).find(item=>item.orderNumber===event.data?.object?.metadata?.aura_order_number);if(target?.balancePaymentStatus==="paid")queueOrderMilestoneEmail(state,target,"balance_paid",event.created)}return applied});
   await syncPaidCheckoutToOrderInvoice(event);
   void flushAnalyticsOutbox().catch(error=>console.error("GA4 outbox flush failed",error));
   void flushRecoveryEmailOutbox().catch(error=>console.error("Recovery email outbox flush failed",error));
@@ -443,7 +458,7 @@ async function staticFile(req,res,url){
   if(!stat.isFile())return send(res,404,"Not found");
   if(pathname==="/merchant-feed.xml"||/^\/products\/[a-z0-9-]+\.html$/.test(pathname)){
     const raw=fs.readFileSync(target,"utf8"),slug=path.basename(pathname,".html");
-    const html=pathname.endsWith(".xml")?renderCoastGoFeed(raw):renderReviews(slug==="coast-go"?renderCoastGoPage(raw):raw,publicReviewData(await store.read(),slug));
+    const state=await store.read(),html=renderInventoryContent(pathname.endsWith(".xml")?renderCoastGoFeed(raw):renderReviews(slug==="coast-go"?renderCoastGoPage(raw):raw,publicReviewData(state,slug)),state,{feed:pathname.endsWith('.xml')});
     const body=Buffer.from(html);
     res.writeHead(200,{"Content-Type":mime[path.extname(target).toLowerCase()],"Content-Length":body.length,"Cache-Control":"no-store"});return res.end(req.method==="HEAD"?undefined:body);
   }
@@ -456,6 +471,8 @@ const server=http.createServer(async(req,res)=>{
   try{
     const url=parseRequestUrl(req.url,siteUrl);
     if(req.method==="GET"&&url.pathname==="/api/health"){const state=await store.read(),analyticsEntries=Object.values(state.analyticsOutbox||{}),recoveryEntries=Object.values(state.recoveryEmailOutbox||{}),orderEmailEntries=Object.values(state.transactionalEmailOutbox||{}),sentAnalytics=analyticsEntries.filter(item=>item.status==="sent"),latestAnalyticsSentAt=Math.max(0,...sentAnalytics.map(item=>Number(item.sentAt||0)));return send(res,200,{ok:true,mode:allowLive?"live-enabled":"sandbox-only",storage:store.kind,stripeConfigured:Boolean(stripeKey),webhookConfigured:Boolean(webhookSecret),adminConfigured:Boolean(adminApiToken),orderInvoices:{enabled:orderInvoicesEnabled,gstTaxRateConfigured:/^txr_[A-Za-z0-9]+$/.test(gstTaxRateId)},catalogueSkus:catalog.variants.length,mappedStripePrices:stripeMap.bySku.size,stripeAccount:stripeMap.accountId,analytics:{serverEventsEnabled:analyticsDispatchEnabled,configured:Boolean(ga4ApiSecret),validationMode:analyticsValidationMode,enhancedConversionsEnabled,pending:analyticsEntries.filter(item=>["pending","retry","sending"].includes(item.status)).length,failed:analyticsEntries.filter(item=>item.status==="failed").length,sent:sentAnalytics.length,latestSentAt:latestAnalyticsSentAt||null},checkoutRecovery:{enabled:true,emailConfigured:Boolean(agentMailApiKey),emailReady:recoveryEmailReady,configurationError:Boolean(recoveryEmailInitError),smsEnabled:false,pending:recoveryEntries.filter(item=>["pending","retry","sending"].includes(item.status)).length,failed:recoveryEntries.filter(item=>item.status==="failed").length},orderNotifications:{enabled:true,emailConfigured:Boolean(agentMailApiKey),emailReady:recoveryEmailReady,recipient:orderNotificationEmail,pending:orderEmailEntries.filter(item=>["pending","retry","sending"].includes(item.status)).length,failed:orderEmailEntries.filter(item=>item.status==="failed").length},account:"AURA PADDLE PTY LTD"})}
+    if(['GET','POST'].includes(req.method)&&url.pathname==='/api/admin/inventory')return await inventoryAdmin(req,res);
+    if(req.method==='GET'&&url.pathname==='/api/availability')return send(res,200,publicAvailability(await store.read()));
     if(req.method==="POST"&&url.pathname==="/api/checkout")return await checkout(req,res);
     if(req.method==="GET"&&url.pathname==="/api/checkout-session")return await sessionSummary(req,res,url);
     if(req.method==="GET"&&url.pathname==="/api/order")return await orderStatus(req,res,url);

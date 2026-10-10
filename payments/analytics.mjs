@@ -90,6 +90,7 @@ function queueEntry(state,key,entry){
 
 export function enqueueStripeAnalytics(state,event,catalog,{enhancedConversionsEnabled=false}={}){
   const object=event.data?.object||{},order=orderForEvent(state,event),consent=order?.attribution?.consent||{};
+  if(order?.internalTest)return false;
   if(!order||(consent.analytics!==true&&consent.marketing!==true)||!order.attribution?.analyticsClientId)return false;
   const base={
     stripeEventId:event.id,

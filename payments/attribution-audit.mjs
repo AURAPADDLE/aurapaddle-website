@@ -5,7 +5,9 @@ export function orderAttributionAudit(order,state,{configured,serverEventsEnable
   const attribution=order.attribution||{},consent=attribution.consent||{},entry=state.analyticsOutbox?.[`purchase:${order.orderNumber}`];
   const allowed=consent.analytics===true||consent.marketing===true;
   let status,reason,attention=false;
-  if(entry?.status==="sent"){
+  if(order.internalTest){
+    status='internal_test';reason='Excluded from customer sales and future purchase delivery. Any previously sent analytics require separate reporting reconciliation.';
+  }else if(entry?.status==="sent"){
     status="sent_unverified";reason="HTTP delivery succeeded; GA4 reporting and Ads attribution still require reconciliation.";
   }else if(entry?.status==="validated"){
     status="validation_only";reason="Validated only; no production purchase was sent.";attention=true;

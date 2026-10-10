@@ -3,6 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import {fileURLToPath} from "node:url";
 import {orderAttributionAudit} from "./attribution-audit.mjs";
+import {reserveInventory,noStockOrder} from './inventory.mjs';
 import coastGoOffer from "../coastgo-offer.js";
 
 const here=path.dirname(fileURLToPath(import.meta.url));
@@ -168,15 +169,17 @@ export function reserveCheckoutIdentity(state,{requestId,attribution,customerEma
   for(const [key,entry] of Object.entries(state.checkoutRequests))if(now-Number(entry?.reservedAt||0)>86400)delete state.checkoutRequests[key];
   const existing=state.checkoutRequests[requestId];
   if(existing){
+    if(existing.cartItems&&JSON.stringify(existing.cartItems)!==JSON.stringify(items.map(item=>({sku:item.variant.sku,quantity:item.quantity}))))throw Error('This checkout request was already used for a different cart.');
     if(items.length&&JSON.stringify(existing.stockItems||[])!==JSON.stringify(items.filter(item=>item.variant.stockQuantity).map(item=>({sku:item.variant.sku,quantity:item.quantity}))))throw new Error("This checkout request was already used for a different cart.");
     if(!existing.attribution&&attribution)existing.attribution=normaliseAttribution(attribution);
     const email=normaliseRecoveryEmail(customerEmail);
     if(email)existing.customerEmail=email;
+    reserveInventory(state,existing,items,now);
     return {orderNumber:existing.orderNumber,trackingToken:existing.trackingToken,integrationIdentifier:existing.integrationIdentifier};
   }
   const stockItems=items.filter(item=>item.variant.stockQuantity).map(item=>({sku:item.variant.sku,quantity:item.quantity}));
   const paidOrderNumbers=new Set(Object.values(state.orders).map(order=>order.orderNumber));
-  for(const item of stockItems){
+  for(const item of state.inventory?.initializedAt?[]:stockItems){
     const stock=items.find(entry=>entry.variant.sku===item.sku).variant.stockQuantity;
     // The 60 units are the newly recorded on-hand stock. Legacy preorder/test
     // payments predate this stock count and must not consume it again.
@@ -194,6 +197,8 @@ export function reserveCheckoutIdentity(state,{requestId,attribution,customerEma
   const trackingToken=randomBytes(24).toString("base64url");
   const suffix=randomBytes(8).toString("hex").slice(0,8).replace(/[0-9]/g,char=>"abcdefghij"[Number(char)]);
   const identity={orderNumber,trackingToken,integrationIdentifier:`aura_cart_${suffix}`,reservedAt:now,stockItems,attribution:normaliseAttribution(attribution),customerEmail:normaliseRecoveryEmail(customerEmail)};
+  identity.cartItems=items.map(item=>({sku:item.variant.sku,quantity:item.quantity}));
+  reserveInventory(state,identity,items,now);
   state.reservations[orderNumber]=now;
   state.checkoutRequests[requestId]=identity;
   return {orderNumber,trackingToken,integrationIdentifier:identity.integrationIdentifier};
@@ -520,6 +525,10 @@ function progressAchievements(order){
 }
 
 export function orderProgress(order){
+  if(['collected','not_required'].includes(order.fulfilmentStatus))return [
+    {id:'order_confirmed',label:'Payment received',description:'Payment records are retained.',state:'complete',completedAt:order.created||null},
+    {id:order.fulfilmentStatus,label:order.fulfilmentStatus==='collected'?'Completed · Customer collected':'Completed · No shipping required',description:order.fulfilmentStatus==='collected'?'Collection confirmed by AURA PADDLE. No carrier tracking is required.':'This order does not require physical fulfilment.',state:'current',completedAt:order.completedAt||null}
+  ];
   if(order.paymentStage==="paid_in_full"){
     const steps=[
       {id:"order_confirmed",label:"Order confirmed",description:"Your full payment, including published shipping, has been received.",completedAt:Number(order.orderConfirmedAt||order.created||0)},
@@ -539,9 +548,19 @@ export function orderProgress(order){
 }
 
 export function updateOrderProgress(order,input={},now=Math.floor(Date.now()/1000)){
-  const stage=String(input.stage||""),allowed=new Set(["update_estimate","production_confirmed","dispatched","delivered"]);
+  const stage=String(input.stage||""),allowed=new Set(["update_estimate","production_confirmed","dispatched","delivered","collected","internal_test"]);
   if(!allowed.has(stage))throw new Error("Select a valid order progress update.");
   if(order.initialPaymentStatus!=="paid"||["cancelled","refunded"].includes(order.fulfilmentStatus))throw new Error("This order cannot be progressed.");
+  if(['collected','not_required'].includes(order.fulfilmentStatus))throw Error('This order is already completed.');
+  if(['collected','internal_test'].includes(stage)){
+    if(order.paymentStage!=='paid_in_full'&&order.balancePaymentStatus!=='paid')throw Error('Full payment must be received before completion.');
+    if(order.dispatchedAt||order.deliveredAt||order.inventoryConsumed)throw Error('This order has already shipped. Reconcile physical stock before changing its classification.');
+    const note=String(input.note||'').trim().slice(0,500);if(!note)throw Error('A confirmation note is required.');
+    order.fulfilmentMethod=stage==='collected'?'pickup':'none';order.fulfilmentStatus=stage==='collected'?'collected':'not_required';order.orderStatus='completed';order.completedAt=now;order.updated=now;order.completionNote=note;
+    order.internalTest=stage==='internal_test';order.orderAudit??=[];order.orderAudit.push({action:stage,note,at:now});
+    delete order.estimatedDispatchDate;
+    return order;
+  }
   const estimatedDispatchDate=String(input.estimatedDispatchDate||"").trim();
   if(estimatedDispatchDate){
     const parsedDate=new Date(`${estimatedDispatchDate}T00:00:00Z`);
@@ -587,7 +606,7 @@ export function publicOrderView(order){
     initialPaymentAmount:order.amountTotal,initialPaymentStatus:order.initialPaymentStatus,
     balancePaymentStatus:order.paymentStage==="paid_in_full"&&order.initialPaymentStatus==="paid"?"paid":order.balancePaymentStatus,balanceRequestedAmount:order.balanceRequestedAmount||null,balancePaymentUrl,
     shippingLabel:order.shippingLabel,shippingAmount:order.shippingAmount,orderStatus:order.orderStatus,fulfilmentStatus:order.fulfilmentStatus,
-    progress:orderProgress(order),estimatedDispatchDate:order.estimatedDispatchDate||"",carrier:order.carrier||"",trackingNumber:order.trackingNumber||"",trackingUrl:safeTrackingUrl(order.trackingUrl),
+    progress:orderProgress(order),fulfilmentMethod:order.fulfilmentMethod||'shipping',completedAt:order.completedAt||null,estimatedDispatchDate:order.estimatedDispatchDate||"",carrier:order.carrier||"",trackingNumber:order.trackingNumber||"",trackingUrl:safeTrackingUrl(order.trackingUrl),
     dispatchedAt:dispatched?.toISOString()||null,estimatedArrival:null,updated:order.updated
   };
 }
@@ -595,6 +614,7 @@ export function publicOrderView(order){
 export function adminOrderList(state,catalog,analyticsConfiguration={}){
   return Object.values(state.orders||{}).sort((a,b)=>Number(b.created||0)-Number(a.created||0)).map(order=>({
     orderNumber:order.orderNumber,
+    internalTest:order.internalTest===true,fulfilmentMethod:order.fulfilmentMethod||'shipping',completedAt:order.completedAt||null,completionNote:order.completionNote||'',inventoryAccounted:order.inventoryAccounted||null,inventoryConsumed:order.inventoryConsumed||null,inventoryException:order.inventoryException||'',orderAudit:order.orderAudit||[],
     attributionAudit:orderAttributionAudit(order,state,analyticsConfiguration),
     customerName:order.customerName||"",
     customerEmail:order.customerEmail||"",
@@ -648,7 +668,9 @@ export function applyStripeEvent(state,event){
   state.events??={};state.orders??={};state.abandonedCheckouts??={};state.recoveryEmailOutbox??={};state.recoverySuppressions??={};state.transactionalEmailOutbox??={};
   if(state.events[event.id])return false;
   const object=event.data?.object||{};
+  const preserved=Object.values(state.orders).filter(o=>['collected','not_required','dispatched','delivered'].includes(o.fulfilmentStatus)).map(o=>({order:o,fulfilmentStatus:o.fulfilmentStatus,orderStatus:o.orderStatus}));
   if(["checkout.session.completed","checkout.session.async_payment_succeeded"].includes(event.type)&&object.payment_status==="paid"){
+    if(state.orders[object.id]){state.events[event.id]={type:event.type,created:event.created};return false;}
     const metadata=object.metadata||{},items=parseMetadataItems(metadata),quantity=items.reduce((sum,item)=>sum+item.quantity,0);
     const {deliveryName,deliveryAddress}=checkoutShippingDetails(object);
     const reservation=Object.values(state.checkoutRequests||{}).find(item=>item?.orderNumber===metadata.aura_order_number);
@@ -730,6 +752,7 @@ export function applyStripeEvent(state,event){
     const order=Object.values(state.orders).find(item=>item.orderNumber===object.metadata?.aura_order_number);
     if(order){order.balancePaymentStatus="payment_failed";order.orderStatus="balance_payment_failed";order.updated=event.created}
   }
+  if(event.type!=='charge.refunded')for(const prior of preserved){prior.order.fulfilmentStatus=prior.fulfilmentStatus;prior.order.orderStatus=prior.orderStatus;}
   state.events[event.id]={type:event.type,created:event.created};
   return true;
 }
@@ -740,6 +763,7 @@ export function queueOrderEmails(state,event,{adminEmail="admin@aurapaddle.com"}
   const object=event.data?.object||{};
   if(object.payment_status!=="paid")return false;
   const order=state.orders?.[object.id];
+  if(order?.internalTest)return false;
   if(!order?.orderNumber)return false;
   const now=Number(event.created||Math.floor(Date.now()/1000)),customerEmail=normaliseRecoveryEmail(object.customer_details?.email||object.customer_email||order.customerEmail),recipientAdmin=normaliseRecoveryEmail(adminEmail);
   const shared={
@@ -763,6 +787,7 @@ export function queueOrderEmails(state,event,{adminEmail="admin@aurapaddle.com"}
 }
 
 export function queueOrderMilestoneEmail(state,order,kind,now=Math.floor(Date.now()/1000)){
+  if(order?.internalTest)return false;
   if(!["balance_requested","balance_paid","dispatched"].includes(kind)||!order?.sessionId||!order?.orderNumber)return false;
   const recipient=normaliseRecoveryEmail(order.customerEmail);
   if(!recipient)return false;
@@ -788,6 +813,7 @@ export function campaignProgress(state,catalog){
     if(!campaigns.has(variant.campaign.id))campaigns.set(variant.campaign.id,{...variant.campaign,reserved:0});
   }
   for(const order of Object.values(state.orders||{})){
+    if(noStockOrder(order))continue;
     if(Array.isArray(order.items))for(const item of order.items){const variant=catalog.bySku.get(item.sku);if(variant?.campaign&&campaigns.has(variant.campaign.id))campaigns.get(variant.campaign.id).reserved+=Number(item.activeQuantity||0)}
     else if(order.campaignId&&campaigns.has(order.campaignId))campaigns.get(order.campaignId).reserved+=Number(order.activeQuantity||0);
   }
