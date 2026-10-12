@@ -76,6 +76,34 @@ test("server-rendered preorder panels match embedded campaign dates and committe
   }
 });
 
+test("inflatable SUP collection is indexable, canonical and linked from crawlable navigation",()=>{
+  const collection=fs.readFileSync(path.join(siteDir,"inflatable-paddle-boards","index.html"),"utf8");
+  assert.match(collection,/<meta name="robots" content="index,follow,max-image-preview:large">/);
+  assert.match(collection,/<link rel="canonical" href="https:\/\/www\.aurapaddle\.com\/inflatable-paddle-boards\/">/);
+  assert.equal((collection.match(/rel="canonical"/g)||[]).length,1);
+  assert.match(collection,/<h1>Inflatable Stand Up Paddle Boards<\/h1>/);
+  for(const slug of ["coast-go","yoga-cruiser","angler-fishing","touring-performance"]){
+    assert.match(collection,new RegExp(`href="\\.\\.\\/products\\/${slug}\\.html`),slug);
+  }
+  const schema=JSON.parse(collection.match(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/)?.[1]||"{}");
+  const list=schema["@graph"]?.find(node=>node["@type"]==="ItemList");
+  assert.equal(list?.numberOfItems,4);
+  assert.equal(list?.itemListElement?.length,4);
+  const homepage=fs.readFileSync(path.join(siteDir,"index.html"),"utf8");
+  assert.equal((homepage.match(/href="inflatable-paddle-boards\/"/g)||[]).length,2);
+  const sitemap=fs.readFileSync(path.join(siteDir,"sitemap.xml"),"utf8");
+  assert.match(sitemap,/https:\/\/www\.aurapaddle\.com\/inflatable-paddle-boards\//);
+});
+
+test("shop schema and checkout explanation match the rendered catalogue",()=>{
+  const shop=fs.readFileSync(path.join(siteDir,"shop","index.html"),"utf8");
+  const schema=JSON.parse(shop.match(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/)?.[1]||"{}");
+  assert.equal(schema.mainEntity.numberOfItems,schema.mainEntity.itemListElement.length);
+  assert.equal(schema.mainEntity.numberOfItems,11);
+  assert.doesNotMatch(shop,/Payment integration preview|Stripe Checkout reserved|payment button disabled/);
+  assert.match(shop,/How pre-order payments work/);
+});
+
 test("Hydrofoil Kit Set applies the AUD 50 incentive and a 50% initial payment",()=>{
   const variant=catalog.bySku.get("AP246531");
   assert.equal(variant.slug,"hydrofoil-set");assert.equal(variant.retailAmount,149900);assert.equal(variant.checkoutAmount,144900);assert.equal(variant.depositAmount,72450);
