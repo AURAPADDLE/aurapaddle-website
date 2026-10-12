@@ -1,0 +1,50 @@
+AURA PADDLE WEBSITE - LATEST OFFLINE REVIEW
+Review copy: 17 August 2026
+
+IMPORTANT
+1. DO NOT open an HTML file while it is still inside the ZIP window.
+2. Download the ZIP and choose Extract All / Unzip before opening anything.
+3. Open the newly extracted AURA_PADDLE_Offline_Review_Liam_2026-08-15 folder.
+4. Keep every file and folder together. Do not move an individual HTML file or image.
+
+MAC
+1. Double-click START_LOCAL_REVIEW.command.
+2. Keep the Terminal window open while reviewing the website.
+3. The homepage should open automatically in the browser.
+
+WINDOWS
+1. Double-click START_LOCAL_REVIEW_WINDOWS.bat.
+2. Keep the Command Prompt window open while reviewing the website.
+3. The homepage should open automatically in the browser.
+
+DIRECT FALLBACK
+After extracting the complete folder, double-click START_HERE.html.
+
+OLDER MAC INSTRUCTIONS
+If macOS blocks the starter, right-click START_LOCAL_REVIEW.command, choose Open, then choose Open again.
+
+MANUAL FALLBACK
+Open Terminal, type "cd ", drag the unzipped AURA_PADDLE_Offline_Review_Liam folder into Terminal, and press Return. Then run:
+python3 -m http.server 4173
+
+Open this address in a browser:
+http://localhost:4173/
+
+START PAGE
+index.html
+
+INCLUDED PAGES
+- redesign-preview.html - Homepage
+- shop-preview.html - Product catalogue
+- products/ - 10 product pages with size, colour and AP SKU selection
+- product-preview.html - Compatibility page for older product links
+- policy-preview.html - Policies and customer care
+- RELEASE_CHECKLIST.md - Approval gates before deployment
+
+REVIEW STATUS
+- This is an offline review version.
+- Stripe payments are inactive.
+- No changes in this package have been deployed online.
+- CoastGo is written as one word throughout the customer-facing website.
+
+Google Fonts may use a system fallback when the computer has no internet connection. All website content and supplied product images remain local in this package.

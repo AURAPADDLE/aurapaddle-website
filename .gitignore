@@ -1,0 +1,20 @@
+# Local credentials and provider project state must never be committed.
+.projects/
+.env
+.env.*
+!.env.example
+
+# Dependencies and local tooling output.
+node_modules/
+payments/node_modules/
+.DS_Store
+.playwright-cli/
+output/
+
+# Agent/editor configuration generated during local provisioning.
+.agents/
+.claude/
+.cursor/
+.cursorignore
+AGENTS.md
+CLAUDE.md

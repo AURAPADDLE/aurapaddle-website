@@ -1,0 +1,15 @@
+{
+  "name": "aura-paddle-payments",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node server.mjs",
+    "test": "node --test test.mjs coastgo-test.mjs reviews.test.mjs inventory.test.mjs inventory-integration.test.mjs cookie-consent.test.mjs"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "dependencies": {
+    "pg": "^8.23.0"
+  }
+}
