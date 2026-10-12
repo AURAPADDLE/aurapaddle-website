@@ -83,7 +83,7 @@
     });
     document.head.append(script);
     window.gtag("js",new Date());
-    window.gtag("config",measurementId,{send_page_view:true,...(debugMode?{debug_mode:true,traffic_type:"internal_test"}:{})});
+    window.gtag("config",measurementId,{send_page_view:true,...(debugMode?{debug_mode:true,traffic_type:"internal"}:{})});
     return tagReady;
   };
   // Advanced Consent Mode: load the tag after the denied default so Google can
@@ -133,7 +133,7 @@
   const sendAnalyticsEvent=(name,parameters={})=>{
     if(typeof window.gtag!=="function")return false;
     loadGoogleTag();
-    window.gtag("event",String(name),debugMode?{...parameters,debug_mode:true,traffic_type:"internal_test"}:parameters);
+    window.gtag("event",String(name),debugMode?{...parameters,debug_mode:true,traffic_type:"internal"}:parameters);
     return true;
   };
   window.AURAAnalytics={

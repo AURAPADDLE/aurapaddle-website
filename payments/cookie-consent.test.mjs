@@ -6,10 +6,11 @@ import vm from "node:vm";
 const fullSource=fs.readFileSync(new URL("../cookie-consent.js",import.meta.url),"utf8");
 const source=`${fullSource.slice(0,fullSource.indexOf('  const banner=document.createElement("section");'))}})();`;
 
-function browserFixture({consent={analytics:true,marketing:true},loadDelayMs=30,clientId="123456789.987654321",sessionId="1787635200"}={}){
+function browserFixture({consent={analytics:true,marketing:true},loadDelayMs=30,clientId="123456789.987654321",sessionId="1787635200",debug=false}={}){
   const storage=new Map([["aura-cookie-consent-v1",JSON.stringify({necessary:true,...consent,updatedAt:"2026-10-12T00:00:00.000Z"})]]);
   const dataLayer=[];
   const getCalls={client_id:0,session_id:0};
+  const gtagCalls=[];
   let script;
   const window={dataLayer};
   const scaledTimeout=(callback,delay)=>setTimeout(callback,Math.max(1,Math.round(Number(delay||0)/100)));
@@ -25,6 +26,7 @@ function browserFixture({consent={analytics:true,marketing:true},loadDelayMs=30,
       if(loadDelayMs===null)return;
       setTimeout(()=>{
         const googleTag=(...args)=>{
+          gtagCalls.push(args);
           if(args[0]==="get"){
             getCalls[args[2]]=(getCalls[args[2]]||0)+1;
             args[3](args[2]==="client_id"?clientId:args[2]==="session_id"?sessionId:"");
@@ -38,12 +40,12 @@ function browserFixture({consent={analytics:true,marketing:true},loadDelayMs=30,
   };
   const context={
     window,document,
-    location:{href:"https://www.aurapaddle.com/cart/",hostname:"www.aurapaddle.com",pathname:"/cart/"},
+    location:{href:`https://www.aurapaddle.com/cart/${debug?"?aura_debug=1":""}`,hostname:"www.aurapaddle.com",pathname:"/cart/"},
     localStorage:{getItem:key=>storage.get(key)??null,setItem:(key,value)=>storage.set(key,String(value)),removeItem:key=>storage.delete(key)},
     URL,Date,JSON,Promise,clearTimeout,setTimeout:scaledTimeout
   };
   vm.runInNewContext(source,context);
-  return {window,storage,getCalls};
+  return {window,storage,getCalls,gtagCalls};
 }
 
 test("consented checkout reads IDs after a normally loading Google tag",async()=>{
@@ -104,4 +106,26 @@ test("necessary-only checkout does not wait for or retain Google IDs",async()=>{
   assert.ok(Date.now()-started<30);
   assert.deepEqual(JSON.parse(JSON.stringify(attribution.consent)),{analytics:false,marketing:false,updatedAt:"2026-10-12T00:00:00.000Z"});
   assert.equal(attribution.analyticsClientId,undefined);
+});
+
+test("explicit aura_debug traffic matches the active GA4 internal filter",async()=>{
+  const fixture=browserFixture({loadDelayMs:1,debug:true});
+  await fixture.window.AURAAttribution.snapshot();
+  fixture.window.AURAAnalytics.event("checkout_submit",{checkout_stage:"test"});
+  const config=fixture.gtagCalls.find(args=>args[0]==="config");
+  const event=fixture.gtagCalls.find(args=>args[0]==="event"&&args[1]==="checkout_submit");
+  assert.equal(config[2].debug_mode,true);
+  assert.equal(config[2].traffic_type,"internal");
+  assert.equal(event[2].debug_mode,true);
+  assert.equal(event[2].traffic_type,"internal");
+});
+
+test("ordinary browser events do not receive an internal traffic label",async()=>{
+  const fixture=browserFixture({loadDelayMs:1});
+  await fixture.window.AURAAttribution.snapshot();
+  fixture.window.AURAAnalytics.event("checkout_submit",{checkout_stage:"cart"});
+  const config=fixture.gtagCalls.find(args=>args[0]==="config");
+  const event=fixture.gtagCalls.find(args=>args[0]==="event"&&args[1]==="checkout_submit");
+  assert.equal(Object.hasOwn(config[2],"traffic_type"),false);
+  assert.equal(Object.hasOwn(event[2],"traffic_type"),false);
 });
