@@ -51,7 +51,7 @@
         media.querySelector(".card-progress")?.remove();
         let note=card.querySelector(".variant-availability-note");
         if(!note){note=document.createElement("p");note.className="variant-availability-note";card.querySelector(".product-body").append(note)}
-        note.textContent="Glacier Blue: estimated dispatch 15 September 2026. Other colours: conditional pre-order, estimated dispatch 30 November 2026.";
+        note.textContent="Glacier Blue: in stock, dispatch within 1 business day after successful payment. Other colours: conditional pre-order, estimated dispatch 30 January 2027.";
         return;
       }
       if(!state||!media||!status)return;

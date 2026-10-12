@@ -36,7 +36,7 @@ const colours={
   mintwhite:{name:"Mint / White",catalogue:"Mint/White",swatch:"linear-gradient(135deg,#54c1b8 0 55%,#f7f7f3 55%)"}
 };
 const supColourKeys=["glacier","sandstone","eucalyptus","coral"];
-const preorderTerms={deadline:"30 September 2026",deadlineISO:"2026-09-30",estimatedDelivery:"30 November 2026",discountAUD:50,reserved:0,payment:"50% when ordered · 50% before dispatch",thresholdRequired:true};
+const preorderTerms={deadline:"30 November 2026",deadlineISO:"2026-11-30",estimatedDelivery:"30 January 2027",discountAUD:50,reserved:0,payment:"50% when ordered · 50% before dispatch",thresholdRequired:true};
 const sharedPaddleSlugs=new Set(["yoga-cruiser","angler-fishing","touring-performance"]);
 const fiveBoardSlugs=new Set(["inflatable-hydrofoil","hydrofoil-set","vela-wakeboard"]);
 
@@ -60,7 +60,7 @@ function confirmedPreorderFor(product){
     description:isYoga?"Reserve a Glacier Blue board from the incoming stock allocation before it arrives. This order does not depend on a production target.":"Your board is reserved in a confirmed production schedule. This pre-order is not conditional on a minimum order quantity.",
     deadline:"Not applicable",
     deadlineISO:"",
-    estimatedDelivery:isYoga?"15 September 2026":"30 October 2026",
+    estimatedDelivery:isYoga?"within 1 business day after payment":"within 2 days from release / confirmation",
     discountAUD:50,
     reserved:0,
     payment:"50% when ordered · 50% before dispatch"
@@ -499,7 +499,7 @@ const feedItems=paymentCatalogue.filter(item=>item.kind!=="accessory").map(item=
   const title=isGlacierHero?"AURA PADDLE Yoga Cruiser 11ft Inflatable SUP — Glacier Blue — In Stock":`${item.productName} — ${item.size} — ${item.colour}`;
   const description=isGlacierHero?"Glacier Blue is in stock. Stable 36-inch deck for SUP yoga, beginners and family paddling. Complete kit. Dispatch within 1 business day after payment; delivery transit time varies by destination.":(product?.metaDescription||item.description);
   const labels=isGlacierHero?"<g:custom_label_0>Yoga Hero</g:custom_label_0><g:custom_label_1>In Stock</g:custom_label_1><g:shipping_label>yoga_glacier_in_stock</g:shipping_label>":"";
-  return `<item><g:id>${xml(item.sku)}</g:id><title>${xml(title)}</title><description>${xml(description)}</description><link>${xml(item.productUrl)}</link><g:image_link>${xml(image)}</g:image_link>${additionalImages}<g:availability>${item.available?"in_stock":"preorder"}</g:availability>${availabilityDate?`<g:availability_date>${availabilityDate}</g:availability_date>`:""}<g:price>${(item.retailAmount/100).toFixed(2)} AUD</g:price><g:sale_price>${(item.checkoutAmount/100).toFixed(2)} AUD</g:sale_price><g:sale_price_effective_date>2026-08-18T01:18:00+10:00/2026-09-30T23:59:59+10:00</g:sale_price_effective_date><g:brand>AURA PADDLE</g:brand><g:condition>new</g:condition><g:color>${xml(item.colour)}</g:color><g:size>${xml(item.size)}</g:size>${labels}<g:identifier_exists>yes</g:identifier_exists></item>`;
+  return `<item><g:id>${xml(item.sku)}</g:id><title>${xml(title)}</title><description>${xml(description)}</description><link>${xml(item.productUrl)}</link><g:image_link>${xml(image)}</g:image_link>${additionalImages}<g:availability>${item.available?"in_stock":"preorder"}</g:availability>${availabilityDate?`<g:availability_date>${availabilityDate}</g:availability_date>`:""}<g:price>${(item.retailAmount/100).toFixed(2)} AUD</g:price><g:sale_price>${(item.checkoutAmount/100).toFixed(2)} AUD</g:sale_price><g:sale_price_effective_date>2026-08-18T01:18:00+10:00/2026-11-30T23:59:59+10:00</g:sale_price_effective_date><g:brand>AURA PADDLE</g:brand><g:condition>new</g:condition><g:color>${xml(item.colour)}</g:color><g:size>${xml(item.size)}</g:size>${labels}<g:identifier_exists>yes</g:identifier_exists></item>`;
 }).join("");
 let feedOutput=`<?xml version="1.0" encoding="UTF-8"?><rss xmlns:g="http://base.google.com/ns/1.0" version="2.0"><channel><title>AURA PADDLE Australia</title><link>https://www.aurapaddle.com/</link><description>AURA PADDLE product feed</description>${feedItems}</channel></rss>\n`;
 if(requestedProductSlugs.size){

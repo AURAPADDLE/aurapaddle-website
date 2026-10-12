@@ -211,6 +211,10 @@ export function normaliseCheckoutItems(rawItems,catalog,now=Date.now()){
     const sku=String(raw?.sku||"").toUpperCase(),catalogVariant=catalog.bySku.get(sku);
     if(!catalogVariant)throw new Error(`SKU ${sku||"(missing)"} is not enabled for Stripe Checkout.`);
     const variant=coastGoOffer.variant(catalogVariant,now);
+    if(variant.orderMode==="preorder"&&variant.campaign?.thresholdRequired&&variant.campaign.deadlineISO){
+      const closesAt=Date.parse(`${variant.campaign.deadlineISO}T23:59:59.999+10:00`);
+      if(Number.isFinite(closesAt)&&now>closesAt)throw new Error(`The ${variant.campaign.name||"pre-order"} campaign has closed.`);
+    }
     const quantity=normaliseQuantity(raw.quantity);
     merged.set(sku,{variant,quantity:(merged.get(sku)?.quantity||0)+quantity});
   }

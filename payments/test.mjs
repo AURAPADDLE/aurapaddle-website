@@ -69,6 +69,13 @@ test("Hydrofoil Kit Set applies the AUD 50 incentive and a 50% initial payment",
   assert.equal(params.get("metadata[aura_shipping_amount]"),"quote_required");
 });
 
+test("conditional pre-orders close after 30 November 2026 Queensland time",()=>{
+  const sku="AP233694";
+  assert.equal(normaliseCheckoutItems([{sku,quantity:1}],catalog,Date.parse("2026-11-30T23:59:59.999+10:00"))[0].variant.campaign.deadlineISO,"2026-11-30");
+  assert.throws(()=>normaliseCheckoutItems([{sku,quantity:1}],catalog,Date.parse("2026-12-01T00:00:00+10:00")),/campaign has closed/i);
+  assert.doesNotThrow(()=>normaliseCheckoutItems([{sku:"AP734955",quantity:1}],catalog,Date.parse("2026-12-01T00:00:00+10:00")));
+});
+
 test("Wayfinder RRP follows the approved size bands",()=>{
   const variants=catalog.variants.filter(item=>item.slug==="wayfinder");
   for(const variant of variants){
