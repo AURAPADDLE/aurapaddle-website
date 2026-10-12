@@ -7,7 +7,7 @@
   const debugMode=new URL(location.href).searchParams.get("aura_debug")==="1";
   const read=()=>{try{return {...defaults,...JSON.parse(localStorage.getItem(storageKey)||"null")}}catch{return {...defaults}}};
   const saved=()=>localStorage.getItem(storageKey)!==null;
-  let tagRequested=false;
+  let tagRequested=false,tagReady;
 
   const clean=(value,max=160)=>String(value||"").trim().replace(/[\u0000-\u001f\u007f]/g,"").slice(0,max);
   const readAttribution=()=>{try{const value=JSON.parse(localStorage.getItem(attributionKey)||"null"),expiresAt=Date.parse(value?.expiresAt||"");if(!value||!Number.isFinite(expiresAt)||Date.now()>=expiresAt)return null;return value}catch{return null}};
@@ -69,27 +69,38 @@
   });
 
   const loadGoogleTag=()=>{
-    if(tagRequested)return;
+    if(tagRequested)return tagReady;
     tagRequested=true;
     const script=document.createElement("script");
     script.async=true;
     script.src=`https://www.googletagmanager.com/gtag/js?id=${measurementId}`;
+    tagReady=new Promise(resolve=>{
+      let finished=false;
+      const finish=value=>{if(finished)return;finished=true;clearTimeout(timer);resolve(value)};
+      const timer=setTimeout(()=>finish(false),3500);
+      script.addEventListener("load",()=>finish(true),{once:true});
+      script.addEventListener("error",()=>finish(false),{once:true});
+    });
     document.head.append(script);
     window.gtag("js",new Date());
     window.gtag("config",measurementId,{send_page_view:true,...(debugMode?{debug_mode:true,traffic_type:"internal_test"}:{})});
+    return tagReady;
   };
   // Advanced Consent Mode: load the tag after the denied default so Google can
   // receive cookieless measurement pings while optional storage remains off.
   loadGoogleTag();
-  const getGoogleTagValue=name=>new Promise(resolve=>{
+  const getGoogleTagValue=(name,timeout=1200)=>new Promise(resolve=>{
     let finished=false;
     const finish=value=>{if(finished)return;finished=true;clearTimeout(timer);resolve(value)};
-    const timer=setTimeout(()=>finish(""),2500);
+    const timer=setTimeout(()=>finish(""),timeout);
     try{window.gtag("get",measurementId,name,finish)}catch{finish("")}
   });
   const refreshAnalyticsIds=async preferences=>{
     if(!preferences.analytics&&!preferences.marketing)return captureAttribution(preferences);
-    loadGoogleTag();
+    // A consented checkout may happen while the async tag is still loading.
+    // Wait for load/error with a hard deadline, then make one bounded lookup.
+    // A blocked tag remains visibly missing; no identifier is manufactured.
+    await loadGoogleTag();
     const [clientId,sessionId]=await Promise.all([getGoogleTagValue("client_id"),getGoogleTagValue("session_id")]);
     // Respect a withdrawal made while the asynchronous Google tag lookup ran.
     preferences=window.auraConsent||preferences;
