@@ -81,6 +81,11 @@ function orderForEvent(state,event){
   return Object.values(state.orders||{}).find(order=>order.orderNumber===object.metadata?.aura_order_number);
 }
 
+function isInternalTestOrder(order){
+  const last=order?.attribution?.last||{};
+  return order?.internalTest===true||last.source==="internal_test"||last.campaign==="aura_controlled_test";
+}
+
 function queueEntry(state,key,entry){
   state.analyticsOutbox??={};
   if(state.analyticsOutbox[key])return false;
@@ -90,7 +95,7 @@ function queueEntry(state,key,entry){
 
 export function enqueueStripeAnalytics(state,event,catalog,{enhancedConversionsEnabled=false}={}){
   const object=event.data?.object||{},order=orderForEvent(state,event),consent=order?.attribution?.consent||{};
-  if(order?.internalTest)return false;
+  if(isInternalTestOrder(order))return false;
   if(!order||(consent.analytics!==true&&consent.marketing!==true)||!order.attribution?.analyticsClientId)return false;
   const base={
     stripeEventId:event.id,
@@ -133,10 +138,6 @@ export function enqueueStripeAnalytics(state,event,catalog,{enhancedConversionsE
     eventName="balance_payment_failed";
     params={transaction_id:`${order.orderNumber}-BALANCE`,currency:String(object.currency||order.currency||"aud").toUpperCase(),value:cents(object.amount_due),payment_stage:"balance_and_shipping"};
   }else return false;
-  // Match the existing abandoned-checkout admin classification exactly. Server
-  // events do not inherit browser IP-based labels; unknown traffic stays unmarked.
-  const last=order.attribution?.last||{};
-  if(last.source==="internal_test"||last.campaign==="aura_controlled_test")params.traffic_type="internal";
   const entry={...base,eventName,params};
   if(enhancedConversionsEnabled&&consent.marketing===true&&eventName==="purchase"&&order.customerId){
     const userData=hashUserData(object.customer_details||{});

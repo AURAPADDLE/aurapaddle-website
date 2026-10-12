@@ -492,20 +492,11 @@ function internalAnalyticsEvent(type){
   return {id:`evt_audit_${type}`,type,created:1_787_635_200,data:{object:{id:"cs_audit",payment_status:"paid",payment_intent:"pi_audit",amount_refunded:10000,refunded:false,amount_paid:47350,amount_due:47350,currency:"aud",metadata:{aura_order_number:"APO49001"}}}};
 }
 for(const marker of [{source:"internal_test"},{source:"google",campaign:"aura_controlled_test"}]){
-  for(const [type,name,value] of internalAnalyticsEvents){
-    test(`${type} preserves exact internal marker ${marker.campaign||marker.source} in GA4 payload`,()=>{
+  for(const [type] of internalAnalyticsEvents){
+    test(`${type} suppresses exact internal marker ${marker.campaign||marker.source} from GA4`,()=>{
       const state=internalAnalyticsFixture(marker),event=internalAnalyticsEvent(type);
-      assert.equal(enqueueStripeAnalytics(state,event,catalog),true);
       assert.equal(enqueueStripeAnalytics(state,event,catalog),false);
-      const entries=Object.values(state.analyticsOutbox);
-      assert.equal(entries.length,1);
-      const payload=measurementPayload(entries[0]);
-      assert.equal(payload.events[0].name,name);
-      assert.equal(payload.events[0].params.traffic_type,"internal");
-      assert.equal(payload.events[0].params.value,value);
-      assert.equal(payload.events[0].params.session_id,1787635200);
-      assert.equal(payload.consent.ad_user_data,"DENIED");
-      assert.equal(payload.user_data,undefined);
+      assert.deepEqual(state.analyticsOutbox,{});
     });
   }
 }
@@ -589,11 +580,8 @@ test("expired Checkout falls back to the securely reserved email and labels cont
   assert.equal(state.recoveryEmailOutbox.cs_test_reserved_email.recipient,"test@example.com");
   assert.equal(list.internalTest,true);
   assert.equal(list.contactStatus,"internal_test");
-  assert.equal(enqueueStripeAnalytics(state,event,catalog),true);
-  const payload=measurementPayload(state.analyticsOutbox["checkout_abandoned:cs_test_reserved_email"]);
-  assert.equal(payload.events[0].params.traffic_type,"internal");
-  assert.equal(payload.events[0].params.value,374.5);
-  assert.equal(payload.consent.ad_user_data,"GRANTED");
+  assert.equal(enqueueStripeAnalytics(state,event,catalog),false);
+  assert.deepEqual(state.analyticsOutbox||{},{});
 });
 
 test("recovery email is not queued without explicit website consent",()=>{

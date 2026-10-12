@@ -675,6 +675,7 @@ export function applyStripeEvent(state,event){
     const {deliveryName,deliveryAddress}=checkoutShippingDetails(object);
     const reservation=Object.values(state.checkoutRequests||{}).find(item=>item?.orderNumber===metadata.aura_order_number);
     const attribution=reservation?.attribution?normaliseAttribution(reservation.attribution):attributionFromMetadata(metadata);
+    const lastAttribution=attribution.last||{};
     state.orders[object.id]={
       sessionId:object.id,
       orderNumber:metadata.aura_order_number||"",
@@ -708,6 +709,7 @@ export function applyStripeEvent(state,event){
       deliveryName,
       deliveryAddress,
       attribution,
+      internalTest:lastAttribution.source==="internal_test"||lastAttribution.campaign==="aura_controlled_test",
       orderConfirmedAt:object.created||event.created,
       ...(metadata.aura_payment_stage==="paid_in_full"?{balancePaidAt:object.created||event.created,preparingForDispatchAt:object.created||event.created}:{}),
       created:object.created||event.created,

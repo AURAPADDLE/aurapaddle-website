@@ -273,7 +273,11 @@
     let guideLink=$("preorderGuide");
     if(!guideLink){guideLink=document.createElement("a");guideLink.id="preorderGuide";guideLink.className="preorder-guide";guideLink.href="../pre-order/";guideLink.textContent="Understand the complete pre-order process →";$("preorderCopy").insertAdjacentElement("afterend",guideLink)}
     guideLink.hidden=!preorder;
-    if(!preorder)return;
+    if(!preorder){
+      const terms=$("preorderTermsBody");
+      if(terms){terms.textContent="This in-stock board is paid in full at secure checkout together with the published shipping charge. It is normally prepared for dispatch within 1 business day after successful payment; transit time is additional. See the Shipping and Returns policies; Australian Consumer Law rights are not excluded.";terms.previousElementSibling.firstChild.textContent="Order terms ";}
+      return;
+    }
     $("preorderKicker").textContent=campaign.name;$("preorderTitle").textContent=threshold&&companyAllocationByCampaign[campaign.id]?(remaining?`${remaining} more to production.`:"Production target reached."):campaign.inventoryIncoming?"Glacier Blue is allocated from incoming stock.":campaign.title;$("preorderCount").hidden=!threshold;$("preorderCount").textContent=threshold?`${reserved} / ${target}`:"";
     $("preorderProgress").style.width=`${percent}%`;
     const track=$("preorderProgress").parentElement;track.hidden=!threshold;track.setAttribute("aria-label",`${campaign.name} committed production progress`);track.setAttribute("aria-valuemax",String(target));track.setAttribute("aria-valuenow",String(reserved));
