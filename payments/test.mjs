@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import crypto from "node:crypto";
+import fs from "node:fs";
+import path from "node:path";
 import test from "node:test";
+import {fileURLToPath} from "node:url";
 import coastGoOffer from "../coastgo-offer.js";
 import {abandonedCheckoutList,adminOrderList,applyStripeEvent,buildCheckoutParams,buildOrderInvoiceLines,calculateShipping,campaignProgress,isStripeHostedInvoiceUrl,loadCatalog,loadShippingRates,loadStripeMap,normaliseAttribution,normaliseCheckoutItems,normaliseQuantity,orderProgress,parseRequestUrl,prepareBalanceRequest,publicOrderView,queueOrderEmails,queueOrderMilestoneEmail,reserveCheckoutIdentity,unsubscribeRecoveryEmail,updateOrderProgress,verifyStripeSignature} from "./lib.mjs";
 import {enqueueStripeAnalytics,hashUserData,measurementPayload} from "./analytics.mjs";
@@ -10,6 +13,7 @@ import {adminOrderEmailContent,customerOrderEmailContent,milestoneOrderEmailCont
 const catalog=loadCatalog();
 const shippingRates=loadShippingRates();
 const stripeMap=loadStripeMap(catalog);
+const siteDir=path.resolve(path.dirname(fileURLToPath(import.meta.url)),"..");
 const shippingFor=(items,regionId="gold-coast-brisbane",now=Date.parse("2026-09-28T00:00:00+10:00"),promoCode="")=>calculateShipping(items,regionId,shippingRates,now,promoCode);
 
 test("CoastGo region tariff charges per board with full product and shipping payment",()=>{
@@ -57,6 +61,19 @@ test("catalogue contains 77 board SKUs and the Fishing Rack accessory",()=>{
   assert.equal(catalog.bySku.get("AP734955").stockQuantity,60);
   assert.equal(stripeMap.bySku.size,76);
   const rack=catalog.bySku.get("AP667703");assert.equal(rack.checkoutAmount,12900);assert.equal(rack.depositAmount,6450);assert.equal(rack.retailAmount-rack.checkoutAmount,0);assert.equal(rack.bundle.unitAmount,6900);
+});
+
+test("server-rendered preorder panels match embedded campaign dates and committed allocations",()=>{
+  const allocations={"paddle-launch-batch-01":20,"gannet-launch-batch":5,"current-launch-batch":5,"meridian-launch-batch":5,"wayfinder-launch-batch":5};
+  for(const filename of fs.readdirSync(path.join(siteDir,"products")).filter(name=>name.endsWith(".html"))){
+    const html=fs.readFileSync(path.join(siteDir,"products",filename),"utf8");
+    const pageData=JSON.parse(html.match(/<script id="product-data" type="application\/json">([\s\S]*?)<\/script>/)?.[1]||"{}");
+    const campaign=pageData.variants?.find(variant=>variant.orderMode==="preorder")?.preorder;
+    if(!campaign)continue;
+    assert.equal(html.match(/<span id="preorderDelivery">([^<]+)<\/span>/)?.[1],campaign.estimatedDelivery,filename);
+    const expected=Math.min(Number(campaign.target||0),Number(allocations[campaign.id]||0)+Number(campaign.reserved||0));
+    assert.equal(html.match(/<strong id="preorderCount"[^>]*>(\d+) \/ /)?.[1],String(expected),filename);
+  }
 });
 
 test("Hydrofoil Kit Set applies the AUD 50 incentive and a 50% initial payment",()=>{
