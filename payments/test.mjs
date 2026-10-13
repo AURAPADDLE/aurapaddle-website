@@ -93,6 +93,11 @@ test("inflatable SUP collection is indexable, canonical and linked from crawlabl
   assert.equal((homepage.match(/href="inflatable-paddle-boards\/"/g)||[]).length,3);
   assert.match(homepage,/<h1><span class="hero-lead">Paddle out\.<\/span><span class="hero-tagline">Find your way<br>on the water\.<\/span><\/h1>/);
   assert.match(homepage,/Compare <a href="inflatable-paddle-boards\/">inflatable stand up paddle boards<\/a> for all-round paddling, yoga, fishing and touring, then explore the wider AURA surf, foil and wake range\./);
+  assert.equal((homepage.match(/https:\/\/www\.instagram\.com\/aurapaddleau\//g)||[]).length,2);
+  assert.doesNotMatch(homepage,/instagram\.com\/aurapaddlemax/);
+  const story=fs.readFileSync(path.join(siteDir,"our-story","index.html"),"utf8");
+  assert.match(story,/href="https:\/\/www\.instagram\.com\/aurapaddleau\/"/);
+  assert.doesNotMatch(story,/instagram\.com\/aurapaddlemax/);
   const sitemap=fs.readFileSync(path.join(siteDir,"sitemap.xml"),"utf8");
   assert.match(sitemap,/https:\/\/www\.aurapaddle\.com\/inflatable-paddle-boards\//);
 });
