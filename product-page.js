@@ -4,7 +4,7 @@
   if(data.slug==="coast-go")data.variants=data.variants.map(v=>coastGo.variant(v));
   window.addEventListener("aura:coastgo-change",()=>{if(["coast-go","yoga-cruiser"].includes(data.slug))renderSelection()});
   const $=id=>document.getElementById(id);
-  const yogaCruiserDescription="A spacious, confidence-inspiring iSUP created for yoga, relaxed cruising and unhurried days on the water. Its 36-inch-wide deck gives you room to move, reset your stance or bring a seated passenger while the high-volume shape keeps the ride reassuringly composed. Dual-layer UV-resistant PVC — designed for Australian UV intensity.";
+  const yogaCruiserDescription="A 36-inch-wide inflatable SUP created for yoga, gentle movement and relaxed cruising. Its broad padded deck provides generous usable room while the 11-foot, 285-litre format supports easy-paced paddling. Dual-layer UV-resistant PVC — designed for Australian UV intensity.";
   const uvConstruction={
     "yoga-cruiser":{
       summary:"Dual-layer UV-resistant PVC — designed for Australian UV intensity.",
@@ -503,7 +503,7 @@
   $("checkoutButton").addEventListener("click",beginCheckout);
   $("reviewForm")?.addEventListener("submit",submitReview);
   document.querySelectorAll("[data-add-accessory]").forEach(button=>button.addEventListener("click",()=>addAccessory(button.dataset.addAccessory)));
-  const menuButton=$("menuButton"),mobileMenu=$("mobileMenu");menuButton.addEventListener("click",()=>{const open=mobileMenu.classList.toggle("open");menuButton.setAttribute("aria-expanded",String(open));document.body.classList.toggle("menu-open",open)});mobileMenu.querySelectorAll("a").forEach(a=>a.addEventListener("click",()=>{mobileMenu.classList.remove("open");document.body.classList.remove("menu-open");menuButton.setAttribute("aria-expanded","false")}));
+  const menuButton=$("menuButton"),mobileMenu=$("mobileMenu");if(menuButton&&mobileMenu){menuButton.addEventListener("click",()=>{const open=mobileMenu.classList.toggle("open");menuButton.setAttribute("aria-expanded",String(open));document.body.classList.toggle("menu-open",open)});mobileMenu.querySelectorAll("a").forEach(a=>a.addEventListener("click",()=>{mobileMenu.classList.remove("open");document.body.classList.remove("menu-open");menuButton.setAttribute("aria-expanded","false")}))}
   function setupCoastGoPromotion(){
     if(!["coast-go","yoga-cruiser"].includes(data.slug))return;
     const yoga=data.slug==="yoga-cruiser";
