@@ -16,9 +16,9 @@
   const coastLink=offer.querySelector('[data-preorder-offer-shop]');
   coastLink.href='products/coast-go.html';coastLink.textContent='Shop CoastGo';
   const yogaLink=document.createElement('a');yogaLink.className='btn btn-primary';yogaLink.href='products/yoga-cruiser.html?colour=glacier';yogaLink.textContent='Shop Yoga Cruiser';coastLink.after(yogaLink);
-  const visual=offer.querySelector('.preorder-offer__visual');
+  const visual=offer.querySelector('.offer-products');
   const yogaImage=document.createElement('img');yogaImage.src='assets/products/yoga-cruiser/glacier-blue/AP734955_yoga-cruiser_11ft_glacier-blue_amazon-01-main-package.jpg';yogaImage.alt='Yoga Cruiser Glacier Blue';
-  visual.append(yogaImage);visual.style.gridTemplateColumns='1fr 1fr';visual.style.gap='8px';
+  visual.append(yogaImage);
   const seen=()=>{try{return sessionStorage.getItem(storageKey)==='seen'}catch{return false}};
   const open=(source,manual=false)=>{if(!policy.freeShippingActive()){if(offer.open)offer.close();return;}if(offer.open||document.querySelector('dialog[open]')||(!manual&&seen()))return;offer.showModal();try{sessionStorage.setItem(storageKey,'seen')}catch{}track('view_promotion',{promotion_source:source});};
   document.querySelectorAll('[data-preorder-offer-open]').forEach(button=>button.addEventListener('click',()=>open('manual',true)));

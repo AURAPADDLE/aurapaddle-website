@@ -4,19 +4,19 @@
   if(data.slug==="coast-go")data.variants=data.variants.map(v=>coastGo.variant(v));
   window.addEventListener("aura:coastgo-change",()=>{if(["coast-go","yoga-cruiser"].includes(data.slug))renderSelection()});
   const $=id=>document.getElementById(id);
-  const yogaCruiserDescription="A 36-inch-wide inflatable SUP created for yoga, gentle movement and relaxed cruising. Its broad padded deck provides generous usable room while the 11-foot, 285-litre format supports easy-paced paddling. Dual-layer UV-resistant PVC — designed for Australian UV intensity.";
+  const yogaCruiserDescription="A 36-inch-wide inflatable SUP created for yoga, gentle movement and relaxed cruising. Its broad padded deck provides generous usable room while the 11-foot, 285-litre format supports easy-paced paddling. All board materials are UV-resistant — designed for Australian conditions; accessories are excluded. Avoid prolonged sun and heat, and follow inflation, cleaning, drying and storage guidance.";
   const uvConstruction={
     "yoga-cruiser":{
-      summary:"Dual-layer UV-resistant PVC — designed for Australian UV intensity.",
-      specification:"Woven drop stitch with dual-layer UV-resistant PVC"
+      summary:"All board materials are UV-resistant — designed for Australian conditions; accessories are excluded. Avoid prolonged sun and heat, and follow inflation, cleaning, drying and storage guidance.",
+      specification:"Woven drop stitch with dual-layer PVC"
     },
     "angler-fishing":{
-      summary:"Woven drop-stitch construction with reinforced UV-resistant PVC is designed for Australian UV intensity.",
-      specification:"Woven drop stitch with reinforced UV-resistant PVC"
+      summary:"All board materials are UV-resistant — designed for Australian conditions; accessories are excluded. Avoid prolonged sun and heat, and follow inflation, cleaning, drying and storage guidance.",
+      specification:"Woven drop stitch with reinforced PVC"
     },
     "touring-performance":{
-      summary:"Woven drop-stitch construction with reinforced UV-resistant PVC is designed for Australian UV intensity.",
-      specification:"Woven drop stitch with reinforced UV-resistant PVC"
+      summary:"All board materials are UV-resistant — designed for Australian conditions; accessories are excluded. Avoid prolonged sun and heat, and follow inflation, cleaning, drying and storage guidance.",
+      specification:"Woven drop stitch with reinforced PVC"
     }
   }[data.slug];
   if(uvConstruction){
@@ -336,6 +336,7 @@
     for(const selector of [".breadcrumb",".eyebrow","h1",".subtitle","#availability",".price-row",".product-rating-link","#priceNote"]){const el=info.querySelector(selector);if(el)intro.append(el)}
     intro.querySelector("h1").textContent="Yoga Cruiser";
     intro.querySelector(".subtitle").textContent=yogaCruiserDescription;
+    const benefits=info.querySelector(".product-benefits");if(benefits)intro.querySelector(".subtitle").after(benefits);
     const kit=document.createElement("p");kit.className="kit-summary";kit.textContent="Electric pump · Wheeled carry bag · Adjustable paddle included";intro.append(kit);
     const dispatch=document.createElement("p");dispatch.id="introDispatch";dispatch.className="dispatch-summary";intro.append(dispatch);
     layout.prepend(intro);
