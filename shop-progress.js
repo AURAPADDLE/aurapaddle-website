@@ -47,7 +47,7 @@
       if(productId&&!card.dataset.productId)card.dataset.productId=productId;
       const state=stateFor(productId),media=card.querySelector(".product-media"),status=card.querySelector(".status");
       if(productId==="yoga"&&media&&status){
-        status.textContent="Glacier Blue · Incoming · No minimum";
+        status.textContent="Glacier Blue · In stock · 1 business day dispatch";
         media.querySelector(".card-progress")?.remove();
         let note=card.querySelector(".variant-availability-note");
         if(!note){note=document.createElement("p");note.className="variant-availability-note";card.querySelector(".product-body").append(note)}

@@ -29,6 +29,30 @@
       row.cells[1].textContent=uvConstruction.specification;
     }
   }
+  const inflatableSupSlugs=new Set(["coast-go","yoga-cruiser","angler-fishing","touring-performance"]);
+  if(inflatableSupSlugs.has(data.slug)){
+    const breadcrumb=document.querySelector(".product-info .breadcrumb");
+    if(breadcrumb&&!breadcrumb.querySelector('a[href*="inflatable-paddle-boards"]')){
+      const current=breadcrumb.querySelector("span:last-child");
+      current?.insertAdjacentHTML("beforebegin",'<a href="../inflatable-paddle-boards/">Inflatable SUP Boards</a><span>›</span>');
+    }
+    document.querySelectorAll('script[type="application/ld+json"]').forEach(script=>{
+      try{
+        const structured=JSON.parse(script.textContent),graph=structured["@graph"];
+        const list=Array.isArray(graph)?graph.find(node=>node["@type"]==="BreadcrumbList")?.itemListElement:null;
+        if(Array.isArray(list)&&!list.some(item=>item.name==="Inflatable SUP Boards")){
+          list.splice(2,0,{"@type":"ListItem",position:3,name:"Inflatable SUP Boards",item:"https://www.aurapaddle.com/inflatable-paddle-boards/"});
+          list.slice(3).forEach((item,index)=>{item.position=index+4});
+          script.textContent=JSON.stringify(structured);
+        }
+      }catch{}
+    });
+  }
+  if(data.slug==="touring-performance"){
+    data.specs=(data.specs||[]).filter(([label])=>!["Thickness","Volume"].includes(label));
+    const table=document.querySelector(".spec-table");
+    [...(table?.rows||[])].forEach(row=>{if(["Thickness","Volume"].includes(row.cells[0]?.textContent.trim()))row.remove()});
+  }
   if(data.slug==="yoga-cruiser"){
     const galleryOverrides={
       sandstone:[
