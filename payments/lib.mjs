@@ -157,6 +157,15 @@ export function normaliseAttribution(value){
     const sessionId=attributionText(String(raw.analyticsSessionId||""),32);
     if(/^\d+\.\d+$/.test(clientId))attribution.analyticsClientId=clientId;
     if(/^\d+$/.test(sessionId))attribution.analyticsSessionId=sessionId;
+    // Only consented, bounded diagnostics; retain all production checkout guards.
+    if(raw.diagnostics?.version===1){
+      const d=raw.diagnostics;
+      attribution.diagnostics={version:1,
+        tagStatus:["not_requested","loading","loaded","load_error","timeout","offline_review"].includes(d.tagStatus)?d.tagStatus:"unknown",
+        clientStatus:attribution.analyticsClientId?"present":"unavailable",
+        sessionStatus:attribution.analyticsSessionId?"present":"unavailable",
+        lookupMs:Number.isFinite(d.lookupMs)?Math.min(10000,Math.max(0,Math.round(d.lookupMs))):0};
+    }
   }
   if(!attribution.first)delete attribution.first;
   if(!attribution.last)delete attribution.last;

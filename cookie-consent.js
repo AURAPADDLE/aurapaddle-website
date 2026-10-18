@@ -5,9 +5,10 @@
   const attributionKey="aura-attribution-v1";
   const attributionMaxAge=90*24*60*60*1000;
   const debugMode=new URL(location.href).searchParams.get("aura_debug")==="1";
+  const offlineReview=window.AURA_OFFLINE_REVIEW===true;
   const read=()=>{try{return {...defaults,...JSON.parse(localStorage.getItem(storageKey)||"null")}}catch{return {...defaults}}};
-  const saved=()=>localStorage.getItem(storageKey)!==null;
-  let tagRequested=false,tagReady;
+  const saved=()=>{try{return localStorage.getItem(storageKey)!==null}catch{return false}};
+  let tagRequested=false,tagReady,tagStatus="not_requested";
 
   const clean=(value,max=160)=>String(value||"").trim().replace(/[\u0000-\u001f\u007f]/g,"").slice(0,max);
   const readAttribution=()=>{try{const value=JSON.parse(localStorage.getItem(attributionKey)||"null"),expiresAt=Date.parse(value?.expiresAt||"");if(!value||!Number.isFinite(expiresAt)||Date.now()>=expiresAt)return null;return value}catch{return null}};
@@ -69,17 +70,19 @@
   });
 
   const loadGoogleTag=()=>{
+    if(offlineReview){tagStatus="offline_review";return Promise.resolve(false)}
     if(tagRequested)return tagReady;
     tagRequested=true;
+    tagStatus="loading";
     const script=document.createElement("script");
     script.async=true;
     script.src=`https://www.googletagmanager.com/gtag/js?id=${measurementId}`;
     tagReady=new Promise(resolve=>{
       let finished=false;
-      const finish=value=>{if(finished)return;finished=true;clearTimeout(timer);resolve(value)};
-      const timer=setTimeout(()=>finish(false),3500);
-      script.addEventListener("load",()=>finish(true),{once:true});
-      script.addEventListener("error",()=>finish(false),{once:true});
+      const finish=status=>{if(finished)return;finished=true;tagStatus=status;clearTimeout(timer);resolve(status==="loaded")};
+      const timer=setTimeout(()=>finish("timeout"),3500);
+      script.addEventListener("load",()=>{tagStatus="loaded";finish("loaded")},{once:true});
+      script.addEventListener("error",()=>finish("load_error"),{once:true});
     });
     document.head.append(script);
     window.gtag("js",new Date());
@@ -97,11 +100,12 @@
   });
   const refreshAnalyticsIds=async preferences=>{
     if(!preferences.analytics&&!preferences.marketing)return captureAttribution(preferences);
-    // A consented checkout may happen while the async tag is still loading.
-    // Wait for load/error with a hard deadline, then make one bounded lookup.
-    // A blocked tag remains visibly missing; no identifier is manufactured.
+    // Preserve the live bounded tag wait; diagnostics never manufacture IDs.
+    const started=Date.now();
     await loadGoogleTag();
-    const [clientId,sessionId]=await Promise.all([getGoogleTagValue("client_id"),getGoogleTagValue("session_id")]);
+    preferences=window.auraConsent||preferences;
+    if(!preferences.analytics&&!preferences.marketing)return captureAttribution(preferences);
+    const [clientId,sessionId]=offlineReview?["",""]:await Promise.all([getGoogleTagValue("client_id"),getGoogleTagValue("session_id")]);
     // Respect a withdrawal made while the asynchronous Google tag lookup ran.
     preferences=window.auraConsent||preferences;
     if(!preferences.analytics&&!preferences.marketing)return captureAttribution(preferences);
@@ -111,6 +115,7 @@
     delete current.analyticsClientId;delete current.analyticsSessionId;
     if(/^\d+\.\d+$/.test(String(clientId||"")))current.analyticsClientId=String(clientId);
     if(/^\d+$/.test(String(sessionId||"")))current.analyticsSessionId=String(sessionId);
+    current.diagnostics={version:1,tagStatus,clientStatus:current.analyticsClientId?"present":"unavailable",sessionStatus:current.analyticsSessionId?"present":"unavailable",lookupMs:Math.min(10000,Math.max(0,Date.now()-started))};
     writeAttribution(current);
     return current;
   };
@@ -131,6 +136,7 @@
     if(analytics||marketing)loadGoogleTag();
   };
   const sendAnalyticsEvent=(name,parameters={})=>{
+    if(offlineReview)return false;
     if(typeof window.gtag!=="function")return false;
     loadGoogleTag();
     window.gtag("event",String(name),debugMode?{...parameters,debug_mode:true,traffic_type:"internal"}:parameters);

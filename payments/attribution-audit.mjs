@@ -36,7 +36,14 @@ export function orderAttributionAudit(order,state,{configured,serverEventsEnable
     googleClickIdPresent:consent.marketing===true&&Boolean(attribution.last?.clickId),
     clientIdPresent:allowed&&Boolean(attribution.analyticsClientId),sessionIdPresent:allowed&&Boolean(attribution.analyticsSessionId),
     purchase:{status,reason,attention,attempts:Number(entry?.attempts||0),sentAt:Number(entry?.sentAt||0),validatedAt:Number(entry?.validatedAt||0)},
-    adsAttribution:"unverified"
+    adsAttribution:"unverified",
+    diagnostics:allowed&&attribution.diagnostics?{
+      version:1,
+      tagStatus:["not_requested","loading","loaded","load_error","timeout","offline_review"].includes(attribution.diagnostics.tagStatus)?attribution.diagnostics.tagStatus:"unknown",
+      clientStatus:attribution.analyticsClientId?"present":"unavailable",
+      sessionStatus:attribution.analyticsSessionId?"present":"unavailable",
+      lookupMs:Math.min(10000,Math.max(0,Number(attribution.diagnostics.lookupMs)||0))
+    }:null
   };
 }
 

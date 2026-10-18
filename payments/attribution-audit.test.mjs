@@ -46,10 +46,20 @@ test("source evidence is allowed only with analytics consent",()=>{
 test("admin source panel renders statuses and escapes user-controlled campaign text",()=>{
   const html=fs.readFileSync(new URL('../admin/orders/index.html',import.meta.url),'utf8');
   const script=html.match(/<script>([\s\S]*?)<\/script>/)[1];
-  const context={document:{getElementById:()=>({addEventListener(){}})},sessionStorage:{getItem:()=>null}};
+  const context={document:{getElementById:()=>({addEventListener(){}}),querySelector:()=>({insertAdjacentHTML(){}})},sessionStorage:{getItem:()=>null}};
   vm.createContext(context);vm.runInContext(script,context);
   const o=order();o.attribution.last.campaign='<img src=x onerror=alert(1)>';
   const card=vm.runInContext(`attributionCard(${JSON.stringify({attributionAudit:orderAttributionAudit(o,{})})})`,context);
   assert.ok(card.includes('not queued'));assert.ok(card.includes('&lt;img'));assert.ok(!card.includes('<img'));
   assert.ok(card.includes('does not confirm inclusion in GA4'));
+});
+
+test('diagnostics are consent-gated, allowlisted and do not trust reported ID presence',()=>{
+  const raw={consent:{analytics:true},diagnostics:{version:1,tagStatus:'<script>secret</script>',clientStatus:'present',lookupMs:999999,token:'private'}};
+  const a=normaliseAttribution(raw);
+  assert.deepEqual(a.diagnostics,{version:1,tagStatus:'unknown',clientStatus:'unavailable',sessionStatus:'unavailable',lookupMs:10000});
+  assert.equal(normaliseAttribution({...raw,consent:{analytics:false,marketing:false}}).diagnostics,undefined);
+  const o=order();o.attribution=a;
+  assert.equal(orderAttributionAudit(o,{}).diagnostics.tagStatus,'unknown');
+  assert.ok(!JSON.stringify(orderAttributionAudit(o,{})).includes('private'));
 });
