@@ -43,13 +43,53 @@ export function hashUserData(customerDetails={}){
   return result;
 }
 
-function orderItems(order,catalog){
+const integer=(value,label)=>{const number=Number(value);if(!Number.isInteger(number)||number<0)throw new Error(`Invalid ${label}.`);return number};
+const lineList=value=>Array.isArray(value)?value:Array.isArray(value?.data)?value.data:[];
+const lineTaxes=line=>{if(!line||!("taxes" in line))throw new Error("Stripe line tax data is required.");return lineList(line.taxes).reduce((sum,tax)=>sum+integer(tax?.amount,"Stripe tax amount"),0)};
+const lineKind=line=>line?.metadata?.aura_line_kind||line?.price?.product?.metadata?.aura_line_kind||(/^Shipping · /i.test(String(line?.description||""))?"shipping":"product");
+const lineGross=line=>integer(line?.amount_total,"Stripe line total");
+
+export function checkoutCommerceAmounts(object={},stripeLineItems=[]){
+  const lines=lineList(stripeLineItems),amountTotal=integer(object.amount_total,"Stripe Checkout total"),currency=String(object.currency||"").toLowerCase();
+  if(currency!=="aud")throw new Error("GA4 commerce currency must be AUD.");
+  if(!lines.length)throw new Error("Stripe Checkout line items are required for GA4 commerce amounts.");
+  let itemValueMinor=0,shippingMinor=0,taxMinor=0;const itemLineValues=[];
+  for(const line of lines){
+    const gross=lineGross(line),tax=lineTaxes(line),net=gross-tax;
+    if(net<0)throw new Error("Stripe line tax exceeds its total.");
+    taxMinor+=tax;
+    if(lineKind(line)==="shipping")shippingMinor+=net;
+    else{itemValueMinor+=net;itemLineValues.push({valueMinor:net,quantity:integer(line.quantity||1,"Stripe line quantity")})}
+  }
+  if(object.total_details?.amount_tax!==undefined&&integer(object.total_details.amount_tax,"Stripe Checkout tax total")!==taxMinor)throw new Error("Stripe Checkout tax totals do not reconcile.");
+  if(itemValueMinor+shippingMinor+taxMinor!==amountTotal)throw new Error("Stripe Checkout commerce amounts do not reconcile.");
+  return {itemValueMinor,shippingMinor,taxMinor,currency,itemLineValues};
+}
+
+export function balanceCommerceAmounts(object={},order={},purchaseParams={}){
+  const amountPaid=integer(order.balancePaidAmount,"balance payment amount"),currency=String(object.currency||order.currency||"").toLowerCase();
+  if(currency!=="aud")throw new Error("GA4 commerce currency must be AUD.");
+  const lines=lineList(object.lines),totalTax=object.total_tax_amounts===undefined?null:lineList(object.total_tax_amounts).reduce((sum,tax)=>sum+integer(tax?.amount,"Stripe invoice tax amount"),0);
+  if(!lines.length||totalTax===null)throw new Error("Stripe invoice lines and authoritative tax totals are required for GA4 balance amounts.");
+  let fullItemNet=0,shippingMinor=0;
+  for(const line of lines){
+    const net=integer(line.amount_excluding_tax,"Stripe invoice line amount excluding tax");
+    if(lineKind(line)==="shipping")shippingMinor+=net;else fullItemNet+=net;
+  }
+  if(!["value","shipping","tax"].every(key=>Number.isFinite(purchaseParams[key])&&purchaseParams[key]>=0))throw new Error("The initial purchase lacks separated GA4 commerce amounts.");
+  const initialItem=Math.round(purchaseParams.value*100),initialShipping=Math.round(purchaseParams.shipping*100),initialTax=Math.round(purchaseParams.tax*100);
+  const itemValueMinor=fullItemNet-initialItem,shippingForBalance=shippingMinor-initialShipping,taxMinor=totalTax-initialTax;
+  if([itemValueMinor,shippingForBalance,taxMinor].some(value=>!Number.isInteger(value)||value<0)||itemValueMinor+shippingForBalance+taxMinor!==amountPaid)throw new Error("Stripe balance commerce amounts do not reconcile.");
+  return {itemValueMinor,shippingMinor:shippingForBalance,taxMinor,currency};
+}
+
+function orderItems(order,catalog,itemLineValues=[]){
   const items=Array.isArray(order.items)?order.items:[];
   const anglerQuantity=items.filter(item=>catalog.bySku.get(item.sku)?.slug==="angler-fishing").reduce((sum,item)=>sum+Number(item.quantity||0),0);
   const rackQuantity=items.filter(item=>item.sku==="AP667703").reduce((sum,item)=>sum+Number(item.quantity||0),0);
   const pairedRack=Math.min(anglerQuantity,rackQuantity);
   let remainingPairedRack=pairedRack;
-  return items.map(item=>{
+  return items.map((item,index)=>{
     const variant=catalog.bySku.get(item.sku),quantity=Number(item.quantity||1);
     let unitAmount=variant?.orderMode==="preorder"?variant.depositAmount:variant?.checkoutAmount;
     if(item.sku==="AP667703"){
@@ -64,7 +104,7 @@ function orderItems(order,catalog){
       item_brand:"AURA PADDLE",
       item_category:variant?.kind==="accessory"?"Accessory":variant?.shortName||"Board",
       item_variant:[variant?.size,variant?.colour].filter(Boolean).join(" · "),
-      price:cents(unitAmount),
+      price:itemLineValues[index]?Number((itemLineValues[index].valueMinor/100/itemLineValues[index].quantity).toFixed(6)):cents(unitAmount),
       quantity
     };
   });
@@ -93,7 +133,7 @@ function queueEntry(state,key,entry){
   return true;
 }
 
-export function enqueueStripeAnalytics(state,event,catalog,{enhancedConversionsEnabled=false}={}){
+export function enqueueStripeAnalytics(state,event,catalog,{enhancedConversionsEnabled=false,stripeLineItems}={}){
   const object=event.data?.object||{},order=orderForEvent(state,event),consent=order?.attribution?.consent||{};
   if(isInternalTestOrder(order))return false;
   if(!order||(consent.analytics!==true&&consent.marketing!==true)||!order.attribution?.analyticsClientId)return false;
@@ -108,9 +148,10 @@ export function enqueueStripeAnalytics(state,event,catalog,{enhancedConversionsE
   };
   let key,eventName,params;
   if(["checkout.session.completed","checkout.session.async_payment_succeeded"].includes(event.type)&&object.payment_status==="paid"){
+    const amounts=checkoutCommerceAmounts(object,stripeLineItems);
     key=`purchase:${order.orderNumber}`;
     eventName="purchase";
-    params={transaction_id:order.orderNumber,currency:String(order.currency||"aud").toUpperCase(),value:cents(order.amountTotal),shipping:order.paymentStage==="paid_in_full"?cents(order.shippingAmount):0,payment_stage:order.paymentStage||"initial_50_percent",items:orderItems(order,catalog)};
+    params={transaction_id:order.orderNumber,currency:amounts.currency.toUpperCase(),value:cents(amounts.itemValueMinor),shipping:cents(amounts.shippingMinor),tax:cents(amounts.taxMinor),payment_stage:order.paymentStage||"initial_50_percent",items:orderItems(order,catalog,amounts.itemLineValues)};
     if(order.shippingPromotionId)params.promotion_id=order.shippingPromotionId;
     if(order.promotionCode)params.coupon=order.promotionCode;
   }else if(event.type==="checkout.session.expired"){
@@ -126,9 +167,11 @@ export function enqueueStripeAnalytics(state,event,catalog,{enhancedConversionsE
     if(object.refunded)params.items=orderItems(order,catalog);
     order.analyticsRefundQueuedAmount=cumulative;
   }else if(event.type==="invoice.paid"&&order.balancePaymentStatus==="paid"){
+    const purchaseParams=state.analyticsOutbox?.[`purchase:${order.orderNumber}`]?.params||{};
+    const amounts=balanceCommerceAmounts(object,order,purchaseParams);
     key=`balance_payment:${object.id}`;
     eventName="balance_payment";
-    params={transaction_id:`${order.orderNumber}-BALANCE`,currency:String(object.currency||order.currency||"aud").toUpperCase(),value:cents(object.amount_paid),shipping:cents(order.shippingAmount),payment_stage:"balance_and_shipping"};
+    params={transaction_id:`${order.orderNumber}-BALANCE`,currency:amounts.currency.toUpperCase(),value:cents(amounts.itemValueMinor),shipping:cents(amounts.shippingMinor),tax:cents(amounts.taxMinor),payment_stage:"balance_and_shipping"};
   }else if(event.type==="invoice.voided"){
     key=`balance_invoice_voided:${object.id}`;
     eventName="balance_invoice_voided";

@@ -6,7 +6,7 @@ import test from "node:test";
 import {fileURLToPath} from "node:url";
 import coastGoOffer from "../coastgo-offer.js";
 import {abandonedCheckoutList,adminOrderList,applyStripeEvent,buildCheckoutParams,buildOrderInvoiceLines,calculateShipping,campaignProgress,isStripeHostedInvoiceUrl,loadCatalog,loadShippingRates,loadStripeMap,normaliseAttribution,normaliseCheckoutItems,normaliseQuantity,orderProgress,parseRequestUrl,prepareBalanceRequest,publicOrderView,queueOrderEmails,queueOrderMilestoneEmail,reserveCheckoutIdentity,unsubscribeRecoveryEmail,updateOrderProgress,verifyStripeSignature} from "./lib.mjs";
-import {enqueueStripeAnalytics,hashUserData,measurementPayload} from "./analytics.mjs";
+import {balanceCommerceAmounts,checkoutCommerceAmounts,enqueueStripeAnalytics,hashUserData,measurementPayload} from "./analytics.mjs";
 import {recoveryEmailContent} from "./recovery-email.mjs";
 import {adminOrderEmailContent,customerOrderEmailContent,milestoneOrderEmailContent} from "./order-email.mjs";
 
@@ -15,6 +15,10 @@ const shippingRates=loadShippingRates();
 const stripeMap=loadStripeMap(catalog);
 const siteDir=path.resolve(path.dirname(fileURLToPath(import.meta.url)),"..");
 const shippingFor=(items,regionId="gold-coast-brisbane",now=Date.parse("2026-09-28T00:00:00+10:00"),promoCode="")=>calculateShipping(items,regionId,shippingRates,now,promoCode);
+const checkoutLines=(productGross,productTax=0,{shippingGross=0,shippingTax=0,quantity=1}={})=>({data:[
+  {description:"AURA product",amount_total:productGross,quantity,taxes:productTax?[{amount:productTax}]:[]},
+  ...(shippingGross?[{description:"Shipping · test",amount_total:shippingGross,quantity:1,taxes:shippingTax?[{amount:shippingTax}]:[],price:{product:{metadata:{aura_line_kind:"shipping"}}}}]:[])
+]});
 
 test("CoastGo region tariff charges per board with full product and shipping payment",()=>{
   const tariff={"coastgo-metro":3000,"coastgo-standard":3500,"coastgo-country":7500,"coastgo-remote-north":12000,"coastgo-remote-west":12000,"coastgo-express":12000};
@@ -511,8 +515,9 @@ test("paid Stripe webhook queues one authoritative GA4 purchase",()=>{
   const event={id:"evt_purchase",type:"checkout.session.completed",created:1_787_635_200,data:{object:{id:"cs_test_purchase",customer:"cus_test",payment_status:"paid",payment_intent:"pi_test_purchase",amount_total:37450,currency:"aud",customer_details:{email:"MAX@example.com",phone:"+61 400 000 000"},metadata:{aura_items:"AP734955:1",aura_order_number:"APO48219",aura_tracking_token:"secure_tracking_token_48219",aura_order_mode:"preorder",aura_payment_stage:"initial_50_percent"}}}};
   assert.equal(applyStripeEvent(state,event),true);
   assert.equal(state.orders.cs_test_purchase.attribution.last.source,"google");
-  assert.equal(enqueueStripeAnalytics(state,event,catalog,{enhancedConversionsEnabled:false}),true);
-  assert.equal(enqueueStripeAnalytics(state,event,catalog,{enhancedConversionsEnabled:false}),false);
+  const stripeLineItems=checkoutLines(37450);
+  assert.equal(enqueueStripeAnalytics(state,event,catalog,{enhancedConversionsEnabled:false,stripeLineItems}),true);
+  assert.equal(enqueueStripeAnalytics(state,event,catalog,{enhancedConversionsEnabled:false,stripeLineItems}),false);
   const entry=state.analyticsOutbox["purchase:APO48219"],payload=measurementPayload(entry);
   assert.equal(payload.events[0].name,"purchase");
   assert.equal(payload.events[0].params.transaction_id,"APO48219");
@@ -522,21 +527,72 @@ test("paid Stripe webhook queues one authoritative GA4 purchase",()=>{
   assert.equal(payload.consent.ad_user_data,"DENIED");
 });
 
-test("in-stock GA4 purchase includes the shipping already paid today",()=>{
+test("in-stock GA4 purchase separates product revenue, authoritative tax and shipping",()=>{
   const attribution={version:1,consent:{analytics:true,marketing:false},analyticsClientId:"123456789.987654321"};
   const state={orders:{},checkoutRequests:{stock_request:{orderNumber:"APO48299",attribution}},analyticsOutbox:{}};
   const event={id:"evt_stock_measurement",type:"checkout.session.completed",created:1_787_635_200,data:{object:{id:"cs_stock_measurement",payment_status:"paid",amount_total:82800,currency:"aud",metadata:{aura_items:"AP734955:1",aura_order_number:"APO48299",aura_order_mode:"available",aura_payment_stage:"paid_in_full",aura_shipping_amount:"7900"}}}};
   applyStripeEvent(state,event);
-  assert.equal(enqueueStripeAnalytics(state,event,catalog),true);
+  assert.equal(enqueueStripeAnalytics(state,event,catalog,{stripeLineItems:checkoutLines(74900,6809,{shippingGross:7900,shippingTax:718})}),true);
   const params=measurementPayload(state.analyticsOutbox["purchase:APO48299"]).events[0].params;
-  assert.equal(params.value,828);
-  assert.equal(params.shipping,79);
+  assert.equal(params.value,680.91);
+  assert.equal(params.shipping,71.82);
+  assert.equal(params.tax,75.27);
+  assert.equal(params.value+params.shipping+params.tax,828);
+  assert.equal(params.items.reduce((sum,item)=>sum+item.price*item.quantity,0),params.value);
   assert.equal(params.payment_stage,"paid_in_full");
+});
+
+test("GA4 commerce amount normalisers handle zero shipping and reject missing tax evidence",()=>{
+  assert.deepEqual(checkoutCommerceAmounts({amount_total:11000,currency:"aud",total_details:{amount_tax:1000}},checkoutLines(11000,1000)),{itemValueMinor:10000,shippingMinor:0,taxMinor:1000,currency:"aud",itemLineValues:[{valueMinor:10000,quantity:1}]});
+  assert.throws(()=>checkoutCommerceAmounts({amount_total:11000,currency:"aud"},{data:[{amount_total:11000,quantity:1}]}),/tax|reconcile/i);
+  assert.throws(()=>checkoutCommerceAmounts({amount_total:11000,currency:"aud",total_details:{amount_tax:999}},checkoutLines(11000,1000)),/tax totals do not reconcile/i);
+  assert.throws(()=>checkoutCommerceAmounts({amount_total:11000,currency:"usd"},checkoutLines(11000)),/AUD/);
+});
+
+test("preorder deposit purchase reports only the paid deposit components",()=>{
+  const attribution={version:1,consent:{analytics:true,marketing:false},analyticsClientId:"123456789.987654321"};
+  const state={orders:{},checkoutRequests:{deposit_request:{orderNumber:"APO48300",attribution}},analyticsOutbox:{}};
+  const event={id:"evt_deposit_measurement",type:"checkout.session.completed",created:1_787_635_200,data:{object:{id:"cs_deposit_measurement",payment_status:"paid",amount_total:37450,currency:"aud",total_details:{amount_tax:3405},metadata:{aura_items:"AP734955:1",aura_order_number:"APO48300",aura_order_mode:"preorder",aura_payment_stage:"initial_50_percent"}}}};
+  applyStripeEvent(state,event);
+  assert.equal(enqueueStripeAnalytics(state,event,catalog,{stripeLineItems:checkoutLines(37450,3405)}),true);
+  const params=measurementPayload(state.analyticsOutbox["purchase:APO48300"]).events[0].params;
+  assert.deepEqual({value:params.value,shipping:params.shipping,tax:params.tax},{value:340.45,shipping:0,tax:34.05});
+  assert.equal(params.value+params.shipping+params.tax,374.5);
+});
+
+test("balance invoice emits one custom event for only the newly paid net product, shipping and tax",()=>{
+  const order={orderNumber:"APO48301",currency:"aud",balancePaymentStatus:"paid",balancePaidAmount:13200,items:[{sku:"AP734955",quantity:1}],attribution:{consent:{analytics:true,marketing:false},analyticsClientId:"123456789.987654321"}};
+  const state={orders:{cs_balance:order},analyticsOutbox:{"purchase:APO48301":{key:"purchase:APO48301",status:"sent",params:{transaction_id:"APO48301",currency:"AUD",value:100,shipping:0,tax:10}}}};
+  const object={id:"in_balance",currency:"aud",amount_paid:24200,total_tax_amounts:[{amount:2200}],lines:{data:[
+    {amount_excluding_tax:20000,description:"AURA product"},
+    {amount_excluding_tax:2000,description:"Shipping · test",metadata:{aura_line_kind:"shipping"}}
+  ]},metadata:{aura_order_number:"APO48301"}};
+  const event={id:"evt_balance",type:"invoice.paid",created:1_787_635_300,data:{object}};
+  assert.deepEqual(balanceCommerceAmounts(object,order,state.analyticsOutbox["purchase:APO48301"].params),{itemValueMinor:10000,shippingMinor:2000,taxMinor:1200,currency:"aud"});
+  assert.equal(enqueueStripeAnalytics(state,event,catalog),true);
+  assert.equal(enqueueStripeAnalytics(state,event,catalog),false);
+  const entry=state.analyticsOutbox["balance_payment:in_balance"];
+  assert.equal(entry.eventName,"balance_payment");
+  assert.equal(entry.params.transaction_id,"APO48301-BALANCE");
+  assert.deepEqual({value:entry.params.value,shipping:entry.params.shipping,tax:entry.params.tax},{value:100,shipping:20,tax:12});
+  assert.equal(Object.keys(state.analyticsOutbox).filter(key=>key.startsWith("purchase:")).length,1);
+});
+
+test("balance amount normaliser rejects missing tax evidence and legacy gross purchase params",()=>{
+  const order={currency:"aud",balancePaidAmount:13200};
+  const invoice={currency:"aud",total_tax_amounts:[{amount:2200}],lines:{data:[{amount_excluding_tax:20000,description:"AURA product"},{amount_excluding_tax:2000,description:"Shipping · test"}]}};
+  assert.throws(()=>balanceCommerceAmounts({...invoice,total_tax_amounts:undefined},order,{value:100,shipping:0,tax:10}),/authoritative tax/i);
+  assert.throws(()=>balanceCommerceAmounts(invoice,order,{value:110,shipping:0}),/lacks separated/i);
+});
+
+test("legacy queued analytics entries are delivered unchanged",()=>{
+  const legacy={clientId:"123.456",timestampMicros:1,consent:{analytics:true,marketing:false},eventName:"purchase",params:{transaction_id:"APO40000",currency:"AUD",value:132,shipping:22}};
+  assert.deepEqual(measurementPayload(legacy).events[0].params,{transaction_id:"APO40000",currency:"AUD",value:132,shipping:22,engagement_time_msec:1});
 });
 
 // Local fixtures only: these tests never send events to Stripe or GA4.
 function internalAnalyticsFixture(last={},consent={analytics:true,marketing:false}){
-  const order={orderNumber:"APO49001",paymentIntentId:"pi_audit",amountTotal:37450,currency:"aud",shippingAmount:9900,balancePaymentStatus:"paid",items:[{sku:"AP734955",quantity:1}],attribution:{consent,last,analyticsClientId:"123456789.987654321",analyticsSessionId:"1787635200"}};
+  const order={orderNumber:"APO49001",paymentIntentId:"pi_audit",amountTotal:37450,currency:"aud",shippingAmount:9900,balancePaymentStatus:"paid",balancePaidAmount:9900,items:[{sku:"AP734955",quantity:1}],attribution:{consent,last,analyticsClientId:"123456789.987654321",analyticsSessionId:"1787635200"}};
   return {orders:{cs_audit:order},abandonedCheckouts:{cs_audit:structuredClone(order)},analyticsOutbox:{}};
 }
 const internalAnalyticsEvents=[
@@ -549,7 +605,7 @@ const internalAnalyticsEvents=[
   ["invoice.payment_failed","balance_payment_failed",473.5]
 ];
 function internalAnalyticsEvent(type){
-  return {id:`evt_audit_${type}`,type,created:1_787_635_200,data:{object:{id:"cs_audit",payment_status:"paid",payment_intent:"pi_audit",amount_refunded:10000,refunded:false,amount_paid:47350,amount_due:47350,currency:"aud",metadata:{aura_order_number:"APO49001"}}}};
+  return {id:`evt_audit_${type}`,type,created:1_787_635_200,data:{object:{id:"cs_audit",payment_status:"paid",payment_intent:"pi_audit",amount_total:37450,amount_refunded:10000,refunded:false,amount_paid:47350,amount_due:47350,currency:"aud",total_tax_amounts:[],lines:{data:[{amount_excluding_tax:37450,description:"AURA product"},{amount_excluding_tax:9900,description:"Shipping · test",metadata:{aura_line_kind:"shipping"}}]},metadata:{aura_order_number:"APO49001"}}}};
 }
 for(const marker of [{source:"internal_test"},{source:"google",campaign:"aura_controlled_test"}]){
   for(const [type] of internalAnalyticsEvents){
@@ -562,10 +618,13 @@ for(const marker of [{source:"internal_test"},{source:"google",campaign:"aura_co
 }
 test("normal, unknown and near-match campaigns are not classified as internal",()=>{
   for(const last of [{},{source:"google",campaign:"launch"},{source:"internal_test_customer"},{campaign:"aura_controlled_test_sale"},{campaign:"purchase_verification_20260830"}]){
-    for(const [type] of internalAnalyticsEvents){
+    for(const [type,eventName] of internalAnalyticsEvents){
       const state=internalAnalyticsFixture(last);
-      assert.equal(enqueueStripeAnalytics(state,internalAnalyticsEvent(type),catalog),true);
-      assert.equal(Object.hasOwn(measurementPayload(Object.values(state.analyticsOutbox)[0]).events[0].params,"traffic_type"),false);
+      if(type==="invoice.paid")state.analyticsOutbox["purchase:APO49001"]={eventName:"purchase",params:{value:374.5,shipping:0,tax:0}};
+      const options=type.startsWith("checkout.session.")?{stripeLineItems:checkoutLines(37450)}:{};
+      assert.equal(enqueueStripeAnalytics(state,internalAnalyticsEvent(type),catalog,options),true);
+      const entry=Object.values(state.analyticsOutbox).find(item=>item.eventName===eventName);
+      assert.equal(Object.hasOwn(measurementPayload(entry).events[0].params,"traffic_type"),false);
     }
   }
 });
@@ -587,8 +646,9 @@ test("marketing-consented purchase is queued once even when analytics consent is
   const state={events:{},orders:{},checkoutRequests:{request_marketing:{orderNumber:"APO48229",attribution}},analyticsOutbox:{}};
   const event={id:"evt_marketing_purchase",type:"checkout.session.completed",created:1_787_635_200,data:{object:{id:"cs_test_marketing_purchase",customer:"cus_test",payment_status:"paid",payment_intent:"pi_test_marketing_purchase",amount_total:37450,currency:"aud",metadata:{aura_items:"AP734955:1",aura_order_number:"APO48229",aura_tracking_token:"secure_tracking_token_48229",aura_order_mode:"preorder",aura_payment_stage:"initial_50_percent"}}}};
   assert.equal(applyStripeEvent(state,event),true);
-  assert.equal(enqueueStripeAnalytics(state,event,catalog),true);
-  assert.equal(enqueueStripeAnalytics(state,event,catalog),false);
+  const stripeLineItems=checkoutLines(37450);
+  assert.equal(enqueueStripeAnalytics(state,event,catalog,{stripeLineItems}),true);
+  assert.equal(enqueueStripeAnalytics(state,event,catalog,{stripeLineItems}),false);
   const payload=measurementPayload(state.analyticsOutbox["purchase:APO48229"]);
   assert.equal(payload.events[0].name,"purchase");
   assert.equal(payload.events[0].params.transaction_id,"APO48229");
@@ -610,7 +670,7 @@ test("enhanced conversion preparation hashes customer data only when enabled and
   const state={events:{},orders:{},checkoutRequests:{request_456:{orderNumber:"APO48220",attribution}},analyticsOutbox:{}};
   const event={id:"evt_enhanced",type:"checkout.session.completed",created:1_787_635_200,data:{object:{id:"cs_test_enhanced",customer:"cus_test",payment_status:"paid",payment_intent:"pi_test_enhanced",amount_total:37450,currency:"aud",customer_details:{email:"max@example.com",phone:"+61400000000"},metadata:{aura_items:"AP734955:1",aura_order_number:"APO48220",aura_tracking_token:"secure_tracking_token_48220",aura_order_mode:"preorder",aura_payment_stage:"initial_50_percent"}}}};
   applyStripeEvent(state,event);
-  enqueueStripeAnalytics(state,event,catalog,{enhancedConversionsEnabled:true});
+  enqueueStripeAnalytics(state,event,catalog,{enhancedConversionsEnabled:true,stripeLineItems:checkoutLines(37450)});
   const payload=measurementPayload(state.analyticsOutbox["purchase:APO48220"]);
   assert.match(payload.user_data.sha256_email_address,/^[a-f0-9]{64}$/);
   assert.equal(payload.user_id,"cus_test");

@@ -338,6 +338,7 @@ export function buildCheckoutParams({items,priceBySku,siteUrl,returnPath,shippin
     const prefix=`line_items[${items.length}]`;
     params.set(`${prefix}[price_data][currency]`,"aud");
     params.set(`${prefix}[price_data][product_data][name]`,`Shipping · ${shipping.label}`);
+    params.set(`${prefix}[price_data][product_data][metadata][aura_line_kind]`,"shipping");
     params.set(`${prefix}[price_data][unit_amount]`,String(shipping.amount));
     params.set(`${prefix}[quantity]`,"1");
     if(orderInvoicesEnabled&&metadata.aura_payment_stage==="paid_in_full")params.set(`${prefix}[tax_rates][0]`,gstTaxRateId);

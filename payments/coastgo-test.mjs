@@ -102,11 +102,12 @@ test('free standard shipping is recorded once on a genuine paid webhook payload,
   assert.equal(params.get('metadata[aura_shipping_promotion_id]'),offer.shippingPromotionId);
   const metadata=Object.fromEntries([...params].filter(([k])=>k.startsWith('metadata[')).map(([k,v])=>[k.slice(9,-1),v]));
   const event={id:'evt_offline_promo',type:'checkout.session.completed',created:cutoff/1000,data:{object:{id:'cs_offline_promo',metadata,payment_status:'paid',amount_total:59800,currency:'aud'}}};
-  const state={};applyStripeEvent(state,event);enqueueStripeAnalytics(state,event,catalog);
+  const stripeLineItems={data:[{description:'CoastGo',amount_total:59800,quantity:2,taxes:[]}]};
+  const state={};applyStripeEvent(state,event);enqueueStripeAnalytics(state,event,catalog,{stripeLineItems});
   const purchase=state.analyticsOutbox['purchase:APO00000'];
   assert.equal(purchase.params.shipping,0);assert.equal(purchase.params.promotion_id,offer.shippingPromotionId);
   assert.equal(purchase.params.items[0].price,299);assert.equal(purchase.params.value,598);
-  assert.equal(enqueueStripeAnalytics(state,event,catalog),false);
+  assert.equal(enqueueStripeAnalytics(state,event,catalog,{stripeLineItems}),false);
 });
 
 test('full-payment CoastGo confirmation and tracking never promise one-day dispatch or a balance',()=>{
