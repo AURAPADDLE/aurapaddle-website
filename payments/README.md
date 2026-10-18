@@ -27,6 +27,7 @@ This folder contains the server-side portion of the Stripe Checkout review build
 The server also exposes:
 
 - `GET /api/health`
+- `GET /api/admin/analytics-issues` (Bearer `ADMIN_API_TOKEN` required)
 - `POST /api/checkout`
 - `GET /api/checkout-session?id=...`
 - `POST /api/stripe-webhook`
@@ -67,6 +68,7 @@ The server also exposes:
 - Attribution expires after 90 days, is attached to the reserved APO order, and is copied into Stripe metadata so the webhook can reconcile the order without trusting browser-supplied prices.
 - Stripe webhooks are authoritative for `purchase`, `refund`, remaining-balance payment and balance failure/void events. The browser success page emits only `payment_confirmation_view` to avoid duplicate purchases.
 - Server events are queued in the durable order store before delivery to GA4 and retried with backoff. `/api/health` reports whether GA4 is configured and the pending/failed outbox counts without exposing the API secret.
+- Commerce amount validation failures are fail-closed and listed by the protected analytics-issues endpoint; `/api/health` exposes only their aggregate count. Stripe API lookup and amount-validation failures return a failed webhook response after the idempotent order update is safely stored, allowing Stripe's webhook retry schedule to fill the analytics outbox later. A persistent issue remains visible and requires review before Stripe exhausts retries; an authorised event resend can be used after its cause is fixed.
 - Analytics or advertising-measurement consent preserves a first-party GA client/session reference for the verified payment event. If the Google tag is blocked after consent, checkout creates an anonymous fallback reference so the paid order is not silently dropped.
 - Replayed Stripe webhooks repair a missing analytics outbox entry while the `purchase:{APO order}` key prevents duplicate purchase delivery.
 - Configure `GA4_MEASUREMENT_ID`, `GA4_API_SECRET` and `GA4_SERVER_EVENTS_ENABLED=true` in the host secret manager. Keep `GA4_VALIDATION_MODE=false` in production.

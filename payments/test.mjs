@@ -546,7 +546,13 @@ test("GA4 commerce amount normalisers handle zero shipping and reject missing ta
   assert.deepEqual(checkoutCommerceAmounts({amount_total:11000,currency:"aud",total_details:{amount_tax:1000}},checkoutLines(11000,1000)),{itemValueMinor:10000,shippingMinor:0,taxMinor:1000,currency:"aud",itemLineValues:[{valueMinor:10000,quantity:1}]});
   assert.throws(()=>checkoutCommerceAmounts({amount_total:11000,currency:"aud"},{data:[{amount_total:11000,quantity:1}]}),/tax|reconcile/i);
   assert.throws(()=>checkoutCommerceAmounts({amount_total:11000,currency:"aud",total_details:{amount_tax:999}},checkoutLines(11000,1000)),/tax totals do not reconcile/i);
+  assert.throws(()=>checkoutCommerceAmounts({amount_total:500,currency:"aud"},checkoutLines(500,600)),/tax exceeds/i);
   assert.throws(()=>checkoutCommerceAmounts({amount_total:11000,currency:"usd"},checkoutLines(11000)),/AUD/);
+});
+
+test("native Stripe shipping cost is separated once and reconciled with aggregate tax",()=>{
+  const result=checkoutCommerceAmounts({amount_total:13200,currency:"aud",total_details:{amount_tax:1200,amount_shipping:2200}},checkoutLines(11000,1000));
+  assert.deepEqual(result,{itemValueMinor:10000,shippingMinor:2000,taxMinor:1200,currency:"aud",itemLineValues:[{valueMinor:10000,quantity:1}]});
 });
 
 test("preorder deposit purchase reports only the paid deposit components",()=>{
@@ -558,6 +564,19 @@ test("preorder deposit purchase reports only the paid deposit components",()=>{
   const params=measurementPayload(state.analyticsOutbox["purchase:APO48300"]).events[0].params;
   assert.deepEqual({value:params.value,shipping:params.shipping,tax:params.tax},{value:340.45,shipping:0,tax:34.05});
   assert.equal(params.value+params.shipping+params.tax,374.5);
+});
+
+test("completed and async success webhooks share one purchase dedupe key",()=>{
+  const attribution={version:1,consent:{analytics:true,marketing:false},analyticsClientId:"123456789.987654321"};
+  const state={orders:{},checkoutRequests:{dedupe_request:{orderNumber:"APO48302",attribution}},analyticsOutbox:{}};
+  const object={id:"cs_dedupe",payment_status:"paid",amount_total:37450,currency:"aud",metadata:{aura_items:"AP734955:1",aura_order_number:"APO48302",aura_order_mode:"preorder",aura_payment_stage:"initial_50_percent"}};
+  const completed={id:"evt_completed",type:"checkout.session.completed",created:1_787_635_200,data:{object}};
+  const asyncSucceeded={id:"evt_async",type:"checkout.session.async_payment_succeeded",created:1_787_635_201,data:{object}};
+  applyStripeEvent(state,completed);applyStripeEvent(state,asyncSucceeded);
+  const stripeLineItems=checkoutLines(37450);
+  assert.equal(enqueueStripeAnalytics(state,completed,catalog,{stripeLineItems}),true);
+  assert.equal(enqueueStripeAnalytics(state,asyncSucceeded,catalog,{stripeLineItems}),false);
+  assert.deepEqual(Object.keys(state.analyticsOutbox),["purchase:APO48302"]);
 });
 
 test("balance invoice emits one custom event for only the newly paid net product, shipping and tax",()=>{
@@ -582,6 +601,7 @@ test("balance amount normaliser rejects missing tax evidence and legacy gross pu
   const order={currency:"aud",balancePaidAmount:13200};
   const invoice={currency:"aud",total_tax_amounts:[{amount:2200}],lines:{data:[{amount_excluding_tax:20000,description:"AURA product"},{amount_excluding_tax:2000,description:"Shipping · test"}]}};
   assert.throws(()=>balanceCommerceAmounts({...invoice,total_tax_amounts:undefined},order,{value:100,shipping:0,tax:10}),/authoritative tax/i);
+  assert.throws(()=>balanceCommerceAmounts({...invoice,lines:{...invoice.lines,has_more:true}},order,{value:100,shipping:0,tax:10}),/fetched completely/i);
   assert.throws(()=>balanceCommerceAmounts(invoice,order,{value:110,shipping:0}),/lacks separated/i);
 });
 

@@ -53,15 +53,23 @@ export function checkoutCommerceAmounts(object={},stripeLineItems=[]){
   const lines=lineList(stripeLineItems),amountTotal=integer(object.amount_total,"Stripe Checkout total"),currency=String(object.currency||"").toLowerCase();
   if(currency!=="aud")throw new Error("GA4 commerce currency must be AUD.");
   if(!lines.length)throw new Error("Stripe Checkout line items are required for GA4 commerce amounts.");
-  let itemValueMinor=0,shippingMinor=0,taxMinor=0;const itemLineValues=[];
+  let itemValueMinor=0,shippingMinor=0,lineTaxMinor=0;const itemLineValues=[];
   for(const line of lines){
     const gross=lineGross(line),tax=lineTaxes(line),net=gross-tax;
     if(net<0)throw new Error("Stripe line tax exceeds its total.");
-    taxMinor+=tax;
+    lineTaxMinor+=tax;
     if(lineKind(line)==="shipping")shippingMinor+=net;
     else{itemValueMinor+=net;itemLineValues.push({valueMinor:net,quantity:integer(line.quantity||1,"Stripe line quantity")})}
   }
-  if(object.total_details?.amount_tax!==undefined&&integer(object.total_details.amount_tax,"Stripe Checkout tax total")!==taxMinor)throw new Error("Stripe Checkout tax totals do not reconcile.");
+  let taxMinor=lineTaxMinor;
+  const nativeShippingGross=object.total_details?.amount_shipping===undefined?0:integer(object.total_details.amount_shipping,"Stripe Checkout native shipping total");
+  if(nativeShippingGross){
+    if(object.total_details?.amount_tax===undefined)throw new Error("Stripe Checkout tax total is required for native shipping.");
+    taxMinor=integer(object.total_details.amount_tax,"Stripe Checkout tax total");
+    const nativeShippingTax=taxMinor-lineTaxMinor;
+    if(nativeShippingTax<0||nativeShippingTax>nativeShippingGross)throw new Error("Stripe Checkout native shipping tax does not reconcile.");
+    shippingMinor+=nativeShippingGross-nativeShippingTax;
+  }else if(object.total_details?.amount_tax!==undefined&&integer(object.total_details.amount_tax,"Stripe Checkout tax total")!==taxMinor)throw new Error("Stripe Checkout tax totals do not reconcile.");
   if(itemValueMinor+shippingMinor+taxMinor!==amountTotal)throw new Error("Stripe Checkout commerce amounts do not reconcile.");
   return {itemValueMinor,shippingMinor,taxMinor,currency,itemLineValues};
 }
@@ -69,6 +77,7 @@ export function checkoutCommerceAmounts(object={},stripeLineItems=[]){
 export function balanceCommerceAmounts(object={},order={},purchaseParams={}){
   const amountPaid=integer(order.balancePaidAmount,"balance payment amount"),currency=String(object.currency||order.currency||"").toLowerCase();
   if(currency!=="aud")throw new Error("GA4 commerce currency must be AUD.");
+  if(object.lines?.has_more===true)throw new Error("Stripe invoice lines must be fetched completely for GA4 commerce amounts.");
   const lines=lineList(object.lines),totalTax=object.total_tax_amounts===undefined?null:lineList(object.total_tax_amounts).reduce((sum,tax)=>sum+integer(tax?.amount,"Stripe invoice tax amount"),0);
   if(!lines.length||totalTax===null)throw new Error("Stripe invoice lines and authoritative tax totals are required for GA4 balance amounts.");
   let fullItemNet=0,shippingMinor=0;

@@ -15,6 +15,9 @@ test('authenticated inventory and order workflow is persistent, private and does
  try{
   for(let n=0;n<100;n++){if(server.exitCode!==null)throw Error(diagnostics||'Local server exited.');try{if((await fetch(`${base}/api/health`)).ok)break}catch{}await new Promise(r=>setTimeout(r,50))}
   const request=(url,body,authenticated=true)=>fetch(base+url,{method:body?'POST':'GET',headers:{'Content-Type':'application/json',...(authenticated?{Authorization:`Bearer ${token}`}:{})},...(body?{body:JSON.stringify(body)}:{})});
+  const health=await (await request('/api/health',null,false)).json();assert.equal(health.analytics.amountIssues,0);
+  assert.equal((await request('/api/admin/analytics-issues',null,false)).status,401);
+  assert.deepEqual(await (await request('/api/admin/analytics-issues')).json(),{items:[]});
   assert.equal((await request('/api/admin/inventory',null,false)).status,401);
   assert.equal((await request('/api/admin/inventory',{action:'initialize'},false)).status,401);
   assert.equal((await request('/payments/inventory.mjs')).status,404);
