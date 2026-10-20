@@ -4,7 +4,7 @@
   "type": "module",
   "scripts": {
     "start": "node server.mjs",
-    "test": "node --test test.mjs coastgo-test.mjs reviews.test.mjs inventory.test.mjs inventory-integration.test.mjs cookie-consent.test.mjs attribution-audit.test.mjs meta-pixel.test.mjs geo-region.test.mjs ../scripts/checkout-review.test.mjs",
+    "test": "node --test test.mjs coastgo-test.mjs reviews.test.mjs inventory.test.mjs inventory-integration.test.mjs cookie-consent.test.mjs attribution-audit.test.mjs meta-pixel.test.mjs geo-region.test.mjs ../scripts/checkout-review.test.mjs ../scripts/preorder-valid-from.test.mjs",
     "geo:update": "node ../scripts/update-dbip-country.mjs"
   },
   "engines": {

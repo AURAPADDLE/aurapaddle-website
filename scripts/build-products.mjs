@@ -46,6 +46,16 @@ const companyAllocationByCampaign={
   "meridian-launch-batch":5,
   "wayfinder-launch-batch":5
 };
+const offerValidFromByCampaign=new Map([
+  ["paddle-launch-batch-01","2026-10-01"],
+  ["inflatable-hydrofoil-launch-batch","2026-10-01"],
+  ["hydrofoil-set-launch-batch","2026-10-01"],
+  ["vela-wakeboard-launch-batch","2026-10-01"],
+  ["gannet-launch-batch","2026-10-01"],
+  ["current-launch-batch","2026-10-01"],
+  ["meridian-launch-batch","2026-10-01"],
+  ["wayfinder-launch-batch","2026-10-01"]
+]);
 
 function campaignFor(product){
   if(sharedPaddleSlugs.has(product.slug))return {...preorderTerms,id:"paddle-launch-batch-01",name:"Paddle Board Launch Batch 01",target:50,scopeLabel:"Shared Paddle batch",title:"50 boards unlock the combined Paddle Board batch.",description:"Paid pre-orders for Yoga Cruiser pre-order colours, Angler Fishing and Touring Performance are combined. Production starts when this shared batch reaches 50 boards, regardless of the selected model or colour."};
@@ -380,7 +390,14 @@ function schemaFor(product,variants){
     if(images.length)node.image=images.map(src=>src.replace("../","https://www.aurapaddle.com/"));
     const sizeSpec=sizeSpecFor(product,v.size);
     if(sizeSpec)node.additionalProperty=[{"@type":"PropertyValue","name":"Width","value":sizeSpec.width},{"@type":"PropertyValue","name":"Thickness","value":sizeSpec.thickness},{"@type":"PropertyValue","name":"Volume","value":sizeSpec.volume}];
-    if(v.retailAUD){node.offers={"@type":"Offer","price":sellingPrice(v),"priceCurrency":"AUD","availability":v.available?"https://schema.org/InStock":"https://schema.org/PreOrder","url":node.url,"seller":{"@id":"https://www.aurapaddle.com/#organization"},hasMerchantReturnPolicy:merchantPolicy};if(!v.available&&v.preorder.deadlineISO)node.offers.priceValidUntil=v.preorder.deadlineISO}
+    if(v.retailAUD){
+      node.offers={"@type":"Offer","price":sellingPrice(v),"priceCurrency":"AUD","availability":v.available?"https://schema.org/InStock":"https://schema.org/PreOrder","url":node.url,"seller":{"@id":"https://www.aurapaddle.com/#organization"},hasMerchantReturnPolicy:merchantPolicy};
+      if(!v.available){
+        const validFrom=offerValidFromByCampaign.get(v.preorder.id);
+        if(validFrom)node.offers.validFrom=validFrom;
+        if(v.preorder.deadlineISO)node.offers.priceValidUntil=v.preorder.deadlineISO;
+      }
+    }
     return node;
   });
   return {"@context":"https://schema.org","@graph":[{"@type":"Organization","@id":"https://www.aurapaddle.com/#organization","name":"AURA PADDLE","legalName":"Aura Paddle Pty Ltd","url":"https://www.aurapaddle.com/","email":"admin@aurapaddle.com","identifier":[{"@type":"PropertyValue","propertyID":"ABN","value":"46 697 865 759"},{"@type":"PropertyValue","propertyID":"ACN","value":"697 865 759"}],"hasMerchantReturnPolicy":merchantPolicy},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Home","item":"https://www.aurapaddle.com/"},{"@type":"ListItem","position":2,"name":"Shop","item":"https://www.aurapaddle.com/shop/"},{"@type":"ListItem","position":3,"name":product.short,"item":canonical}]},{"@type":"ProductGroup","@id":`${canonical}#product`,"name":product.name,"description":product.description,"url":canonical,"brand":{"@type":"Brand","name":"AURA PADDLE"},"productGroupID":`AURA-${product.slug.toUpperCase()}`,"variesBy":["https://schema.org/size","https://schema.org/color"],"hasVariant":hasVariant}]};
