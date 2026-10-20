@@ -6,6 +6,14 @@ import vm from "node:vm";
 const fullSource=fs.readFileSync(new URL("../cookie-consent.js",import.meta.url),"utf8");
 const source=`${fullSource.slice(0,fullSource.indexOf('  const banner=document.createElement("section");'))}})();`;
 
+function privacyFixture({savedConsent,session=new Map(),metaChoice="default_au"}={}){
+  const storage=new Map([["aura-attribution-v1",JSON.stringify({metaChoice})]]);
+  if(savedConsent!==undefined)storage.set("aura-cookie-consent-v1",JSON.stringify({necessary:true,analytics:false,marketing:savedConsent,updatedAt:"2026-10-20T00:00:00.000Z"}));
+  const window={dataLayer:[],AURA_OFFLINE_REVIEW:true};
+  const context={window,document:{referrer:""},location:{href:"https://www.aurapaddle.com/",hostname:"www.aurapaddle.com",pathname:"/"},localStorage:{getItem:key=>storage.get(key)??null,setItem:(key,value)=>storage.set(key,String(value)),removeItem:key=>storage.delete(key)},sessionStorage:{getItem:key=>session.get(key)??null,setItem:(key,value)=>session.set(key,String(value)),removeItem:key=>session.delete(key)},URL,Date,JSON,Promise,clearTimeout,setTimeout};
+  vm.runInNewContext(source,context);return {window,storage,session};
+}
+
 function browserFixture({consent={analytics:true,marketing:true},loadDelayMs=30,clientId="123456789.987654321",sessionId="1787635200",debug=false}={}){
   const storage=new Map([["aura-cookie-consent-v1",JSON.stringify({necessary:true,...consent,updatedAt:"2026-10-12T00:00:00.000Z"})]]);
   const dataLayer=[];
@@ -128,4 +136,33 @@ test("ordinary browser events do not receive an internal traffic label",async()=
   const event=fixture.gtagCalls.find(args=>args[0]==="event"&&args[1]==="checkout_submit");
   assert.equal(Object.hasOwn(config[2],"traffic_type"),false);
   assert.equal(Object.hasOwn(event[2],"traffic_type"),false);
+});
+
+test("unoperated privacy notice remains visible and has no automatic dismissal timer",()=>{
+  const fixture=privacyFixture();assert.equal(fixture.window.AURAPrivacyNoticeState.shouldShow(),true);assert.equal(fixture.window.AURAPrivacyNoticeState.dismissed(),false);
+  assert.doesNotMatch(fullSource,/setTimeout\([^)]*(?:banner|cookie-consent|dismiss)/);
+});
+
+test("dismiss action records only a tab-session UI state and changes no privacy choice",()=>{
+  const fixture=privacyFixture(),before=new Map(fixture.storage);fixture.window.auraConsent={necessary:true,analytics:false,marketing:false};
+  fixture.window.AURAPrivacyNoticeState.dismiss();
+  assert.equal(fixture.window.AURAPrivacyNoticeState.shouldShow(),false);assert.deepEqual([...fixture.storage],[...before]);assert.deepEqual(fixture.window.auraConsent,{necessary:true,analytics:false,marketing:false});
+  assert.equal(JSON.parse(fixture.storage.get("aura-attribution-v1")).metaChoice,"default_au");
+  assert.match(fullSource,/data-cookie-dismiss aria-label="Dismiss privacy notice">×<\/button>/);assert.match(fullSource,/data-cookie-dismiss[^]*dismissNotice\(\);banner\.classList\.remove\("is-visible"\)/);
+});
+
+test("footer privacy entry can reopen detailed settings after the notice is dismissed",()=>{
+  const fixture=privacyFixture();fixture.window.AURAPrivacyNoticeState.dismiss();
+  const home=fs.readFileSync(new URL("../index.html",import.meta.url),"utf8");
+  assert.match(home,/data-open-cookie-settings>Cookie settings<\/button>/);assert.match(fullSource,/data-open-cookie-settings[^]*openSettings\(\)/);assert.equal(fixture.window.AURAPrivacyNoticeState.dismissed(),true);assert.equal(fixture.storage.has("aura-cookie-consent-v1"),false);
+});
+
+test("dismissal follows the same browser tab across pages but not persistent storage",()=>{
+  const session=new Map(),first=privacyFixture({session});first.window.AURAPrivacyNoticeState.dismiss();const nextPage=privacyFixture({session});
+  assert.equal(nextPage.window.AURAPrivacyNoticeState.shouldShow(),false);assert.equal(nextPage.storage.has("aura-cookie-consent-v1"),false);assert.equal(session.get("aura-privacy-notice-dismissed-v1"),"1");
+});
+
+test("an existing marketing rejection remains rejected and shows no unsaved notice",()=>{
+  const fixture=privacyFixture({savedConsent:false});assert.equal(fixture.window.AURAPrivacyNoticeState.shouldShow(),false);assert.equal(fixture.window.AURAPrivacyNoticeState.dismissed(),false);
+  const choice=JSON.parse(fixture.storage.get("aura-cookie-consent-v1"));assert.equal(choice.analytics,false);assert.equal(choice.marketing,false);
 });

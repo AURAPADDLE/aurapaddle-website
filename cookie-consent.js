@@ -3,11 +3,17 @@
   const measurementId="G-0DJKT6VHVL";
   const defaults={necessary:true,analytics:false,marketing:false};
   const attributionKey="aura-attribution-v1";
+  const noticeDismissKey="aura-privacy-notice-dismissed-v1";
   const attributionMaxAge=90*24*60*60*1000;
   const debugMode=new URL(location.href).searchParams.get("aura_debug")==="1";
   const offlineReview=window.AURA_OFFLINE_REVIEW===true;
   const read=()=>{try{return {...defaults,...JSON.parse(localStorage.getItem(storageKey)||"null")}}catch{return {...defaults}}};
   const saved=()=>{try{return localStorage.getItem(storageKey)!==null}catch{return false}};
+  const noticeDismissed=()=>{try{return sessionStorage.getItem(noticeDismissKey)==="1"}catch{return false}};
+  const dismissNotice=()=>{try{sessionStorage.setItem(noticeDismissKey,"1")}catch{}};
+  const shouldShowNotice=()=>!saved()&&!noticeDismissed();
+  window.AURAPrivacyNoticeState={dismissed:noticeDismissed,dismiss:dismissNotice,shouldShow:shouldShowNotice};
+  const trustedAustralianDefault=()=>!saved()&&window.AURA_TRUSTED_REGION?.source==="trusted-server"&&String(window.AURA_TRUSTED_REGION.country||"").toUpperCase()==="AU";
   let tagRequested=false,tagReady,tagStatus="not_requested";
 
   const clean=(value,max=160)=>String(value||"").trim().replace(/[\u0000-\u001f\u007f]/g,"").slice(0,max);
@@ -122,7 +128,10 @@
   window.AURAAttribution={
     async snapshot(){
       const preferences=window.auraConsent||read(),current=await refreshAnalyticsIds(preferences);
-      return current?JSON.parse(JSON.stringify(current)):{version:1,consent:{analytics:false,marketing:false,updatedAt:preferences.updatedAt||new Date().toISOString()}};
+      const snapshot=current?JSON.parse(JSON.stringify(current)):{version:1,consent:{analytics:false,marketing:false,updatedAt:preferences.updatedAt||new Date().toISOString()}};
+      snapshot.metaMeasurement=preferences.marketing===true||window.auraMetaDefault===true;
+      snapshot.metaChoice=preferences.marketing===true?"explicit_allow":saved()?"explicit_deny":window.auraMetaDefault?"default_au":"none";
+      return snapshot;
     }
   };
   const updateGoogleConsent=preferences=>{
@@ -144,10 +153,15 @@
   };
   window.AURAAnalytics={
     event(name,parameters={}){
+      const measurementEvent={name:String(name),parameters};
+      window.AURAMeasurementQueue=window.AURAMeasurementQueue||[];
+      window.AURAMeasurementQueue.push(measurementEvent);
+      if(typeof CustomEvent==="function")window.dispatchEvent(new CustomEvent("aura:measurement-event",{detail:measurementEvent}));
       return sendAnalyticsEvent(name,parameters);
     }
   };
   const apply=preferences=>{
+    window.auraMetaDefault=trustedAustralianDefault();
     window.auraConsent={...defaults,...preferences};
     updateGoogleConsent(window.auraConsent);
     captureAttribution(window.auraConsent);
@@ -162,22 +176,50 @@
   const banner=document.createElement("section");
   banner.className="cookie-consent";
   banner.setAttribute("aria-label","Cookie preferences");
-  banner.innerHTML=`<div class="cookie-consent__inner"><div><h2>Your privacy choices</h2><p>We use necessary browser storage for features such as your cart. Optional analytics and marketing technologies stay off unless you choose them. <a href="/policies/#privacy">Privacy Policy</a></p></div><div class="cookie-consent__actions"><button class="cookie-consent__secondary" data-cookie-settings>Settings</button><button class="cookie-consent__secondary" data-cookie-reject>Necessary only</button><button class="cookie-consent__primary" data-cookie-accept>Accept optional</button></div></div>`;
+  banner.innerHTML=`<button class="cookie-consent__dismiss" type="button" data-cookie-dismiss aria-label="Dismiss privacy notice">×</button><div class="cookie-consent__inner"><div><h2>Your privacy choices</h2><p>We use necessary browser storage for features such as your cart. Optional analytics and marketing cookies and storage remain denied unless your saved choice allows them. Google Analytics may still receive limited cookieless measurement requests while consent is denied. <a href="/policies/#privacy">Privacy Policy</a></p></div><div class="cookie-consent__actions"><button class="cookie-consent__secondary" data-cookie-settings>Settings</button><button class="cookie-consent__secondary" data-cookie-reject>Necessary only</button><button class="cookie-consent__primary" data-cookie-accept>Accept optional</button></div></div>`;
 
   const dialog=document.createElement("dialog");
   dialog.className="cookie-settings";
-  dialog.innerHTML=`<div class="cookie-settings__body"><div class="cookie-settings__top"><h2>Privacy settings</h2><button class="cookie-settings__close" type="button" data-cookie-dialog-cancel aria-label="Close">×</button></div><p>Choose whether AURA PADDLE may use optional analytics and advertising technologies. These remain off unless you allow them.</p><label class="cookie-option"><span><strong>Necessary</strong><span>Required for core features and to remember your privacy choice.</span></span><input type="checkbox" checked disabled></label><label class="cookie-option"><span><strong>Analytics</strong><span>Helps us understand aggregate visits, purchases, referral sources and website performance.</span></span><input id="cookieAnalytics" type="checkbox"></label><label class="cookie-option"><span><strong>Marketing</strong><span>Supports advertising campaign measurement, including approved ad-click identifiers.</span></span><input id="cookieMarketing" type="checkbox"></label><div class="cookie-settings__actions"><button class="cookie-consent__secondary" type="button" data-cookie-dialog-cancel>Cancel</button><button class="save" type="button" data-cookie-dialog-save>Save choices</button></div></div>`;
+  dialog.innerHTML=`<div class="cookie-settings__body"><div class="cookie-settings__top"><h2>Privacy settings</h2><button class="cookie-settings__close" type="button" data-cookie-dialog-cancel aria-label="Close">×</button></div><p>Choose separate permissions for analytics and advertising technologies.</p><label class="cookie-option"><span><strong>Necessary</strong><span>Required for core features and to remember your privacy choice.</span></span><input type="checkbox" checked disabled></label><label class="cookie-option"><span><strong>Analytics</strong><span>Allows analytics cookies and identifiers to measure visits, purchases, referral sources and site performance. Limited cookieless Google measurement may occur while denied.</span></span><input id="cookieAnalytics" type="checkbox"></label><label class="cookie-option"><span><strong>Marketing</strong><span>Allows advertising measurement, including Meta Pixel. Meta may receive IP address, browser, cookie and selected shopping-event data. We do not send payment-card details, contact fields or sensitive checkout URLs.</span></span><input id="cookieMarketing" type="checkbox"></label><div class="cookie-settings__actions"><button class="cookie-consent__secondary" type="button" data-cookie-dialog-cancel>Cancel</button><button class="save" type="button" data-cookie-dialog-save>Save choices</button></div></div>`;
   document.body.append(banner,dialog);
 
   const openSettings=()=>{const p=read();dialog.returnValue="";dialog.querySelector("#cookieAnalytics").checked=Boolean(p.analytics);dialog.querySelector("#cookieMarketing").checked=Boolean(p.marketing);dialog.showModal()};
   banner.querySelector("[data-cookie-settings]").addEventListener("click",openSettings);
+  banner.querySelector("[data-cookie-dismiss]").addEventListener("click",()=>{dismissNotice();banner.classList.remove("is-visible")});
   banner.querySelector("[data-cookie-reject]").addEventListener("click",()=>{save(defaults);banner.classList.remove("is-visible")});
   banner.querySelector("[data-cookie-accept]").addEventListener("click",()=>{save({necessary:true,analytics:true,marketing:true});banner.classList.remove("is-visible")});
   dialog.querySelectorAll("[data-cookie-dialog-cancel]").forEach(button=>button.addEventListener("click",()=>dialog.close("cancel")));
   dialog.querySelector("[data-cookie-dialog-save]").addEventListener("click",()=>dialog.close("save"));
   dialog.addEventListener("close",()=>{if(dialog.returnValue!=="save")return;save({necessary:true,analytics:dialog.querySelector("#cookieAnalytics").checked,marketing:dialog.querySelector("#cookieMarketing").checked});banner.classList.remove("is-visible")});
   document.addEventListener("click",event=>{if(event.target.closest("[data-open-cookie-settings]"))openSettings()});
+  const ensureDbIpAttribution=()=>{
+    if(document.querySelector("[data-dbip-attribution]"))return;
+    const note=document.createElement("span");note.dataset.dbipAttribution="";note.className="dbip-attribution";note.innerHTML='Location data: <a href="https://db-ip.com" rel="license noopener">IP Geolocation by DB-IP</a> · <a href="https://creativecommons.org/licenses/by/4.0/" rel="license noopener">CC BY 4.0</a>';
+    (document.querySelector("footer .footer-bottom")||document.querySelector("footer")||document.body).append(note);
+  };
+  const showNotice=()=>{
+    if(!shouldShowNotice())return;
+    if(trustedAustralianDefault()){
+      banner.querySelector("h2").textContent="Meta advertising measurement";
+      banner.querySelector("[data-cookie-settings]").textContent="Privacy settings";
+      banner.querySelector("p").innerHTML='Meta Pixel is running to measure selected shopping actions. It receives IP address, browser, cookie and event data, but not payment-card or form details. <a href="/policies/#privacy">Learn more</a>';
+      banner.querySelector("[data-cookie-accept]")?.remove();banner.querySelector("[data-cookie-reject]").textContent="Turn off marketing";
+    }
+    banner.classList.add("is-visible");
+  };
+  const resolveRegion=async()=>{
+    if(!shouldShowNotice()||trustedAustralianDefault()||offlineReview){showNotice();return}
+    try{
+      const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),1500);
+      const response=await fetch("/api/region",{credentials:"same-origin",cache:"no-store",signal:controller.signal});clearTimeout(timer);
+      const result=response.ok?await response.json():{};
+      if(result.source==="trusted-server"&&result.basis==="dbip-country-lite"&&["AU","OTHER"].includes(result.region))ensureDbIpAttribution();
+      if(result.region==="AU"&&result.source==="trusted-server"&&result.basis==="dbip-country-lite"){window.AURA_TRUSTED_REGION={country:"AU",source:"trusted-server"};apply(read())}
+    }catch{}
+    showNotice();
+  };
   apply(read());
+  if(!offlineReview){const metaScript=document.createElement("script");metaScript.src="/meta-pixel.js";metaScript.async=true;document.head.append(metaScript)}
   window.dispatchEvent(new CustomEvent("aura:analytics-ready"));
-  if(!saved())banner.classList.add("is-visible");
+  void resolveRegion();
 })();

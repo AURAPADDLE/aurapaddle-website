@@ -10,6 +10,8 @@ payments/node_modules/
 .DS_Store
 .playwright-cli/
 output/
+payments/geo-data/*.mmdb
+payments/geo-data/*.mmdb.gz
 
 # Agent/editor configuration generated during local provisioning.
 .agents/

@@ -150,6 +150,8 @@ export function normaliseAttribution(value){
   const updatedAt=Date.parse(consentRaw.updatedAt||"");
   if(Number.isFinite(updatedAt))consent.updatedAt=new Date(updatedAt).toISOString();
   const attribution={version:1,consent};
+  attribution.metaMeasurement=raw.metaMeasurement===true;
+  attribution.metaChoice=["explicit_allow","explicit_deny","default_au","none"].includes(raw.metaChoice)?raw.metaChoice:"none";
   attribution.first=normaliseAttributionTouch(raw.first,consent);
   attribution.last=normaliseAttributionTouch(raw.last,consent);
   if(consent.analytics||consent.marketing){
@@ -172,7 +174,7 @@ export function normaliseAttribution(value){
   return attribution;
 }
 
-export function reserveCheckoutIdentity(state,{requestId,attribution,customerEmail,items=[],now=Math.floor(Date.now()/1000),randomInt=crypto.randomInt,randomBytes=crypto.randomBytes}={}){
+export function reserveCheckoutIdentity(state,{requestId,attribution,customerEmail,items=[],metaCheckoutBindingHash="",now=Math.floor(Date.now()/1000),randomInt=crypto.randomInt,randomBytes=crypto.randomBytes}={}){
   if(!/^[a-zA-Z0-9_-]{8,80}$/.test(requestId||""))throw new Error("Invalid checkout request ID.");
   state.orders??={};state.reservations??={};state.checkoutRequests??={};
   for(const [key,entry] of Object.entries(state.checkoutRequests))if(now-Number(entry?.reservedAt||0)>86400)delete state.checkoutRequests[key];
@@ -183,6 +185,7 @@ export function reserveCheckoutIdentity(state,{requestId,attribution,customerEma
     if(!existing.attribution&&attribution)existing.attribution=normaliseAttribution(attribution);
     const email=normaliseRecoveryEmail(customerEmail);
     if(email)existing.customerEmail=email;
+    if(/^[a-f0-9]{64}$/.test(metaCheckoutBindingHash))existing.metaCheckoutBindingHash=metaCheckoutBindingHash;
     reserveInventory(state,existing,items,now);
     return {orderNumber:existing.orderNumber,trackingToken:existing.trackingToken,integrationIdentifier:existing.integrationIdentifier};
   }
@@ -206,6 +209,7 @@ export function reserveCheckoutIdentity(state,{requestId,attribution,customerEma
   const trackingToken=randomBytes(24).toString("base64url");
   const suffix=randomBytes(8).toString("hex").slice(0,8).replace(/[0-9]/g,char=>"abcdefghij"[Number(char)]);
   const identity={orderNumber,trackingToken,integrationIdentifier:`aura_cart_${suffix}`,reservedAt:now,stockItems,attribution:normaliseAttribution(attribution),customerEmail:normaliseRecoveryEmail(customerEmail)};
+  if(/^[a-f0-9]{64}$/.test(metaCheckoutBindingHash))identity.metaCheckoutBindingHash=metaCheckoutBindingHash;
   identity.cartItems=items.map(item=>({sku:item.variant.sku,quantity:item.quantity}));
   reserveInventory(state,identity,items,now);
   state.reservations[orderNumber]=now;
@@ -277,7 +281,9 @@ function orderMetadata(items,shipping,orderNumber,trackingToken,attribution,reco
     aura_recovery_email_consent:String(recoveryEmailConsent===true),
     aura_attribution_version:"1",
     aura_consent_analytics:String(normalised.consent.analytics),
-    aura_consent_marketing:String(normalised.consent.marketing)
+    aura_consent_marketing:String(normalised.consent.marketing),
+    aura_meta_measurement:String(normalised.metaMeasurement),
+    aura_meta_choice:normalised.metaChoice
   };
   const optional={
     aura_attr_source:last.source,
@@ -417,7 +423,9 @@ function attributionFromMetadata(metadata={}){
     first:last,
     last,
     analyticsClientId:metadata.aura_ga_client_id||undefined,
-    analyticsSessionId:metadata.aura_ga_session_id||undefined
+    analyticsSessionId:metadata.aura_ga_session_id||undefined,
+    metaMeasurement:metadata.aura_meta_measurement==="true",
+    metaChoice:metadata.aura_meta_choice||"none"
   });
 }
 
@@ -723,6 +731,7 @@ export function applyStripeEvent(state,event){
       deliveryName,
       deliveryAddress,
       attribution,
+      metaCheckoutBindingHash:reservation?.metaCheckoutBindingHash||"",
       internalTest:lastAttribution.source==="internal_test"||lastAttribution.campaign==="aura_controlled_test",
       orderConfirmedAt:object.created||event.created,
       ...(metadata.aura_payment_stage==="paid_in_full"?{balancePaidAt:object.created||event.created,preparingForDispatchAt:object.created||event.created}:{}),

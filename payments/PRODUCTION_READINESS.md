@@ -4,6 +4,8 @@ Live payment activation is blocked until every item is complete:
 
 - Production container/backend is deployed with HTTPS and the managed PostgreSQL order store reports `storage: postgres` from `/api/health`.
 - `PUBLIC_SITE_URL=https://www.aurapaddle.com`.
+- Before setting `TRUST_RENDER_CF_CONNECTING_IP=true`, verify that the actual custom-domain request reaches this process only through the public Render web-service edge and that Render overwrites `CF-Connecting-IP`. Never use `X-Forwarded-For` for the country decision.
+- Provision the current verified DB-IP Country Lite MMDB during the build, confirm `/api/health` reports `geoRegion.database: ready`, retain the DB-IP/CC BY attribution links and replace the database before the manifest expiry. Missing, expired or invalid data must keep the Meta default off.
 - A live Stripe restricted key is stored in the host secret manager.
 - The production host uses `ALLOW_LIVE_PAYMENTS=true`, and startup/API checks confirm the configured key has an `rk_live_` prefix. Never store the key in this repository or in a browser bundle.
 - `STRIPE_WEBHOOK_SECRET` is the live endpoint signing secret.

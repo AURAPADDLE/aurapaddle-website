@@ -13,6 +13,8 @@ import {initializeInventory,inventoryMovement,inventoryView,publicAvailability,r
 import coastGoOffer from "../coastgo-offer.js";
 import {renderCoastGoPage,renderCoastGoFeed} from "./coastgo-content.mjs";
 import {adminReviewData,attachReviewEmail,ensureReviewState,moderateReview,publicReviewData,renderReviews,submitReview} from "./reviews.mjs";
+import {issueMetaPurchaseReceipt,redeemMetaPurchaseReceipt} from "./meta-purchase.mjs";
+import {createGeoResolver,renderClientIp} from "./geo-region.mjs";
 
 const here=path.dirname(fileURLToPath(import.meta.url));
 const siteDir=path.resolve(here,"..");
@@ -67,7 +69,9 @@ const stripeMap=allowLive
     ? {accountId:configuredStripeAccount,mode:"sandbox-inline",bySku:new Map()}
     : sandboxStripeMap;
 const store=createStateStore({databaseUrl,statePath});
+const geoResolver=await createGeoResolver();
 const reviewThrottle=new Map();
+const metaPurchaseThrottle=new Map();
 const mime={".html":"text/html; charset=utf-8",".js":"text/javascript; charset=utf-8",".mjs":"text/javascript; charset=utf-8",".css":"text/css; charset=utf-8",".json":"application/json; charset=utf-8",".png":"image/png",".jpg":"image/jpeg",".jpeg":"image/jpeg",".webp":"image/webp",".svg":"image/svg+xml",".txt":"text/plain; charset=utf-8",".xml":"application/xml; charset=utf-8"};
 
 function send(res,status,body,headers={}){
@@ -75,7 +79,10 @@ function send(res,status,body,headers={}){
   res.writeHead(status,{"Content-Type":typeof body==="string"?"text/plain; charset=utf-8":"application/json; charset=utf-8","Cache-Control":"no-store",...headers});res.end(payload);
 }
 function readBody(req,limit=1_000_000){return new Promise((resolve,reject)=>{const chunks=[];let size=0;req.on("data",chunk=>{size+=chunk.length;if(size>limit){reject(new Error("Request body is too large."));req.destroy();return}chunks.push(chunk)});req.on("end",()=>resolve(Buffer.concat(chunks)));req.on("error",reject)})}
-async function createOrderIdentity(requestId,attribution,customerEmail,items){return store.mutate(state=>reserveCheckoutIdentity(state,{requestId,attribution,customerEmail,items}))}
+async function createOrderIdentity(requestId,attribution,customerEmail,items,metaCheckoutBindingHash){return store.mutate(state=>reserveCheckoutIdentity(state,{requestId,attribution,customerEmail,items,metaCheckoutBindingHash}))}
+function cookieValue(req,name){const match=String(req.headers.cookie||"").split(";").map(value=>value.trim()).find(value=>value.startsWith(`${name}=`));return match?decodeURIComponent(match.slice(name.length+1)):""}
+function requestAddress(req){return process.env.RENDER?String(req.headers["x-forwarded-for"]||"").split(",")[0].trim()||String(req.socket.remoteAddress||"unknown"):String(req.socket.remoteAddress||"unknown")}
+function allowMetaPurchaseRequest(req){const address=requestAddress(req),now=Date.now(),recent=(metaPurchaseThrottle.get(address)||[]).filter(value=>now-value<60*60*1000);if(recent.length>=20)return false;metaPurchaseThrottle.set(address,[...recent,now]);return true}
 function requireAdmin(req){const token=String(req.headers.authorization||"").replace(/^Bearer\s+/i,"");if(!adminApiToken||token.length!==adminApiToken.length)return false;return crypto.timingSafeEqual(Buffer.from(token),Buffer.from(adminApiToken))}
 function assertStripeKeyMode(){
   if(!stripeKey)throw new Error("Stripe API key is not configured on the checkout server.");
@@ -169,10 +176,11 @@ async function checkout(req,res){
   const returnPath=safeReturnPath(body.returnPath,fallback);
   const requestId=/^[a-zA-Z0-9_-]{8,80}$/.test(body.requestId||"")?body.requestId:`${Date.now()}-${Math.random().toString(36).slice(2)}`;
   const attribution=normaliseAttribution(body.attribution);
-  const identity=await createOrderIdentity(requestId,attribution,customerEmail,items);
+  const metaBindingToken=crypto.randomBytes(32).toString("base64url"),metaCheckoutBindingHash=crypto.createHash("sha256").update(metaBindingToken).digest("hex");
+  const identity=await createOrderIdentity(requestId,attribution,customerEmail,items,metaCheckoutBindingHash);
   const params=buildCheckoutParams({items,priceBySku:stripeMap.bySku,siteUrl,returnPath,shipping,attribution,customerEmail,recoveryEmailConsent:body.recoveryEmailConsent===true,orderInvoicesEnabled,gstTaxRateId,...identity});
   const session=await stripeRequest("/v1/checkout/sessions",{method:"POST",headers:{"Content-Type":"application/x-www-form-urlencoded","Idempotency-Key":`aura-${requestId}`},body:params});
-  send(res,200,{id:session.id,url:session.url,orderNumber:identity.orderNumber,testMode:!session.livemode});
+  send(res,200,{id:session.id,url:session.url,orderNumber:identity.orderNumber,testMode:!session.livemode},{"Set-Cookie":`aura_meta_checkout=${encodeURIComponent(metaBindingToken)}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=7200`});
 }
 async function sessionSummary(req,res,url){
   const id=url.searchParams.get("id")||"";
@@ -180,6 +188,19 @@ async function sessionSummary(req,res,url){
   const session=await stripeRequest(`/v1/checkout/sessions/${encodeURIComponent(id)}`);
   const items=String(session.metadata?.aura_items||"").split(",").filter(Boolean).map(entry=>{const [sku,quantity]=entry.split(":");return {sku,quantity:Number(quantity||1)}});
   send(res,200,{id:session.id,orderNumber:session.metadata?.aura_order_number||"",trackingToken:session.metadata?.aura_tracking_token||"",paymentStatus:session.payment_status,status:session.status,amountTotal:session.amount_total,currency:session.currency,customerEmail:session.customer_details?.email||session.customer_email||"",sku:items.length===1?items[0].sku:session.client_reference_id||"",items,orderMode:session.metadata?.aura_order_mode||"",paymentStage:session.metadata?.aura_payment_stage||"",shippingRegion:session.metadata?.aura_shipping_region||"",shippingLabel:session.metadata?.aura_shipping_label||"",shippingAmount:session.metadata?.aura_shipping_amount||"",quantity:items.reduce((sum,item)=>sum+item.quantity,0)||1});
+}
+async function metaPurchase(req,res,action){
+  const origin=req.headers.origin;if(origin!==new URL(siteUrl).origin)return send(res,403,{error:"Purchase verification must come from the AURA PADDLE website."});
+  if(!allowMetaPurchaseRequest(req))return send(res,429,{error:"Too many purchase verification requests."});
+  const body=JSON.parse((await readBody(req,4096)).toString("utf8")||"{}");
+  if(action==="issue"){
+    const result=await store.mutate(state=>issueMetaPurchaseReceipt(state,{sessionId:body.sessionId,bindingToken:cookieValue(req,"aura_meta_checkout")}));
+    if(!result)return send(res,409,{error:"A browser-bound, marketing-eligible paid order is not available."});
+    return send(res,200,result,{"Set-Cookie":"aura_meta_checkout=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0"});
+  }
+  const purchase=await store.mutate(state=>redeemMetaPurchaseReceipt(state,{receipt:body.receipt}));
+  if(!purchase)return send(res,409,{error:"This purchase receipt is invalid, expired or already used."});
+  send(res,200,purchase);
 }
 async function orderStatus(req,res,url){
   const orderNumber=url.searchParams.get("order")||"",token=url.searchParams.get("token")||"";
@@ -465,7 +486,7 @@ async function staticFile(req,res,url){
     const body=Buffer.from(html);
     res.writeHead(200,{"Content-Type":mime[path.extname(target).toLowerCase()],"Content-Length":body.length,"Cache-Control":"no-store"});return res.end(req.method==="HEAD"?undefined:body);
   }
-  res.writeHead(200,{"Content-Type":mime[path.extname(target).toLowerCase()]||"application/octet-stream","Content-Length":stat.size,"Cache-Control":pathname.startsWith("/assets/")?"public, max-age=3600":"no-cache"});
+  res.writeHead(200,{"Content-Type":mime[path.extname(target).toLowerCase()]||"application/octet-stream","Content-Length":stat.size,"Cache-Control":pathname.startsWith("/assets/")?"public, max-age=3600":"no-cache",...(pathname==="/checkout-success.html"||pathname==="/purchase-confirmed.html"?{"Referrer-Policy":"no-referrer"}:{})});
   if(req.method==="HEAD")return res.end();
   fs.createReadStream(target).pipe(res);
 }
@@ -473,12 +494,15 @@ async function staticFile(req,res,url){
 const server=http.createServer(async(req,res)=>{
   try{
     const url=parseRequestUrl(req.url,siteUrl);
-    if(req.method==="GET"&&url.pathname==="/api/health"){const state=await store.read(),analyticsEntries=Object.values(state.analyticsOutbox||{}),amountIssues=Object.values(state.analyticsAmountIssues||{}),recoveryEntries=Object.values(state.recoveryEmailOutbox||{}),orderEmailEntries=Object.values(state.transactionalEmailOutbox||{}),sentAnalytics=analyticsEntries.filter(item=>item.status==="sent"),latestAnalyticsSentAt=Math.max(0,...sentAnalytics.map(item=>Number(item.sentAt||0)));return send(res,200,{ok:true,mode:allowLive?"live-enabled":"sandbox-only",storage:store.kind,stripeConfigured:Boolean(stripeKey),webhookConfigured:Boolean(webhookSecret),adminConfigured:Boolean(adminApiToken),orderInvoices:{enabled:orderInvoicesEnabled,gstTaxRateConfigured:/^txr_[A-Za-z0-9]+$/.test(gstTaxRateId)},catalogueSkus:catalog.variants.length,mappedStripePrices:stripeMap.bySku.size,stripeAccount:stripeMap.accountId,analytics:{serverEventsEnabled:analyticsDispatchEnabled,configured:Boolean(ga4ApiSecret),validationMode:analyticsValidationMode,enhancedConversionsEnabled,pending:analyticsEntries.filter(item=>["pending","retry","sending"].includes(item.status)).length,failed:analyticsEntries.filter(item=>item.status==="failed").length,amountIssues:amountIssues.length,sent:sentAnalytics.length,latestSentAt:latestAnalyticsSentAt||null},checkoutRecovery:{enabled:true,emailConfigured:Boolean(agentMailApiKey),emailReady:recoveryEmailReady,configurationError:Boolean(recoveryEmailInitError),smsEnabled:false,pending:recoveryEntries.filter(item=>["pending","retry","sending"].includes(item.status)).length,failed:recoveryEntries.filter(item=>item.status==="failed").length},orderNotifications:{enabled:true,emailConfigured:Boolean(agentMailApiKey),emailReady:recoveryEmailReady,recipient:orderNotificationEmail,pending:orderEmailEntries.filter(item=>["pending","retry","sending"].includes(item.status)).length,failed:orderEmailEntries.filter(item=>item.status==="failed").length},account:"AURA PADDLE PTY LTD"})}
+    if(req.method==="GET"&&url.pathname==="/api/health"){const state=await store.read(),analyticsEntries=Object.values(state.analyticsOutbox||{}),amountIssues=Object.values(state.analyticsAmountIssues||{}),recoveryEntries=Object.values(state.recoveryEmailOutbox||{}),orderEmailEntries=Object.values(state.transactionalEmailOutbox||{}),sentAnalytics=analyticsEntries.filter(item=>item.status==="sent"),latestAnalyticsSentAt=Math.max(0,...sentAnalytics.map(item=>Number(item.sentAt||0)));return send(res,200,{ok:true,mode:allowLive?"live-enabled":"sandbox-only",storage:store.kind,stripeConfigured:Boolean(stripeKey),webhookConfigured:Boolean(webhookSecret),adminConfigured:Boolean(adminApiToken),geoRegion:{database:geoResolver.status(),renderHeaderTrust:process.env.RENDER==="true"&&process.env.TRUST_RENDER_CF_CONNECTING_IP==="true"},orderInvoices:{enabled:orderInvoicesEnabled,gstTaxRateConfigured:/^txr_[A-Za-z0-9]+$/.test(gstTaxRateId)},catalogueSkus:catalog.variants.length,mappedStripePrices:stripeMap.bySku.size,stripeAccount:stripeMap.accountId,analytics:{serverEventsEnabled:analyticsDispatchEnabled,configured:Boolean(ga4ApiSecret),validationMode:analyticsValidationMode,enhancedConversionsEnabled,pending:analyticsEntries.filter(item=>["pending","retry","sending"].includes(item.status)).length,failed:analyticsEntries.filter(item=>item.status==="failed").length,amountIssues:amountIssues.length,sent:sentAnalytics.length,latestSentAt:latestAnalyticsSentAt||null},checkoutRecovery:{enabled:true,emailConfigured:Boolean(agentMailApiKey),emailReady:recoveryEmailReady,configurationError:Boolean(recoveryEmailInitError),smsEnabled:false,pending:recoveryEntries.filter(item=>["pending","retry","sending"].includes(item.status)).length,failed:recoveryEntries.filter(item=>item.status==="failed").length},orderNotifications:{enabled:true,emailConfigured:Boolean(agentMailApiKey),emailReady:recoveryEmailReady,recipient:orderNotificationEmail,pending:orderEmailEntries.filter(item=>["pending","retry","sending"].includes(item.status)).length,failed:orderEmailEntries.filter(item=>item.status==="failed").length},account:"AURA PADDLE PTY LTD"})}
+    if(req.method==="GET"&&url.pathname==="/api/region"){const region=geoResolver.resolve(renderClientIp(req));return send(res,200,{region,source:region==="UNKNOWN"?"none":"trusted-server",basis:region==="UNKNOWN"?"none":"dbip-country-lite"},{"Cache-Control":"no-store","CDN-Cache-Control":"no-store"})}
     if(req.method==="GET"&&url.pathname==="/api/admin/analytics-issues"){if(!requireAdmin(req))return send(res,401,{error:"Admin authorisation required."});const state=await store.read();return send(res,200,{items:Object.values(state.analyticsAmountIssues||{}).sort((a,b)=>Number(b.createdAt||0)-Number(a.createdAt||0))})}
     if(['GET','POST'].includes(req.method)&&url.pathname==='/api/admin/inventory')return await inventoryAdmin(req,res);
     if(req.method==='GET'&&url.pathname==='/api/availability')return send(res,200,publicAvailability(await store.read()));
     if(req.method==="POST"&&url.pathname==="/api/checkout")return await checkout(req,res);
     if(req.method==="GET"&&url.pathname==="/api/checkout-session")return await sessionSummary(req,res,url);
+    if(req.method==="POST"&&url.pathname==="/api/meta-purchase/issue")return await metaPurchase(req,res,"issue");
+    if(req.method==="POST"&&url.pathname==="/api/meta-purchase/redeem")return await metaPurchase(req,res,"redeem");
     if(req.method==="GET"&&url.pathname==="/api/order")return await orderStatus(req,res,url);
     if(req.method==="POST"&&url.pathname==="/api/reviews")return await receiveReview(req,res);
     if(req.method==="GET"&&url.pathname==="/api/reviews")return await listReviews(req,res,url);
@@ -504,7 +528,7 @@ setInterval(()=>void flushAnalyticsOutbox().catch(error=>console.error("GA4 outb
 setInterval(()=>void flushRecoveryEmailOutbox().catch(error=>console.error("Recovery email outbox flush failed",error)),60_000).unref();
 setInterval(()=>void flushOrderEmailOutbox().catch(error=>console.error("Order email outbox flush failed",error)),60_000).unref();
 setInterval(()=>void flushReviewNotifications().catch(error=>console.error("Review notification flush failed",error)),60_000).unref();
-setInterval(()=>{const cutoff=Date.now()-60*60*1000;for(const [address,times] of reviewThrottle){const recent=times.filter(value=>value>cutoff);if(recent.length)reviewThrottle.set(address,recent);else reviewThrottle.delete(address)}},60*60*1000).unref();
+setInterval(()=>{const cutoff=Date.now()-60*60*1000;for(const bucket of [reviewThrottle,metaPurchaseThrottle])for(const [address,times] of bucket){const recent=times.filter(value=>value>cutoff);if(recent.length)bucket.set(address,recent);else bucket.delete(address)}},60*60*1000).unref();
 setTimeout(()=>void flushAnalyticsOutbox().catch(error=>console.error("GA4 initial outbox flush failed",error)),2_000).unref();
 setTimeout(()=>void initialiseRecoveryEmail().then(()=>Promise.all([flushRecoveryEmailOutbox(),flushOrderEmailOutbox()])).catch(error=>console.error("Transactional email initialisation failed",error)),3_000).unref();
 setTimeout(()=>void flushReviewNotifications().catch(error=>console.error("Initial review notification flush failed",error)),4_000).unref();

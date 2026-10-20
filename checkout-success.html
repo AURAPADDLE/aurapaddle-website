@@ -4,6 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="robots" content="noindex,nofollow">
+  <meta name="referrer" content="no-referrer">
   <title>Initial payment received | AURA PADDLE</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -59,6 +60,14 @@
       if(paid){
         window.AURACart?.clear();
         window.AURAAnalytics?.event("payment_confirmation_view",{value:Number(session.amountTotal||0)/100,currency:String(session.currency||"AUD").toUpperCase(),payment_stage:session.paymentStage||"initial_50_percent",order_mode:session.orderMode||"preorder"});
+        if(window.auraConsent?.marketing===true||window.auraMetaDefault===true)try{
+          for(let attempt=0;attempt<10;attempt++){
+            const receiptResponse=await fetch("/api/meta-purchase/issue",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({sessionId:id})});
+            if(receiptResponse.ok){const result=await receiptResponse.json();sessionStorage.setItem("aura-meta-purchase-receipt-v1",result.receipt);location.replace("/purchase-confirmed.html");return}
+            if(receiptResponse.status!==409)break;
+            await new Promise(resolve=>setTimeout(resolve,1000));
+          }
+        }catch{}
       }
     }catch(error){document.getElementById("statusCopy").textContent=error.message}
   })();
