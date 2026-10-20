@@ -16,6 +16,9 @@ test('authenticated inventory and order workflow is persistent, private and does
   for(let n=0;n<100;n++){if(server.exitCode!==null)throw Error(diagnostics||'Local server exited.');try{if((await fetch(`${base}/api/health`)).ok)break}catch{}await new Promise(r=>setTimeout(r,50))}
   const request=(url,body,authenticated=true)=>fetch(base+url,{method:body?'POST':'GET',headers:{'Content-Type':'application/json',...(authenticated?{Authorization:`Bearer ${token}`}:{})},...(body?{body:JSON.stringify(body)}:{})});
   const health=await (await request('/api/health',null,false)).json();assert.equal(health.analytics.amountIssues,0);
+  const unauthorisedDiagnostic=await fetch(`${base}/api/admin/proxy-diagnostic`,{headers:{'CF-Connecting-IP':'203.0.113.9'}});assert.equal(unauthorisedDiagnostic.status,401);
+  const diagnosticResponse=await fetch(`${base}/api/admin/proxy-diagnostic`,{headers:{Authorization:`Bearer ${token}`,'CF-Connecting-IP':'203.0.113.9','X-Forwarded-For':'198.51.100.4','CF-IPCountry':'AU','X-Country-Code':'NZ'}});assert.equal(diagnosticResponse.status,200);assert.match(diagnosticResponse.headers.get('cache-control'),/no-store/);assert.equal(diagnosticResponse.headers.get('cdn-cache-control'),'no-store');
+  const diagnostic=await diagnosticResponse.json();assert.equal(diagnostic.cfConnectingIp.formatValid,true);assert.equal(diagnostic.xForwardedFor.entryCount,1);assert.equal(diagnostic.cfIpCountry.formatValid,true);assert.doesNotMatch(JSON.stringify(diagnostic),/203\.0\.113\.9|198\.51\.100\.4|AU|NZ/);
   assert.equal((await request('/api/admin/analytics-issues',null,false)).status,401);
   assert.deepEqual(await (await request('/api/admin/analytics-issues')).json(),{items:[]});
   assert.equal((await request('/api/admin/inventory',null,false)).status,401);
