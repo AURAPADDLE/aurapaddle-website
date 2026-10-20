@@ -13,7 +13,6 @@ import {initializeInventory,inventoryMovement,inventoryView,publicAvailability,r
 import coastGoOffer from "../coastgo-offer.js";
 import {renderCoastGoPage,renderCoastGoFeed} from "./coastgo-content.mjs";
 import {adminReviewData,attachReviewEmail,ensureReviewState,moderateReview,publicReviewData,renderReviews,submitReview} from "./reviews.mjs";
-import {proxyDiagnostic} from "./proxy-diagnostic.mjs";
 
 const here=path.dirname(fileURLToPath(import.meta.url));
 const siteDir=path.resolve(here,"..");
@@ -475,10 +474,6 @@ const server=http.createServer(async(req,res)=>{
   try{
     const url=parseRequestUrl(req.url,siteUrl);
     if(req.method==="GET"&&url.pathname==="/api/health"){const state=await store.read(),analyticsEntries=Object.values(state.analyticsOutbox||{}),amountIssues=Object.values(state.analyticsAmountIssues||{}),recoveryEntries=Object.values(state.recoveryEmailOutbox||{}),orderEmailEntries=Object.values(state.transactionalEmailOutbox||{}),sentAnalytics=analyticsEntries.filter(item=>item.status==="sent"),latestAnalyticsSentAt=Math.max(0,...sentAnalytics.map(item=>Number(item.sentAt||0)));return send(res,200,{ok:true,mode:allowLive?"live-enabled":"sandbox-only",storage:store.kind,stripeConfigured:Boolean(stripeKey),webhookConfigured:Boolean(webhookSecret),adminConfigured:Boolean(adminApiToken),orderInvoices:{enabled:orderInvoicesEnabled,gstTaxRateConfigured:/^txr_[A-Za-z0-9]+$/.test(gstTaxRateId)},catalogueSkus:catalog.variants.length,mappedStripePrices:stripeMap.bySku.size,stripeAccount:stripeMap.accountId,analytics:{serverEventsEnabled:analyticsDispatchEnabled,configured:Boolean(ga4ApiSecret),validationMode:analyticsValidationMode,enhancedConversionsEnabled,pending:analyticsEntries.filter(item=>["pending","retry","sending"].includes(item.status)).length,failed:analyticsEntries.filter(item=>item.status==="failed").length,amountIssues:amountIssues.length,sent:sentAnalytics.length,latestSentAt:latestAnalyticsSentAt||null},checkoutRecovery:{enabled:true,emailConfigured:Boolean(agentMailApiKey),emailReady:recoveryEmailReady,configurationError:Boolean(recoveryEmailInitError),smsEnabled:false,pending:recoveryEntries.filter(item=>["pending","retry","sending"].includes(item.status)).length,failed:recoveryEntries.filter(item=>item.status==="failed").length},orderNotifications:{enabled:true,emailConfigured:Boolean(agentMailApiKey),emailReady:recoveryEmailReady,recipient:orderNotificationEmail,pending:orderEmailEntries.filter(item=>["pending","retry","sending"].includes(item.status)).length,failed:orderEmailEntries.filter(item=>item.status==="failed").length},account:"AURA PADDLE PTY LTD"})}
-    if(req.method==="GET"&&url.pathname==="/api/admin/proxy-diagnostic"){
-      if(!requireAdmin(req))return send(res,401,{error:"Admin authorisation required."});
-      return send(res,200,proxyDiagnostic(req,adminApiToken),{"CDN-Cache-Control":"no-store"});
-    }
     if(req.method==="GET"&&url.pathname==="/api/admin/analytics-issues"){if(!requireAdmin(req))return send(res,401,{error:"Admin authorisation required."});const state=await store.read();return send(res,200,{items:Object.values(state.analyticsAmountIssues||{}).sort((a,b)=>Number(b.createdAt||0)-Number(a.createdAt||0))})}
     if(['GET','POST'].includes(req.method)&&url.pathname==='/api/admin/inventory')return await inventoryAdmin(req,res);
     if(req.method==='GET'&&url.pathname==='/api/availability')return send(res,200,publicAvailability(await store.read()));
