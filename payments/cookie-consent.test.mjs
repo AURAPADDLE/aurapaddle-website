@@ -138,9 +138,10 @@ test("ordinary browser events do not receive an internal traffic label",async()=
   assert.equal(Object.hasOwn(event[2],"traffic_type"),false);
 });
 
-test("unoperated privacy notice remains visible and has no automatic dismissal timer",()=>{
+test("unoperated privacy state stays unsaved without automatically opening the notice",()=>{
   const fixture=privacyFixture();assert.equal(fixture.window.AURAPrivacyNoticeState.shouldShow(),true);assert.equal(fixture.window.AURAPrivacyNoticeState.dismissed(),false);
   assert.doesNotMatch(fullSource,/setTimeout\([^)]*(?:banner|cookie-consent|dismiss)/);
+  assert.doesNotMatch(fullSource,/banner\.classList\.add\("is-visible"\)/);
 });
 
 test("dismiss action records only a tab-session UI state and changes no privacy choice",()=>{

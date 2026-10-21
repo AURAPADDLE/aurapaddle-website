@@ -205,7 +205,6 @@
       banner.querySelector("p").innerHTML='Meta Pixel is running to measure selected shopping actions. It receives IP address, browser, cookie and event data, but not payment-card or form details. <a href="/policies/#privacy">Learn more</a>';
       banner.querySelector("[data-cookie-accept]")?.remove();banner.querySelector("[data-cookie-reject]").textContent="Turn off marketing";
     }
-    banner.classList.add("is-visible");
   };
   const resolveRegion=async()=>{
     if(!shouldShowNotice()||trustedAustralianDefault()||offlineReview){showNotice();return}
