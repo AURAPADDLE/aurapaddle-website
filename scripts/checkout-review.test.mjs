@@ -305,7 +305,7 @@ test('CoastGo standard/express/remote retain amounts, visible transit and paymen
   }
 });
 test('offer expiry restores actual standard shipping, without extending promotion',async()=>{
-  const h=harness(false,undefined,{items:[{...yoga,orderMode:'available'}],now:'2026-10-21T14:00:00Z'});h.startCart();
+  const h=harness(false,undefined,{items:[{...yoga,orderMode:'available'}],now:'2026-10-31T14:00:00Z'});h.startCart();
   assert.equal(h.element('dueToday').textContent,'$774');
   await h.element('checkoutCart').listeners.click();
   assert.equal(h.requests[0].body.promoCode,'');

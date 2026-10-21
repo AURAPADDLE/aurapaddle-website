@@ -4,7 +4,7 @@
   const storageKey="aura-home-free-shipping-coastgo-yoga-20261008";
   const promotion={promotion_id:policy.shippingPromotionId,promotion_name:"CoastGo & Yoga Cruiser — free shipping",creative_slot:"homepage_modal",coupon:policy.shippingCode,currency:"AUD",items:[...policy.skus.map(item_id=>({item_id,item_name:"AURA PADDLE CoastGo",price:299,quantity:1})),{item_id:"AP734955",item_name:"AURA PADDLE Yoga Cruiser",price:749,quantity:1}]};
   const track=(name,params={})=>window.AURATracking?.event(name,{...promotion,...params});
-  offer.querySelector('.preorder-offer__eyebrow').textContent="COASTGO + YOGA CRUISER · THROUGH 21 OCTOBER";
+  offer.querySelector('.preorder-offer__eyebrow').textContent="COASTGO + YOGA CRUISER · THROUGH 31 OCTOBER";
   offer.querySelector('#preorderOfferTitle').innerHTML='Two boards.<br><span>FREE SHIPPING*</span>';
   offer.querySelector('.preorder-offer__price').textContent='CoastGo AUD $299 · Yoga Cruiser AUD $749';
   offer.querySelector('.preorder-offer__value').textContent='One code. More time on the water.';
@@ -12,7 +12,7 @@
   copyButton.hidden=false;copyButton.style.display='';
   copyButton.innerHTML='<strong>AURAFREESHIP</strong><span>Copy code</span>';
   copyButton.setAttribute('aria-label','Copy promo code AURAFREESHIP');
-  offer.querySelector('.preorder-offer__copy').textContent='Automatically applied in the cart. CoastGo: eligible standard regions only; express extra, remote quote. Yoga Cruiser: Gold Coast / Brisbane Metro and QLD / NSW / ACT major cities, coastal areas & Melbourne Metro. Ends 21 October 2026, Queensland time. Select your region to confirm.';
+  offer.querySelector('.preorder-offer__copy').textContent='Automatically applied in the cart. CoastGo: eligible standard regions only; express extra, remote quote. Yoga Cruiser: Gold Coast / Brisbane Metro and QLD / NSW / ACT major cities, coastal areas & Melbourne Metro. Ends 31 October 2026, Queensland time. Select your region to confirm.';
   const coastLink=offer.querySelector('[data-preorder-offer-shop]');
   coastLink.href='products/coast-go.html';coastLink.textContent='Shop CoastGo';
   const yogaLink=document.createElement('a');yogaLink.className='btn btn-primary';yogaLink.href='products/yoga-cruiser.html?colour=glacier';yogaLink.textContent='Shop Yoga Cruiser';coastLink.after(yogaLink);

@@ -72,7 +72,7 @@ test('homepage presents both products and common code only during the promotion'
 
 test('standard-only shipping promotion respects exact dates, quantity, remote and mixed-cart exclusions',()=>{
   const end=Date.parse(offer.shippingEndsAt);
-  assert.equal(new Date(end).toISOString(),'2026-10-21T14:00:00.000Z');
+  assert.equal(new Date(end).toISOString(),'2026-10-31T14:00:00.000Z');
   for(const sku of offer.skus)for(const quantity of [1,2,20]){
     for(const now of [cutoff-1,cutoff,cutoff+1,end-1,end,end+1]){
       const items=normaliseCheckoutItems([{sku,quantity}],catalog,now);

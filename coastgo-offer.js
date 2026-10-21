@@ -6,7 +6,7 @@
   const discounted=(now=Date.now())=>now<Date.parse(endsAt);
   const price=(now=Date.now())=>discounted(now)?28900:29900;
   const code="COASTGO10";
-  const shippingEndsAt="2026-10-22T00:00:00+10:00";
+  const shippingEndsAt="2026-11-01T00:00:00+10:00";
   const shippingPromotionId="aura_free_shipping_202610";
   const shippingCode="AURAFREESHIP";
   const yogaSkus=["AP734955","AP505002","AP233694","AP587273"];
@@ -18,8 +18,8 @@
   const freeShippingFor=(regionId,now=Date.now())=>freeShippingActive(now)&&standardRegionIds.includes(regionId);
   const yogaFreeShippingFor=(sku,regionId,now=Date.now())=>freeShippingActive(now)&&isYoga(sku)&&yogaRegionIds.includes(regionId);
   const remoteQuoteFor=(regionId,now=Date.now())=>freeShippingActive(now)&&remoteRegionIds.includes(regionId);
-  const shippingTerms="AURAFREESHIP: free standard shipping to eligible Australian delivery regions through 21 October 2026 inclusive (Queensland time), automatically applied. Express shipping is charged separately; remote destinations require a quote. Standard transit: 21–40 days after dispatch.";
-  const yogaShippingTerms="AURAFREESHIP: free shipping to Gold Coast / Brisbane Metro and QLD / NSW / ACT major cities, coastal areas & Melbourne Metro through 21 October 2026 inclusive (Queensland time), automatically applied. Other regions retain their published rates; remote destinations require a quote.";
+  const shippingTerms="AURAFREESHIP: free standard shipping to eligible Australian delivery regions through 31 October 2026 inclusive (Queensland time), automatically applied. Express shipping is charged separately; remote destinations require a quote. Standard transit: 21–40 days after dispatch.";
+  const yogaShippingTerms="AURAFREESHIP: free shipping to Gold Coast / Brisbane Metro and QLD / NSW / ACT major cities, coastal areas & Melbourne Metro through 31 October 2026 inclusive (Queensland time), automatically applied. Other regions retain their published rates; remote destinations require a quote.";
   const priceNote=(now=Date.now())=>freeShippingActive(now)?"AUD $299 · FREE standard shipping to eligible regions · Express extra · Remote quote":"New-product price · Pay in full · Shipping additional";
   const codeFor=(items,now=Date.now())=>discounted(now)&&items.some(item=>isCoastGo(item.variant?.sku||item.sku))?code:"";
   const beforeLaunch=(now=Date.now())=>now<Date.parse(launchAt);
