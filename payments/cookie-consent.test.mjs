@@ -138,9 +138,10 @@ test("ordinary browser events do not receive an internal traffic label",async()=
   assert.equal(Object.hasOwn(event[2],"traffic_type"),false);
 });
 
-test("unoperated privacy notice remains visible and has no automatic dismissal timer",()=>{
+test("unoperated privacy state stays unsaved without automatically opening the notice",()=>{
   const fixture=privacyFixture();assert.equal(fixture.window.AURAPrivacyNoticeState.shouldShow(),true);assert.equal(fixture.window.AURAPrivacyNoticeState.dismissed(),false);
   assert.doesNotMatch(fullSource,/setTimeout\([^)]*(?:banner|cookie-consent|dismiss)/);
+  assert.doesNotMatch(fullSource,/banner\.classList\.add\("is-visible"\)/);
 });
 
 test("dismiss action records only a tab-session UI state and changes no privacy choice",()=>{
@@ -154,7 +155,7 @@ test("dismiss action records only a tab-session UI state and changes no privacy 
 test("footer privacy entry can reopen detailed settings after the notice is dismissed",()=>{
   const fixture=privacyFixture();fixture.window.AURAPrivacyNoticeState.dismiss();
   const home=fs.readFileSync(new URL("../index.html",import.meta.url),"utf8");
-  assert.match(home,/data-open-cookie-settings>Cookie settings<\/button>/);assert.match(fullSource,/data-open-cookie-settings[^]*openSettings\(\)/);assert.equal(fixture.window.AURAPrivacyNoticeState.dismissed(),true);assert.equal(fixture.storage.has("aura-cookie-consent-v1"),false);
+  assert.match(home,/data-open-cookie-settings>Cookie settings<\/button>/);assert.match(fullSource,/footer&&!footer\.querySelector\("\[data-open-cookie-settings\]"\)/);assert.match(fullSource,/settingsButton\.dataset\.openCookieSettings=""/);assert.match(fullSource,/data-open-cookie-settings[^]*openSettings\(\)/);assert.equal(fixture.window.AURAPrivacyNoticeState.dismissed(),true);assert.equal(fixture.storage.has("aura-cookie-consent-v1"),false);
 });
 
 test("dismissal follows the same browser tab across pages but not persistent storage",()=>{

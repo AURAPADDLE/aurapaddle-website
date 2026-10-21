@@ -182,6 +182,12 @@
   dialog.className="cookie-settings";
   dialog.innerHTML=`<div class="cookie-settings__body"><div class="cookie-settings__top"><h2>Privacy settings</h2><button class="cookie-settings__close" type="button" data-cookie-dialog-cancel aria-label="Close">×</button></div><p>Choose separate permissions for analytics and advertising technologies.</p><label class="cookie-option"><span><strong>Necessary</strong><span>Required for core features and to remember your privacy choice.</span></span><input type="checkbox" checked disabled></label><label class="cookie-option"><span><strong>Analytics</strong><span>Allows analytics cookies and identifiers to measure visits, purchases, referral sources and site performance. Limited cookieless Google measurement may occur while denied.</span></span><input id="cookieAnalytics" type="checkbox"></label><label class="cookie-option"><span><strong>Marketing</strong><span>Allows advertising measurement, including Meta Pixel. Meta may receive IP address, browser, cookie and selected shopping-event data. We do not send payment-card details, contact fields or sensitive checkout URLs.</span></span><input id="cookieMarketing" type="checkbox"></label><div class="cookie-settings__actions"><button class="cookie-consent__secondary" type="button" data-cookie-dialog-cancel>Cancel</button><button class="save" type="button" data-cookie-dialog-save>Save choices</button></div></div>`;
   document.body.append(banner,dialog);
+  const footer=document.querySelector("footer");
+  if(footer&&!footer.querySelector("[data-open-cookie-settings]")){
+    const settingsButton=document.createElement("button");
+    settingsButton.className="cookie-settings-link";settingsButton.type="button";settingsButton.dataset.openCookieSettings="";settingsButton.textContent="Cookie settings";
+    (footer.querySelector(".footer-links,.footer-row div,.footer-col:last-child,.footer-row,.footer-bottom")||footer).append(settingsButton);
+  }
 
   const openSettings=()=>{const p=read();dialog.returnValue="";dialog.querySelector("#cookieAnalytics").checked=Boolean(p.analytics);dialog.querySelector("#cookieMarketing").checked=Boolean(p.marketing);dialog.showModal()};
   banner.querySelector("[data-cookie-settings]").addEventListener("click",openSettings);
@@ -205,7 +211,6 @@
       banner.querySelector("p").innerHTML='Meta Pixel is running to measure selected shopping actions. It receives IP address, browser, cookie and event data, but not payment-card or form details. <a href="/policies/#privacy">Learn more</a>';
       banner.querySelector("[data-cookie-accept]")?.remove();banner.querySelector("[data-cookie-reject]").textContent="Turn off marketing";
     }
-    banner.classList.add("is-visible");
   };
   const resolveRegion=async()=>{
     if(!shouldShowNotice()||trustedAustralianDefault()||offlineReview){showNotice();return}
