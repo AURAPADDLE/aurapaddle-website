@@ -1,6 +1,6 @@
 (()=>{
   const cartImageStyle=document.createElement("style");
-  cartImageStyle.textContent=".cart-image img{width:auto!important;height:auto!important;max-width:calc(100% - 12px)!important;max-height:calc(100% - 12px)!important;object-fit:contain!important;object-position:center!important}";
+  cartImageStyle.textContent=".cart-image img{width:auto!important;height:auto!important;max-width:calc(100% - 12px)!important;max-height:calc(100% - 12px)!important;object-fit:contain!important;object-position:center!important}.delivery-location{border:0;padding:0;margin:0;display:grid;grid-template-columns:1fr 110px;gap:.55rem .75rem}.delivery-location legend{font-weight:700;margin-bottom:.65rem}.delivery-location label:first-of-type,.delivery-location input:first-of-type{grid-column:1}.delivery-location label:nth-of-type(2),.delivery-location select{grid-column:2}.delivery-location label:nth-of-type(3),.delivery-location input:last-of-type{grid-column:1/-1}.delivery-location input,.delivery-location select{min-width:0;width:100%;box-sizing:border-box}@media(max-width:430px){.delivery-location{grid-template-columns:1fr}.delivery-location>*{grid-column:1!important}}";
   document.head.append(cartImageStyle);
 
   const cart=window.AURACart;
@@ -14,6 +14,17 @@
   const checkoutLabel=checkout.textContent;
   const error=document.getElementById("checkoutError");
   const regionSelect=document.getElementById("shippingRegion");
+  const shippingValidationEnabled=config.shippingLocationValidation==="draft"||["127.0.0.1","localhost"].includes(location.hostname);
+  if(shippingValidationEnabled){regionSelect.hidden=true;regionSelect.setAttribute("aria-hidden","true");regionSelect.tabIndex=-1;}
+  const deliveryLocationBlock=document.createElement("fieldset");
+  deliveryLocationBlock.className="delivery-location";
+  deliveryLocationBlock.innerHTML='<legend>Delivery address check</legend><label for="shippingSuburb">Suburb</label><input id="shippingSuburb" autocomplete="address-level2" maxlength="80" required><label for="shippingState">State or territory</label><select id="shippingState" autocomplete="address-level1" required><option value="">Select state</option><option>ACT</option><option>NSW</option><option>NT</option><option>QLD</option><option>SA</option><option>TAS</option><option>VIC</option><option>WA</option></select><label for="shippingPostcode">Postcode</label><input id="shippingPostcode" autocomplete="postal-code" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" required>';
+  if(shippingValidationEnabled)regionSelect.before(deliveryLocationBlock);
+  const shippingSuburb=deliveryLocationBlock.querySelector("#shippingSuburb");
+  const shippingState=deliveryLocationBlock.querySelector("#shippingState");
+  const shippingPostcode=deliveryLocationBlock.querySelector("#shippingPostcode");
+  const deliveryLocation=()=>({suburb:shippingSuburb.value.trim(),state:shippingState.value,postcode:shippingPostcode.value.trim()});
+  let verifiedShipping=null,shippingQuotePending=false,shippingQuoteTimer,shippingQuoteMessage="";
   regionSelect.querySelector('option[value="local-pickup"]')?.remove();
   const legacyRegionOption=regionSelect.querySelector('option[value="canberra-melbourne"]');
   if(legacyRegionOption)legacyRegionOption.remove();
@@ -148,9 +159,9 @@
     const hasCoastGo=items.some(item=>slugFor(item)==="coast-go");
     const menuMode=hasCoastGo?(coastGoRatesLoaded?"coastgo":"loading"):"regular";
     if(regionMenuMode!==menuMode){
-      const previous=regionSelect.value;regionMenuMode=menuMode;
+      const previous=verifiedShipping?.regionId||regionSelect.value;regionMenuMode=menuMode;
       regionSelect.innerHTML=hasCoastGo?`<option value="">${coastGoRatesLoaded?"Choose CoastGo delivery region":"Loading CoastGo delivery regions…"}</option>${coastGoRegions.map(region=>`<option value="${escape(region.id)}">${escape(region.label)}</option>`).join("")}`:regularRegionOptions;
-      const saved=(()=>{try{return sessionStorage.getItem(regionStorageKey)}catch{return ""}})();
+      const saved=shippingValidationEnabled?"":(()=>{try{return sessionStorage.getItem(regionStorageKey)}catch{return ""}})();
       const next=[previous,saved].find(value=>value&&Array.from(regionSelect.options).some(option=>option.value===value));
       regionSelect.value=next||"";
     }
@@ -218,7 +229,7 @@
     if(!shipping.selected){
       shippingAmount.textContent="Select region";
       beforeDispatch.textContent="Select region";
-      shippingHelp.textContent="Choose the region matching your delivery address.";
+      shippingHelp.innerHTML=shippingQuoteMessage||"Enter your suburb, state and postcode so we can confirm the correct SUP freight zone before payment.";
     }else if(shipping.pickup){
       shippingAmount.textContent="Free";
       beforeDispatch.textContent=availableOnly?"Paid today":money(remaining);
@@ -250,8 +261,9 @@
     promoInput.readOnly=Boolean(coastPromo);
     applyPromoButton.textContent=coastPromo?"Applied ✓":"Apply";
     checkout.textContent=availableOnly?"PAY IN FULL SECURELY":"PAY 50% SECURELY";
-    checkout.disabled=checkoutPending||location.protocol==="file:"||config.enabled===false||!shipping.selected||(hasPreorder&&hasAvailable)||(availableOnly&&shipping.quoteRequired);
+    checkout.disabled=checkoutPending||(shippingValidationEnabled&&(shippingQuotePending||!verifiedShipping))||location.protocol==="file:"||config.enabled===false||!shipping.selected||(hasPreorder&&hasAvailable)||(availableOnly&&shipping.quoteRequired);
     regionSelect.disabled=checkoutPending;
+    if(shippingValidationEnabled)for(const field of [shippingSuburb,shippingState,shippingPostcode])field.disabled=checkoutPending;
     checkoutEmail.disabled=checkoutPending;
     promoInput.disabled=checkoutPending;
     applyPromoButton.disabled=checkoutPending||Boolean(coastPromo);
@@ -279,16 +291,38 @@
     render();
   });
 
-  try{const saved=sessionStorage.getItem(regionStorageKey),normalisedSaved=saved==="canberra-melbourne"?"qld-nsw-main":saved;regionSelect.value=regions[normalisedSaved]?normalisedSaved:"";if(saved!==normalisedSaved&&normalisedSaved)sessionStorage.setItem(regionStorageKey,normalisedSaved)}catch{regionSelect.value=""}
-  regionSelect.addEventListener("change",()=>{
-    try{if(regionSelect.value)sessionStorage.setItem(regionStorageKey,regionSelect.value);
-    else sessionStorage.removeItem(regionStorageKey)}catch{}
-    if(regionSelect.value){
-      const shipping=shippingFor(cart.read(),regionSelect.value);
-      track("select_shipping_region",{shipping_region:regionSelect.value,shipping_type:shipping.pickup?"pickup":shipping.quoteRequired?"quote_required":"published_rate"});
-    }
-    render();
-  });
+  const requestShippingQuote=()=>{
+    clearTimeout(shippingQuoteTimer);verifiedShipping=null;shippingQuoteMessage="";regionSelect.value="";render();
+    const locationValue=deliveryLocation();
+    if(!locationValue.suburb||!locationValue.state||!/^\d{4}$/.test(locationValue.postcode))return;
+    shippingQuotePending=true;render();
+    shippingQuoteTimer=setTimeout(async()=>{
+      try{
+        const items=cart.read();
+        const response=await fetch(config.shippingQuoteEndpoint||"/api/shipping-quote",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({items:items.map(({sku,quantity})=>({sku,quantity})),deliveryLocation:locationValue,promoCode:appliedPromoCode})});
+        const payload=await response.json().catch(()=>({}));
+        if(!response.ok)throw new Error(payload.error||"Delivery address could not be checked.");
+        if(payload.status!=="verified"){
+          shippingQuoteMessage='We could not confirm a published SUP freight rate for this address. No payment has been taken. <a href="mailto:admin@aurapaddle.com?subject=SUP%20freight%20quote">Contact AURA PADDLE for a freight quote</a>.';
+          return;
+        }
+        verifiedShipping={...payload.shipping,coverageVersion:payload.coverageVersion,location:payload.location};
+        regionSelect.value=payload.shipping.regionId;
+        const shipping=shippingFor(items,regionSelect.value);
+        track("select_shipping_region",{shipping_region:regionSelect.value,shipping_type:shipping.quoteRequired?"quote_required":"published_rate",verification:"address"});
+      }catch(reason){shippingQuoteMessage=escape(reason.message||String(reason))}
+      finally{shippingQuotePending=false;render()}
+    },350);
+  };
+  if(shippingValidationEnabled)for(const field of [shippingSuburb,shippingState,shippingPostcode])field.addEventListener(field.tagName==="SELECT"?"change":"input",requestShippingQuote);
+  else{
+    try{const saved=sessionStorage.getItem(regionStorageKey),normalisedSaved=saved==="canberra-melbourne"?"qld-nsw-main":saved;regionSelect.value=regions[normalisedSaved]?normalisedSaved:"";if(saved!==normalisedSaved&&normalisedSaved)sessionStorage.setItem(regionStorageKey,normalisedSaved)}catch{regionSelect.value=""}
+    regionSelect.addEventListener("change",()=>{
+      try{if(regionSelect.value)sessionStorage.setItem(regionStorageKey,regionSelect.value);else sessionStorage.removeItem(regionStorageKey)}catch{}
+      if(regionSelect.value){const shipping=shippingFor(cart.read(),regionSelect.value);track("select_shipping_region",{shipping_region:regionSelect.value,shipping_type:shipping.pickup?"pickup":shipping.quoteRequired?"quote_required":"published_rate"})}
+      render();
+    });
+  }
 
   applyPromoButton.addEventListener("click",()=>{
     const code=promoInput.value.trim().toUpperCase();
@@ -339,7 +373,7 @@
     try{
       const attribution=await window.AURAAttribution?.snapshot?.();
       const currentShipping=shippingFor(items,shippingRegion);
-      response=await fetch(config.checkoutEndpoint||"/api/checkout",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({items:items.map(({sku,quantity})=>({sku,quantity})),coastGoPrices:items.filter(item=>window.AURACoastGo?.isCoastGo(item.sku)).map(({sku,unitAmount})=>({sku,unitAmount})),coastGoShippingAmount:currentShipping.total,shippingRegion,promoCode:window.AURACoastGo.codeFor(items)||(currentShipping.promotionApplied?appliedPromoCode:""),returnPath:location.pathname,customerEmail,recoveryEmailConsent:recoveryConsent,requestId:globalThis.crypto?.randomUUID?.()||`${Date.now()}-${Math.random().toString(36).slice(2)}`,attribution})});
+      response=await fetch(config.checkoutEndpoint||"/api/checkout",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({items:items.map(({sku,quantity})=>({sku,quantity})),coastGoPrices:items.filter(item=>window.AURACoastGo?.isCoastGo(item.sku)).map(({sku,unitAmount})=>({sku,unitAmount})),coastGoShippingAmount:currentShipping.total,shippingRegion,...(shippingValidationEnabled?{deliveryLocation:verifiedShipping?.location||deliveryLocation()}:{}),promoCode:window.AURACoastGo.codeFor(items)||(currentShipping.promotionApplied?appliedPromoCode:""),returnPath:location.pathname,customerEmail,recoveryEmailConsent:recoveryConsent,requestId:globalThis.crypto?.randomUUID?.()||`${Date.now()}-${Math.random().toString(36).slice(2)}`,attribution})});
       const payload=await response.json().catch(()=>({}));
       if(!response.ok||!payload.url)throw new Error(payload.error||"Stripe Checkout could not be prepared.");
       const shipping=shippingFor(items,shippingRegion);
@@ -359,7 +393,7 @@
     }
   });
 
-  cart.subscribe(render);
+  cart.subscribe(shippingValidationEnabled?requestShippingQuote:render);
   window.addEventListener("aura:coastgo-change",render);
   // A cached Back navigation retains the disabled state from the Stripe redirect.
   window.addEventListener("pageshow",event=>{

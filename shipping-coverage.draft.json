@@ -1,0 +1,6 @@
+{
+  "status": "draft",
+  "version": "carrier-coverage-pending-liam-review",
+  "notes": "No location is eligible until Liam provides and Max approves a carrier coverage table. Unknown locations require a manual freight quote.",
+  "locations": []
+}

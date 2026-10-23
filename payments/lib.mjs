@@ -5,6 +5,7 @@ import {fileURLToPath} from "node:url";
 import {orderAttributionAudit} from "./attribution-audit.mjs";
 import {reserveInventory,noStockOrder} from './inventory.mjs';
 import coastGoOffer from "../coastgo-offer.js";
+import {compareDeliveryLocation,normaliseDeliveryLocation} from "./shipping-location.mjs";
 
 const here=path.dirname(fileURLToPath(import.meta.url));
 const catalogPath=path.join(here,"catalog.json");
@@ -256,7 +257,7 @@ export function safeReturnPath(value,fallbackValue="/cart-preview.html"){
   }catch{return fallback}
 }
 
-function orderMetadata(items,shipping,orderNumber,trackingToken,attribution,recoveryEmailConsent=false){
+function orderMetadata(items,shipping,orderNumber,trackingToken,attribution,recoveryEmailConsent=false,shippingLocation){
   const modes=new Set(items.map(item=>item.variant.orderMode));
   const hasPreorder=items.some(item=>item.variant.orderMode==="preorder");
   const quantities=new Map();for(const item of items)quantities.set(item.variant.sku,(quantities.get(item.variant.sku)||0)+item.quantity);
@@ -285,6 +286,13 @@ function orderMetadata(items,shipping,orderNumber,trackingToken,attribution,reco
     aura_meta_measurement:String(normalised.metaMeasurement),
     aura_meta_choice:normalised.metaChoice
   };
+  if(!shipping.pickup&&shippingLocation){
+    const location=normaliseDeliveryLocation(shippingLocation);
+    metadata.aura_shipping_suburb=location.suburb;
+    metadata.aura_shipping_state=location.state;
+    metadata.aura_shipping_postcode=location.postcode;
+    metadata.aura_shipping_coverage_version=String(shippingLocation.coverageVersion||"").slice(0,80);
+  }
   const optional={
     aura_attr_source:last.source,
     aura_attr_medium:last.medium,
@@ -304,12 +312,12 @@ function appendObject(params,prefix,object){
   for(const [key,value] of Object.entries(object))params.set(`${prefix}[${key}]`,String(value));
 }
 
-export function buildCheckoutParams({items,priceBySku,siteUrl,returnPath,shipping,attribution,customerEmail,recoveryEmailConsent=false,orderInvoicesEnabled=false,gstTaxRateId="",orderNumber="APO00000",trackingToken="test-tracking-token",integrationIdentifier="aura_cart_abcdefgh",now=Math.floor(Date.now()/1000)}){
+export function buildCheckoutParams({items,priceBySku,siteUrl,returnPath,shipping,shippingLocation,attribution,customerEmail,recoveryEmailConsent=false,orderInvoicesEnabled=false,gstTaxRateId="",orderNumber="APO00000",trackingToken="test-tracking-token",integrationIdentifier="aura_cart_abcdefgh",now=Math.floor(Date.now()/1000)}){
   const params=new URLSearchParams();
   if(!shipping?.regionId)throw new Error("Shipping region is required for checkout.");
   if(!/^APO\d{5}$/.test(orderNumber))throw new Error("Invalid AURA order number.");
   if(!/^[A-Za-z0-9_-]{16,80}$/.test(trackingToken))throw new Error("Invalid order tracking token.");
-  const metadata=orderMetadata(items,shipping,orderNumber,trackingToken,attribution,recoveryEmailConsent);
+  const metadata=orderMetadata(items,shipping,orderNumber,trackingToken,attribution,recoveryEmailConsent,shippingLocation);
   const inStock=metadata.aura_order_mode==="available";
   if(inStock&&shipping.quoteRequired)throw new Error("Please contact AURA PADDLE for a freight quote before ordering in-stock products.");
   const cancelPath=safeReturnPath(returnPath,"/cart-preview.html");
@@ -594,6 +602,7 @@ export function updateOrderProgress(order,input={},now=Math.floor(Date.now()/100
     if(!["awaiting_balance","preparing_for_dispatch","dispatched","delivered"].includes(order.fulfilmentStatus)){order.fulfilmentStatus="production_confirmed";order.orderStatus="production_confirmed"}
   }
   if(stage==="dispatched"){
+    if(order.shippingReviewRequired)throw new Error("Resolve the delivery-address freight review before dispatch.");
     const paymentComplete=order.initialPaymentStatus==="paid"&&(order.paymentStage==="paid_in_full"||order.balancePaymentStatus==="paid");
     if(!paymentComplete)throw new Error("Final payment must be received before dispatch.");
     const carrier=String(input.carrier||"").trim().slice(0,80),trackingNumber=String(input.trackingNumber||"").trim().slice(0,100),trackingUrl=String(input.trackingUrl||"").trim();
@@ -654,6 +663,9 @@ export function adminOrderList(state,catalog,analyticsConfiguration={}){
     shippingLabel:order.shippingLabel||"",
     shippingAmount:Number.isInteger(order.shippingAmount)?order.shippingAmount:null,
     shippingQuoteRequired:order.shippingQuoteRequired===true,
+    shippingReviewRequired:order.shippingReviewRequired===true,
+    verifiedDeliveryLocation:order.verifiedDeliveryLocation||null,
+    shippingCoverageVersion:order.shippingCoverageVersion||"",
     balancePaymentStatus:order.paymentStage==="paid_in_full"&&order.initialPaymentStatus==="paid"?"paid":order.balancePaymentStatus||"not_requested",
     balanceRequestedAmount:Number.isInteger(order.balanceRequestedAmount)?order.balanceRequestedAmount:null,
     balancePaidAmount:Number.isInteger(order.balancePaidAmount)?order.balancePaidAmount:null,
@@ -695,6 +707,8 @@ export function applyStripeEvent(state,event){
     if(state.orders[object.id]){state.events[event.id]={type:event.type,created:event.created};return false;}
     const metadata=object.metadata||{},items=parseMetadataItems(metadata),quantity=items.reduce((sum,item)=>sum+item.quantity,0);
     const {deliveryName,deliveryAddress}=checkoutShippingDetails(object);
+    const verifiedDeliveryLocation=metadata.aura_shipping_postcode?{suburb:metadata.aura_shipping_suburb,state:metadata.aura_shipping_state,postcode:metadata.aura_shipping_postcode,country:"AU"}:null;
+    const shippingReviewRequired=Boolean(verifiedDeliveryLocation&&!compareDeliveryLocation(verifiedDeliveryLocation,deliveryAddress||{}));
     const reservation=Object.values(state.checkoutRequests||{}).find(item=>item?.orderNumber===metadata.aura_order_number);
     const attribution=reservation?.attribution?normaliseAttribution(reservation.attribution):attributionFromMetadata(metadata);
     const lastAttribution=attribution.last||{};
@@ -724,12 +738,15 @@ export function applyStripeEvent(state,event){
       orderStatus:metadata.aura_payment_stage==="paid_in_full"?"paid_in_full":"initial_payment_received",
       initialPaymentStatus:"paid",
       balancePaymentStatus:metadata.aura_payment_stage==="paid_in_full"?"paid":"not_requested",
-      fulfilmentStatus:metadata.aura_payment_stage==="paid_in_full"?"preparing_for_dispatch":"preorder_confirmed",
+      fulfilmentStatus:shippingReviewRequired?"shipping_review_required":metadata.aura_payment_stage==="paid_in_full"?"preparing_for_dispatch":"preorder_confirmed",
       customerEmail:object.customer_details?.email||object.customer_email||"",
       customerName:object.customer_details?.name||"",
       customerPhone:object.customer_details?.phone||"",
       deliveryName,
       deliveryAddress,
+      verifiedDeliveryLocation,
+      shippingCoverageVersion:metadata.aura_shipping_coverage_version||"",
+      shippingReviewRequired,
       attribution,
       metaCheckoutBindingHash:reservation?.metaCheckoutBindingHash||"",
       internalTest:lastAttribution.source==="internal_test"||lastAttribution.campaign==="aura_controlled_test",

@@ -1,0 +1,50 @@
+{
+  "status": "review-only",
+  "receivedByMax": "2026-09-17",
+  "forwardedBy": "Liam",
+  "originalSender": {
+    "name": "Garry Fryer",
+    "company": "Aramex Gold Coast",
+    "email": "Garry@cubicsea.com.au"
+  },
+  "gmailEvidence": "https://mail.google.com/mail/u/?authuser=max%40aurapaddle.com#all/1a0ae1194a5bcc5b",
+  "basis": "2026 email examples for 40 kg volumetric weight; AUD before fuel surcharge and GST",
+  "exampleBaseRates": {
+    "Gold Coast": 15.94,
+    "Brisbane": 19.95,
+    "Sunshine Coast": 25.29,
+    "Sydney": 25.34,
+    "Coffs Harbour": 27.25,
+    "Toowoomba": 33.55,
+    "Northern Rivers": 34.53,
+    "Port Macquarie": 35.18,
+    "Central Coast": 37.50,
+    "Newcastle": 37.50,
+    "Melbourne": 34.64,
+    "Wollongong": 39.38
+  },
+  "fuelSurchargeEvidence": "https://www.aramex.com.au/terms-and-conditions/fuel-surcharge/",
+  "fuelSurchargeObserved": {"2026-09": 0.079, "2026-10": 0.115},
+  "packageLimitsFromAramexGoldCoastDeckOct24Page15": {
+    "maxActualWeightKg": 25,
+    "maxLengthCm": 200,
+    "maxVolumeM3": 0.160,
+    "maxVolumetricWeightKg": 40
+  },
+  "explicitNonDecisions": [
+    "This evidence is not a postcode or suburb coverage map.",
+    "These example rates do not change current storefront prices.",
+    "The Business 4 2025 PDF prices must not be mixed with the 2026 email examples.",
+    "The 25 to 30 kg price jump is not proof that an oversize fee should be added again.",
+    "Published fuel surcharge observations are not a permanent fixed rate.",
+    "Net board weight and packed carry-bag dimensions do not prove carrier gross weight or outer-carton dimensions."
+  ],
+  "missingForProduction": [
+    "postcode and suburb service-area mapping",
+    "verified packed gross weight and outer-carton dimensions for each shippable SKU",
+    "written confirmation that each SUP package is accepted under the quoted service",
+    "current surcharge and GST calculation rules",
+    "effective and expiry dates",
+    "remote, island and excluded-destination rules"
+  ]
+}

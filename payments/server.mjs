@@ -17,6 +17,7 @@ import {renderCoastGoPage,renderCoastGoFeed} from "./coastgo-content.mjs";
 import {adminReviewData,attachReviewEmail,ensureReviewState,moderateReview,publicReviewData,renderReviews,submitReview} from "./reviews.mjs";
 import {issueMetaPurchaseReceipt,redeemMetaPurchaseReceipt} from "./meta-purchase.mjs";
 import {createGeoResolver,renderClientIp} from "./geo-region.mjs";
+import {resolveDeliveryLocation,validateCoverageTable} from "./shipping-location.mjs";
 
 const here=path.dirname(fileURLToPath(import.meta.url));
 const siteDir=path.resolve(here,"..");
@@ -63,6 +64,7 @@ for(const filename of fs.readdirSync(path.join(siteDir,"products")).filter(name=
   for(const variant of product.variants||[])reviewCatalog.bySku.set(variant.sku,{slug:product.slug});
 }
 const shippingRates=loadShippingRates();
+const shippingCoverage=validateCoverageTable(JSON.parse(fs.readFileSync(path.join(siteDir,"shipping-coverage.draft.json"),"utf8")),shippingRates);
 const configuredStripeAccount=process.env.STRIPE_ACCOUNT_ID||"";
 const sandboxStripeMap=loadStripeMap(catalog);
 const stripeMap=allowLive
@@ -172,7 +174,11 @@ async function checkout(req,res){
   const items=normaliseCheckoutItems(rawItems,catalog);
   if(items.some(item=>coastGoOffer.isCoastGo(item.variant.sku)&&!(Array.isArray(body.coastGoPrices)&&body.coastGoPrices.some(price=>price?.sku===item.variant.sku&&price.unitAmount===item.variant.checkoutAmount))))return send(res,409,{error:"CoastGo pricing has changed. Refresh your cart and review the full-payment total before continuing."});
   const promoCode=String(body.promoCode||"").trim().toUpperCase();
-  const shipping=calculateShipping(items,body.shippingRegion,shippingRates,Date.now(),promoCode);
+  const locationResolution=resolveDeliveryLocation(body.deliveryLocation,shippingCoverage,shippingRates);
+  if(locationResolution.status==="invalid")return send(res,400,{error:locationResolution.error});
+  if(locationResolution.status!=="verified")return send(res,400,{error:"We could not confirm a published SUP freight rate for this address. No payment has been taken. Contact AURA PADDLE for a freight quote.",quoteRequired:true});
+  if(body.shippingRegion&&body.shippingRegion!==locationResolution.regionId)return send(res,409,{error:"The selected delivery region does not match the confirmed suburb, state and postcode. Review the delivery details before payment."});
+  const shipping=calculateShipping(items,locationResolution.regionId,shippingRates,Date.now(),promoCode);
   if(items.some(item=>coastGoOffer.isCoastGo(item.variant.sku))&&body.coastGoShippingAmount!==shipping.amount)return send(res,409,{error:"CoastGo shipping has changed. Refresh your cart and review the delivery total before continuing."});
   if(promoCode&&!shipping.promotionCode&&promoCode!==coastGoOffer.codeFor(items))return send(res,400,{error:"This promo code is invalid or not available for this order, region or date."});
   if(items.some(item=>item.variant.orderMode==="available")&&shipping.quoteRequired)return send(res,400,{error:"Contact AURA PADDLE for a freight quote before ordering this in-stock board."});
@@ -182,9 +188,22 @@ async function checkout(req,res){
   const attribution=normaliseAttribution(body.attribution);
   const metaBindingToken=crypto.randomBytes(32).toString("base64url"),metaCheckoutBindingHash=crypto.createHash("sha256").update(metaBindingToken).digest("hex");
   const identity=await createOrderIdentity(requestId,attribution,customerEmail,items,metaCheckoutBindingHash);
-  const params=buildCheckoutParams({items,priceBySku:stripeMap.bySku,siteUrl,returnPath,shipping,attribution,customerEmail,recoveryEmailConsent:body.recoveryEmailConsent===true,orderInvoicesEnabled,gstTaxRateId,...identity});
+  const shippingLocation={...locationResolution.location,coverageVersion:locationResolution.coverageVersion};
+  const params=buildCheckoutParams({items,priceBySku:stripeMap.bySku,siteUrl,returnPath,shipping,shippingLocation,attribution,customerEmail,recoveryEmailConsent:body.recoveryEmailConsent===true,orderInvoicesEnabled,gstTaxRateId,...identity});
   const session=await stripeRequest("/v1/checkout/sessions",{method:"POST",headers:{"Content-Type":"application/x-www-form-urlencoded","Idempotency-Key":`aura-${requestId}`},body:params});
   send(res,200,{id:session.id,url:session.url,orderNumber:identity.orderNumber,testMode:!session.livemode},{"Set-Cookie":`aura_meta_checkout=${encodeURIComponent(metaBindingToken)}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=7200`});
+}
+async function shippingQuote(req,res){
+  const origin=req.headers.origin;
+  if(origin&&origin!==new URL(siteUrl).origin)return send(res,403,{error:"Shipping checks must come from the AURA PADDLE website."});
+  const body=JSON.parse((await readBody(req,100_000)).toString("utf8")||"{}");
+  const rawItems=Array.isArray(body.items)?body.items:[];
+  const items=normaliseCheckoutItems(rawItems,catalog);
+  const resolution=resolveDeliveryLocation(body.deliveryLocation,shippingCoverage,shippingRates);
+  if(resolution.status==="invalid")return send(res,400,{error:resolution.error,status:resolution.status});
+  if(resolution.status!=="verified")return send(res,200,{status:resolution.status,quoteRequired:true,location:resolution.location,coverageVersion:resolution.coverageVersion});
+  const shipping=calculateShipping(items,resolution.regionId,shippingRates,Date.now(),String(body.promoCode||"").trim().toUpperCase());
+  send(res,200,{status:"verified",quoteRequired:shipping.quoteRequired,location:resolution.location,coverageVersion:resolution.coverageVersion,shipping:{regionId:shipping.regionId,label:shipping.label,amount:shipping.amount,quoteRequired:shipping.quoteRequired,promotionApplied:shipping.promotionApplied===true,promotionCode:shipping.promotionCode||""}});
 }
 async function sessionSummary(req,res,url){
   const id=url.searchParams.get("id")||"";
@@ -541,6 +560,7 @@ const server=http.createServer(async(req,res)=>{
     if(req.method==="GET"&&url.pathname==="/api/admin/analytics-issues"){if(!requireAdmin(req))return send(res,401,{error:"Admin authorisation required."});const state=await store.read();return send(res,200,{items:Object.values(state.analyticsAmountIssues||{}).sort((a,b)=>Number(b.createdAt||0)-Number(a.createdAt||0))})}
     if(['GET','POST'].includes(req.method)&&url.pathname==='/api/admin/inventory')return await inventoryAdmin(req,res);
     if(req.method==='GET'&&url.pathname==='/api/availability')return send(res,200,publicAvailability(await store.read()));
+    if(req.method==="POST"&&url.pathname==="/api/shipping-quote")return await shippingQuote(req,res);
     if(req.method==="POST"&&url.pathname==="/api/checkout")return await checkout(req,res);
     if(req.method==="GET"&&url.pathname==="/api/checkout-session")return await sessionSummary(req,res,url);
     if(req.method==="POST"&&url.pathname==="/api/meta-purchase/issue")return await metaPurchase(req,res,"issue");
