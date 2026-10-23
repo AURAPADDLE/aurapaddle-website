@@ -19,7 +19,7 @@ export function deliveryLocationKey(input){
 }
 
 export function validateCoverageTable(table,rates){
-  if(!table||table.status!=="draft"||!Array.isArray(table.locations))throw new Error("Shipping coverage table must remain a reviewed draft until carrier data is approved.");
+  if(!table||!["draft","approved"].includes(table.status)||!Array.isArray(table.locations))throw new Error("Shipping coverage table must declare draft or approved status.");
   const seen=new Set();
   for(const entry of table.locations){
     const key=deliveryLocationKey(entry);
@@ -30,6 +30,12 @@ export function validateCoverageTable(table,rates){
     if(entry.reviewed!==true||!entry.source||!entry.effectiveFrom)throw new Error(`Unreviewed carrier coverage entry: ${key}`);
   }
   return table;
+}
+
+export function assertShippingValidationConfiguration(mode,table){
+  if(!["off","draft","enforced"].includes(mode))throw new Error("SHIPPING_LOCATION_VALIDATION_MODE must be off, draft or enforced.");
+  if(mode==="enforced"&&(table?.status!=="approved"||!table?.locations?.length))throw new Error("Enforced shipping validation requires a non-empty approved carrier coverage table.");
+  return {mode,coverageStatus:table?.status||"missing",reviewedLocations:table?.locations?.length||0};
 }
 
 export function resolveDeliveryLocation(input,table,rates){

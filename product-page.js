@@ -525,7 +525,9 @@
   $("qtyDown").addEventListener("click",()=>{const previous=quantity;$("quantity").textContent=quantity=Math.max(1,quantity-1);if(quantity!==previous){renderPurchaseClarity();renderMobilePurchaseBar();track("change_item_quantity",{item_id:variant().sku,item_name:data.name,direction:"decrease",quantity})}});$("qtyUp").addEventListener("click",()=>{const previous=quantity;$("quantity").textContent=quantity=Math.min(20,quantity+1);if(quantity!==previous){renderPurchaseClarity();renderMobilePurchaseBar();track("change_item_quantity",{item_id:variant().sku,item_name:data.name,direction:"increase",quantity})}});
   document.querySelectorAll(".detail-head").forEach(btn=>btn.addEventListener("click",()=>{const item=btn.parentElement,open=item.classList.toggle("open");btn.setAttribute("aria-expanded",String(open))}));
   document.querySelector(".modal-close").addEventListener("click",()=>$("stripeDialog").close());
-  $("checkoutButton").addEventListener("click",beginCheckout);
+  // All purchase paths must use the cart so the delivery address and freight
+  // region are confirmed before a Checkout Session is created.
+  $("checkoutButton").addEventListener("click",buyNow);
   $("reviewForm")?.addEventListener("submit",submitReview);
   document.querySelectorAll("[data-add-accessory]").forEach(button=>button.addEventListener("click",()=>addAccessory(button.dataset.addAccessory)));
   const menuButton=$("menuButton"),mobileMenu=$("mobileMenu");if(menuButton&&mobileMenu){menuButton.addEventListener("click",()=>{const open=mobileMenu.classList.toggle("open");menuButton.setAttribute("aria-expanded",String(open));document.body.classList.toggle("menu-open",open)});mobileMenu.querySelectorAll("a").forEach(a=>a.addEventListener("click",()=>{mobileMenu.classList.remove("open");document.body.classList.remove("menu-open");menuButton.setAttribute("aria-expanded","false")}))}

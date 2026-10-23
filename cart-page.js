@@ -14,7 +14,7 @@
   const checkoutLabel=checkout.textContent;
   const error=document.getElementById("checkoutError");
   const regionSelect=document.getElementById("shippingRegion");
-  const shippingValidationEnabled=config.shippingLocationValidation==="draft"||["127.0.0.1","localhost"].includes(location.hostname);
+  const shippingValidationEnabled=["draft","enforced"].includes(config.shippingLocationValidation);
   if(shippingValidationEnabled){regionSelect.hidden=true;regionSelect.setAttribute("aria-hidden","true");regionSelect.tabIndex=-1;}
   const deliveryLocationBlock=document.createElement("fieldset");
   deliveryLocationBlock.className="delivery-location";
@@ -24,7 +24,8 @@
   const shippingState=deliveryLocationBlock.querySelector("#shippingState");
   const shippingPostcode=deliveryLocationBlock.querySelector("#shippingPostcode");
   const deliveryLocation=()=>({suburb:shippingSuburb.value.trim(),state:shippingState.value,postcode:shippingPostcode.value.trim()});
-  let verifiedShipping=null,shippingQuotePending=false,shippingQuoteTimer,shippingQuoteMessage="";
+  const sameDeliveryLocation=(left,right)=>String(left?.suburb||"").trim().toUpperCase()===String(right?.suburb||"").trim().toUpperCase()&&String(left?.state||"").trim().toUpperCase()===String(right?.state||"").trim().toUpperCase()&&String(left?.postcode||"").trim()===String(right?.postcode||"").trim();
+  let verifiedShipping=null,shippingQuotePending=false,shippingQuoteTimer,shippingQuoteMessage="",shippingQuoteRequest=0;
   regionSelect.querySelector('option[value="local-pickup"]')?.remove();
   const legacyRegionOption=regionSelect.querySelector('option[value="canberra-melbourne"]');
   if(legacyRegionOption)legacyRegionOption.remove();
@@ -292,7 +293,8 @@
   });
 
   const requestShippingQuote=()=>{
-    clearTimeout(shippingQuoteTimer);verifiedShipping=null;shippingQuoteMessage="";regionSelect.value="";render();
+    const request=++shippingQuoteRequest;
+    clearTimeout(shippingQuoteTimer);verifiedShipping=null;shippingQuotePending=false;shippingQuoteMessage="";regionSelect.value="";render();
     const locationValue=deliveryLocation();
     if(!locationValue.suburb||!locationValue.state||!/^\d{4}$/.test(locationValue.postcode))return;
     shippingQuotePending=true;render();
@@ -301,6 +303,7 @@
         const items=cart.read();
         const response=await fetch(config.shippingQuoteEndpoint||"/api/shipping-quote",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({items:items.map(({sku,quantity})=>({sku,quantity})),deliveryLocation:locationValue,promoCode:appliedPromoCode})});
         const payload=await response.json().catch(()=>({}));
+        if(request!==shippingQuoteRequest)return;
         if(!response.ok)throw new Error(payload.error||"Delivery address could not be checked.");
         if(payload.status!=="verified"){
           shippingQuoteMessage='We could not confirm a published SUP freight rate for this address. No payment has been taken. <a href="mailto:admin@aurapaddle.com?subject=SUP%20freight%20quote">Contact AURA PADDLE for a freight quote</a>.';
@@ -311,7 +314,7 @@
         const shipping=shippingFor(items,regionSelect.value);
         track("select_shipping_region",{shipping_region:regionSelect.value,shipping_type:shipping.quoteRequired?"quote_required":"published_rate",verification:"address"});
       }catch(reason){shippingQuoteMessage=escape(reason.message||String(reason))}
-      finally{shippingQuotePending=false;render()}
+      finally{if(request===shippingQuoteRequest){shippingQuotePending=false;render()}}
     },350);
   };
   if(shippingValidationEnabled)for(const field of [shippingSuburb,shippingState,shippingPostcode])field.addEventListener(field.tagName==="SELECT"?"change":"input",requestShippingQuote);
@@ -346,6 +349,7 @@
     const items=cart.read();
     if(!items.length)return;
     const customerEmail=checkoutEmail.value.trim().toLowerCase();
+    if(shippingValidationEnabled&&(!verifiedShipping||!sameDeliveryLocation(verifiedShipping.location,deliveryLocation()))){requestShippingQuote();error.textContent="Reconfirm the current suburb, state and postcode before payment.";error.style.display="block";return}
     if(!customerEmail||!checkoutEmail.checkValidity()){
       checkoutEmail.setCustomValidity(customerEmail?"Enter a valid email address.":"Enter your email address before continuing to secure payment.");
       checkoutEmail.reportValidity();

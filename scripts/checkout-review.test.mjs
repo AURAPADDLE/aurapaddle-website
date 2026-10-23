@@ -29,6 +29,11 @@ const storage = entries => {
 };
 const yoga = {sku:'AP734955', productName:'AURA PADDLE Yoga Cruiser', shortName:'Yoga Cruiser', size:'11', colour:'Glacier Blue', quantity:1, unitAmount:74900, orderMode:'preorder', productUrl:'products/yoga-cruiser.html'};
 
+test('every product checkout action routes through the cart freight check',()=>{
+  assert.match(source('product-page.js'),/checkoutButton"\)\.addEventListener\("click",buyNow\)/);
+  assert.match(source('product-page.js'),/location\.href="\.\.\/cart\/"/);
+});
+
 function harness(allowed, url='https://www.aurapaddle.com/cart/?utm_source=google&utm_medium=cpc&utm_campaign=offline_qa', options={}) {
   const elements = new Map();
   const element = key => { if (!elements.has(key)) elements.set(key,new Element()); return elements.get(key); };

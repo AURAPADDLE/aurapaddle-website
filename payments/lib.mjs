@@ -578,10 +578,20 @@ export function orderProgress(order){
 }
 
 export function updateOrderProgress(order,input={},now=Math.floor(Date.now()/1000)){
-  const stage=String(input.stage||""),allowed=new Set(["update_estimate","production_confirmed","dispatched","delivered","collected","internal_test"]);
+  const stage=String(input.stage||""),allowed=new Set(["update_estimate","production_confirmed","resolve_shipping_review","dispatched","delivered","collected","internal_test"]);
   if(!allowed.has(stage))throw new Error("Select a valid order progress update.");
   if(order.initialPaymentStatus!=="paid"||["cancelled","refunded"].includes(order.fulfilmentStatus))throw new Error("This order cannot be progressed.");
   if(['collected','not_required'].includes(order.fulfilmentStatus))throw Error('This order is already completed.');
+  if(stage==="resolve_shipping_review"){
+    if(!order.shippingReviewRequired)throw new Error("This order does not have an open delivery-address freight review.");
+    const note=String(input.note||"").trim().slice(0,500);
+    if(!note)throw new Error("A freight-review resolution note is required.");
+    order.shippingReviewRequired=false;order.shippingReviewResolvedAt=now;order.shippingReviewResolutionNote=note;
+    order.fulfilmentStatus=order.paymentStage==="paid_in_full"||order.balancePaymentStatus==="paid"?"preparing_for_dispatch":"preorder_confirmed";
+    order.orderStatus=order.paymentStage==="paid_in_full"?"paid_in_full":order.balancePaymentStatus==="paid"?"balance_paid":"initial_payment_received";
+    order.orderAudit??=[];order.orderAudit.push({action:stage,note,at:now});order.updated=now;return order;
+  }
+  if(order.shippingReviewRequired&&["collected","dispatched","delivered","internal_test"].includes(stage))throw new Error("Resolve the delivery-address freight review before fulfilment.");
   if(['collected','internal_test'].includes(stage)){
     if(order.paymentStage!=='paid_in_full'&&order.balancePaymentStatus!=='paid')throw Error('Full payment must be received before completion.');
     if(order.dispatchedAt||order.deliveredAt||order.inventoryConsumed)throw Error('This order has already shipped. Reconcile physical stock before changing its classification.');
@@ -599,10 +609,9 @@ export function updateOrderProgress(order,input={},now=Math.floor(Date.now()/100
   }
   if(stage==="production_confirmed"){
     order.productionConfirmedAt=Number(order.productionConfirmedAt||now);
-    if(!["awaiting_balance","preparing_for_dispatch","dispatched","delivered"].includes(order.fulfilmentStatus)){order.fulfilmentStatus="production_confirmed";order.orderStatus="production_confirmed"}
+    if(!order.shippingReviewRequired&&!["awaiting_balance","preparing_for_dispatch","dispatched","delivered"].includes(order.fulfilmentStatus)){order.fulfilmentStatus="production_confirmed";order.orderStatus="production_confirmed"}
   }
   if(stage==="dispatched"){
-    if(order.shippingReviewRequired)throw new Error("Resolve the delivery-address freight review before dispatch.");
     const paymentComplete=order.initialPaymentStatus==="paid"&&(order.paymentStage==="paid_in_full"||order.balancePaymentStatus==="paid");
     if(!paymentComplete)throw new Error("Final payment must be received before dispatch.");
     const carrier=String(input.carrier||"").trim().slice(0,80),trackingNumber=String(input.trackingNumber||"").trim().slice(0,100),trackingUrl=String(input.trackingUrl||"").trim();
@@ -781,7 +790,7 @@ export function applyStripeEvent(state,event){
       const paidAmount=Number(object.amount_paid||0),remainingAmount=Number(object.amount_remaining||0),expectedBalance=Number(order.balanceRequestedAmount||0),expectedOrderTotal=Number(order.amountTotal||0)+expectedBalance,invoiceMatches=!order.balanceInvoiceId||order.balanceInvoiceId===object.id;
       const orderInvoice=order.orderInvoiceId===object.id||object.metadata?.aura_invoice_type==="order_tax_invoice";
       order.balancePaidAmount=orderInvoice?Math.max(0,paidAmount-Number(order.amountTotal||0)):paidAmount;
-      if(expectedBalance>0&&invoiceMatches&&remainingAmount===0&&paidAmount===(orderInvoice?expectedOrderTotal:expectedBalance)){order.balancePaymentStatus="paid";order.balanceInvoiceId=object.id;order.orderInvoiceId=orderInvoice?object.id:order.orderInvoiceId;order.orderInvoiceStatus=orderInvoice?"paid":order.orderInvoiceStatus;order.orderInvoiceUrl=orderInvoice?(object.hosted_invoice_url||order.orderInvoiceUrl||""):order.orderInvoiceUrl;order.orderInvoicePdf=orderInvoice?(object.invoice_pdf||order.orderInvoicePdf||""):order.orderInvoicePdf;order.balancePaidAt=event.created;order.preparingForDispatchAt=event.created;order.orderStatus="balance_paid";order.fulfilmentStatus="preparing_for_dispatch";delete order.requiresBalancePaymentReview}
+      if(expectedBalance>0&&invoiceMatches&&remainingAmount===0&&paidAmount===(orderInvoice?expectedOrderTotal:expectedBalance)){order.balancePaymentStatus="paid";order.balanceInvoiceId=object.id;order.orderInvoiceId=orderInvoice?object.id:order.orderInvoiceId;order.orderInvoiceStatus=orderInvoice?"paid":order.orderInvoiceStatus;order.orderInvoiceUrl=orderInvoice?(object.hosted_invoice_url||order.orderInvoiceUrl||""):order.orderInvoiceUrl;order.orderInvoicePdf=orderInvoice?(object.invoice_pdf||order.orderInvoicePdf||""):order.orderInvoicePdf;order.balancePaidAt=event.created;order.preparingForDispatchAt=event.created;order.orderStatus="balance_paid";order.fulfilmentStatus=order.shippingReviewRequired?"shipping_review_required":"preparing_for_dispatch";delete order.requiresBalancePaymentReview}
       else{order.balancePaymentStatus="payment_review";order.requiresBalancePaymentReview=true}
       order.updated=event.created;
     }
