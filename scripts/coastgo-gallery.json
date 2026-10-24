@@ -1,0 +1,26 @@
+{
+  "blueorange": [
+    "../assets/products/coast-go/blue-orange/amazon-20260929/AP081165-01-main.webp",
+    "../assets/products/coast-go/blue-orange/amazon-20260929/AP081165-02-lifestyle.webp",
+    "../assets/products/coast-go/blue-orange/amazon-20260929/AP081165-03-kit.webp",
+    "../assets/products/coast-go/blue-orange/amazon-20260929/AP081165-04-dimensions.webp",
+    "../assets/products/coast-go/blue-orange/amazon-20260929/AP081165-05-details.webp",
+    "../assets/products/coast-go/blue-orange/amazon-20260929/AP081165-06-fins.webp"
+  ],
+  "mintgrey": [
+    "../assets/products/coast-go/mint-grey/amazon-20260929/AP730047-01-main.webp",
+    "../assets/products/coast-go/mint-grey/amazon-20260929/AP730047-02-lifestyle.webp",
+    "../assets/products/coast-go/mint-grey/amazon-20260929/AP730047-03-kit.webp",
+    "../assets/products/coast-go/mint-grey/amazon-20260929/AP730047-04-dimensions.webp",
+    "../assets/products/coast-go/mint-grey/amazon-20260929/AP730047-05-details.webp",
+    "../assets/products/coast-go/mint-grey/amazon-20260929/AP730047-06-fins.webp"
+  ],
+  "bluecoral": [
+    "../assets/products/coast-go/blue-coral/amazon-20260929/AP388238-01-main.webp",
+    "../assets/products/coast-go/blue-coral/amazon-20260929/AP388238-02-lifestyle.webp",
+    "../assets/products/coast-go/blue-coral/amazon-20260929/AP388238-03-kit.webp",
+    "../assets/products/coast-go/blue-coral/amazon-20260929/AP388238-04-dimensions.webp",
+    "../assets/products/coast-go/blue-coral/amazon-20260929/AP388238-05-details.webp",
+    "../assets/products/coast-go/blue-coral/amazon-20260929/AP388238-06-fins.webp"
+  ]
+}
