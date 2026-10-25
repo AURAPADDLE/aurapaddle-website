@@ -7,7 +7,10 @@
   const explicitMarketing=()=>{try{return JSON.parse(localStorage.getItem(consentKey)||"null")?.marketing===true}catch{return false}};
   const trustedAustralianDefault=()=>!savedChoice()&&window.AURA_TRUSTED_REGION?.source==="trusted-server"&&String(window.AURA_TRUSTED_REGION.country||"").toUpperCase()==="AU";
   const allowedPath=()=>["/","/shop/","/cart/","/policies/","/pre-order/","/our-story/","/contact/","/inflatable-paddle-boards/","/purchase-confirmed.html"].includes(location.pathname)||/^\/(products\/[a-z0-9-]+\.html|guides\/[a-z0-9-]+\/?|support(?:\/[a-z0-9-]+)?\/?)$/.test(location.pathname);
-  const safeQuery=()=>[...new URL(location.href).searchParams].every(([key,value])=>["size","colour","category"].includes(key)||key==="fbclid"&&/^[A-Za-z0-9._~-]{1,160}$/.test(value));
+  const safeQuery=()=>[...new URL(location.href).searchParams].every(([key,value])=>
+    ["size","colour","category"].includes(key)||
+    ["utm_source","utm_medium","utm_campaign","utm_content"].includes(key)&&/^[A-Za-z0-9._~-]{1,128}$/.test(value)||
+    key==="fbclid"&&/^[A-Za-z0-9._~-]{1,256}$/.test(value));
   const eligible=()=>allowedPath()&&safeQuery()&&(explicitMarketing()||trustedAustralianDefault());
   const deleteMetaCookies=()=>{for(const name of ["_fbp","_fbc"]){document.cookie=`${name}=; Max-Age=0; Path=/; SameSite=Lax`;document.cookie=`${name}=; Max-Age=0; Path=/; Domain=.aurapaddle.com; SameSite=Lax`}};
   const pageKey=()=>{const url=new URL(location.href);return url.pathname+url.search};
