@@ -139,7 +139,7 @@ const seoTitles={
   "coast-go":"All-Round Inflatable SUP Board | CoastGo | AURA PADDLE"
 };
 const seoHeadings={
-  "yoga-cruiser":"Yoga Cruiser Yoga SUP Board",
+  "yoga-cruiser":"Yoga Cruiser Inflatable SUP Board",
   "angler-fishing":"Angler Fishing Inflatable SUP Board",
   "touring-performance":"Touring Performance Inflatable SUP Board",
   "coast-go":"CoastGo All-Round Inflatable SUP Board"

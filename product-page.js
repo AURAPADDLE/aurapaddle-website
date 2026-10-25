@@ -358,7 +358,7 @@
     const layout=document.querySelector(".product-layout"),info=document.querySelector(".product-info"),intro=document.createElement("div");
     intro.className="product-intro";
     for(const selector of [".breadcrumb",".eyebrow","h1",".subtitle","#availability",".price-row",".product-rating-link","#priceNote"]){const el=info.querySelector(selector);if(el)intro.append(el)}
-    intro.querySelector("h1").textContent="Yoga Cruiser";
+    // Keep the authored H1 when moving it into the Yoga intro.
     intro.querySelector(".subtitle").textContent=yogaCruiserDescription;
     const benefits=info.querySelector(".product-benefits");if(benefits)intro.querySelector(".subtitle").after(benefits);
     const kit=document.createElement("p");kit.className="kit-summary";kit.textContent="Electric pump · Wheeled carry bag · Adjustable paddle included";intro.append(kit);
