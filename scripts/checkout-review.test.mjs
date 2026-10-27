@@ -62,7 +62,7 @@ function harness(allowed, url='https://www.aurapaddle.com/cart/?utm_source=googl
     return input;
   };
   const pageShow=persisted=>(windowListeners.get('pageshow')||[]).forEach(fn=>fn({persisted}));
-  return {context, elements, element, calls, scripts, requests, redirects, startCart, pageShow};
+  return {context, elements, element, calls, scripts, requests, redirects, startCart, pageShow, created};
 }
 
 test('new external source replaces last non-direct while preserving first recorded source',async()=>{
@@ -305,7 +305,7 @@ test('CoastGo standard/express/remote retain amounts, visible transit and paymen
   }
 });
 test('offer expiry restores actual standard shipping, without extending promotion',async()=>{
-  const h=harness(false,undefined,{items:[{...yoga,orderMode:'available'}],now:'2026-10-31T14:00:00Z'});h.startCart();
+  const h=harness(false,undefined,{items:[{...yoga,orderMode:'available'}],now:'2026-10-27T21:47:27Z'});h.startCart();
   assert.equal(h.element('dueToday').textContent,'$774');
   await h.element('checkoutCart').listeners.click();
   assert.equal(h.requests[0].body.promoCode,'');
@@ -352,4 +352,21 @@ test('withdrawal while the tag loads prevents even ID lookup calls',async()=>{
   h.context.auraConsent={analytics:false,marketing:false};h.scripts.find(s=>s.src).listeners.load();
   const result=await pending;assert.equal(result.diagnostics,undefined);assert.equal(h.calls.some(c=>c[0]==='get'),false);
   assert.equal(h.context.localStorage.getItem('aura-attribution-v1'),null);
+});
+
+
+test('withdrawn shipping promotion reprices browser checkout without advertising the old code',async()=>{
+  const now='2026-10-27T21:47:27Z';
+  for(const [item,region,total,shipping] of [[{...yoga,orderMode:'available'},'gold-coast-brisbane','$774',2500],[{...yoga,orderMode:'available'},'qld-nsw-main','$794',4500],[coast,'coastgo-metro','$329',3000],[coast,'coastgo-standard','$334',3500],[coast,'coastgo-country','$374',7500],[coast,'coastgo-remote-north','$419',12000],[coast,'coastgo-express','$419',12000]]){
+    const h=harness(true,undefined,{items:[item],region,now});h.startCart();
+    await new Promise(resolve=>setImmediate(resolve));
+    assert.equal(h.element('dueToday').textContent,total,region);
+    assert.equal(h.created.find(e=>e.className==='promo-code').hidden,true);
+    await h.element('checkoutCart').listeners.click();
+    assert.equal(h.requests[0].body.promoCode,'');
+    assert.equal(h.requests[0].body.coastGoShippingAmount,shipping);
+    const event=h.calls.find(c=>c[0]==='event'&&c[1]==='begin_checkout');
+    assert.equal(event[2].promotion_id,'');assert.equal(event[2].coupon,'');
+    assert.equal(event[2].shipping,shipping/100);
+  }
 });

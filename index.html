@@ -207,31 +207,7 @@
 
   <footer><div class="wrap"><div class="footer-grid"><div><div class="footer-brand">AURA PADDLE</div><p>Paddle out. Find your way on the water.</p></div><div class="footer-col"><h3>Explore</h3><a href="shop/">All boards</a><a href="our-story/">Our story</a><a href="#finder">Find your board</a><a href="#commercial">Commercial</a></div><div class="footer-col"><h3>Policies</h3><a href="policies/#shipping">Shipping Policy</a><a href="policies/#returns">Returns &amp; Refunds</a><a href="policies/#privacy">Privacy Policy</a><a href="policies/#terms">Terms &amp; Conditions</a><button class="cookie-settings-link" type="button" data-open-cookie-settings>Cookie settings</button></div><div class="footer-col"><h3>Connect</h3><a href="https://www.instagram.com/aurapaddleau/" target="_blank" rel="noopener">Instagram</a><a href="https://www.tiktok.com/@aurapaddle" target="_blank" rel="noopener">TikTok</a><a href="mailto:admin@aurapaddle.com">Email AURA PADDLE</a><a class="btn btn-primary whatsapp-button" href="https://wa.me/61422679280" target="_blank" rel="noopener" aria-label="Chat with Max at AURA PADDLE on WhatsApp">Chat on WhatsApp</a><p class="whatsapp-note">Product enquiries with Max. Replies may not be immediate. Payments remain on AURA PADDLE's secure checkout.</p></div></div><div class="footer-bottom"><span>© 2026 AURA Paddle Pty Ltd · ABN 46 697 865 759 · ACN 697 865 759</span><span>Australia-wide online store · Secure payments by Stripe</span></div></div></footer>
 
-  <dialog class="preorder-offer" id="preorderOffer" aria-labelledby="preorderOfferTitle" aria-describedby="preorderOfferCopy">
-    <div class="preorder-offer__inner">
-      <button class="preorder-offer__close" type="button" data-preorder-offer-close aria-label="Close new-arrival offer">×</button>
-      <div class="preorder-offer__visual"><div class="offer-products"><img src="assets/products/coast-go/blue-orange/amazon-20260929/AP081165-01-main.webp" alt="CoastGo Blue Orange complete paddleboard kit"></div><div class="offer-benefits" aria-label="CoastGo and Yoga Cruiser benefits">
-        <div class="offer-benefit"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M12 3 4.5 6v5.5c0 4.6 3.1 7.8 7.5 9.5 4.4-1.7 7.5-4.9 7.5-9.5V6L12 3Z"/><path d="m9 12 2 2 4-4"/></svg><span><strong>2-Year Warranty</strong><span>Both boards · manufacturing defects under normal recreational use.</span></span></div>
-        <div class="offer-benefit"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M4 7v10M20 7v10M4 12h16"/><path d="m7 9-3 3 3 3m10-6 3 3-3 3"/></svg><span><strong>One of the widest inflatable SUPs for yoga and relaxed paddling in Australia.</strong><span>Yoga Cruiser only · 36-inch-wide deck.</span></span></div>
-        <div class="offer-benefit"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M5 18c3-3 11-3 14 0M8 14c2-2 6-2 8 0"/><circle cx="12" cy="6" r="2"/><path d="M12 8v4m-3-1 3-2 3 2"/></svg><span><strong>Your Yoga Space. On the Water.</strong><span>Yoga Cruiser only · a wide, stable platform for stretching, balancing and finding your flow.</span></span></div>
-        <div class="offer-benefit"><svg aria-hidden="true" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v3m0 14v3M2 12h3m14 0h3M4.9 4.9 7 7m10 10 2.1 2.1M19.1 4.9 17 7M7 17l-2.1 2.1"/></svg><span><strong>UV-Resistant Board Materials</strong><span>Yoga Cruiser only in this offer. Not applicable to CoastGo; accessories excluded.</span></span></div>
-      </div></div>
-      <div class="preorder-offer__content">
-        <p class="preorder-offer__eyebrow">CoastGo + Yoga Cruiser · Through 31 October</p>
-        <h2 id="preorderOfferTitle">Two boards.<br><span>FREE SHIPPING*</span></h2>
-        <p class="preorder-offer__price">CoastGo AUD $299 · Yoga Cruiser AUD $749</p>
-        <div id="preorderOfferCopy">
-          <p class="preorder-offer__value">One code. More time on the water.</p>
-          <button class="preorder-offer__code" type="button" data-promo-code-copy aria-label="Copy promo code AURAFREESHIP"><strong>AURAFREESHIP</strong><span>Copy code</span></button>
-          <p class="preorder-offer__copy">Eligible delivery regions only. Automatically applied in the cart through 31 October 2026, Queensland time. CoastGo express extra; remote destinations require a quote. Select your region to confirm.</p>
-        </div>
-        <div class="preorder-offer__actions">
-          <a class="btn btn-primary" href="products/coast-go.html" data-preorder-offer-shop>Shop CoastGo</a>
-          <button class="preorder-offer__later" type="button" data-preorder-offer-close>Not now</button>
-        </div>
-      </div>
-    </div>
-  </dialog>
+
 
   <script src="coastgo-offer.js?v=20260929-launch"></script><script src="cart.js?v=20260917-instock"></script><script src="cookie-consent.js?v=20260921-consent-mode-debug"></script><script src="site-analytics.js?v=20260825-key-events"></script><script>
     document.getElementById("finderForm").addEventListener("submit",e=>{e.preventDefault();const a=document.getElementById("activity").value;const map={yoga:["Yoga Cruiser","Its 36-inch platform prioritises stability and shared use.","paddle"],fishing:["Angler Fishing","A high-capacity platform with dedicated equipment mounts.","paddle"],touring:["Touring Performance","The long, narrow outline is designed for tracking and distance.","paddle"],surf:["AURA Surf Range","Choose Gannet for shortboard response, Current for a minimal, or Meridian for longboard glide.","surf"],wake:["Vela Wakeboard","A complete wakeboard package built around responsive control.","performance"],foil:["Inflatable Hydrofoil","A portable complete system for wing-foil progression.","performance"],school:["Wayfinder","Commercial construction and six sizes support schools and rental fleets.","commercial"]};const result=document.getElementById("finderResult"),m=map[a];result.innerHTML=`<strong>${m[0]}</strong><p>${m[1]}</p><a class="btn btn-dark" href="shop/?category=${m[2]}#products">View matching boards</a>`;result.classList.add("visible");window.AURATracking?.event("board_finder_complete",{activity:a,recommendation:m[0],product_category:m[2]})});

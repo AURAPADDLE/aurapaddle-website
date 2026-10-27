@@ -72,7 +72,7 @@ test('homepage presents both products and common code only during the promotion'
 
 test('standard-only shipping promotion respects exact dates, quantity, remote and mixed-cart exclusions',()=>{
   const end=Date.parse(offer.shippingEndsAt);
-  assert.equal(new Date(end).toISOString(),'2026-10-31T14:00:00.000Z');
+  assert.equal(new Date(end).toISOString(),'2026-10-27T21:47:27.000Z');
   for(const sku of offer.skus)for(const quantity of [1,2,20]){
     for(const now of [cutoff-1,cutoff,cutoff+1,end-1,end,end+1]){
       const items=normaliseCheckoutItems([{sku,quantity}],catalog,now);
@@ -137,4 +137,31 @@ test('Yoga free shipping covers both approved zones and aliases, preserves other
   }
   const others=normaliseCheckoutItems([{sku:'AP667703',quantity:1}],catalog,cutoff);
   assert.equal(calculateShipping(others,'gold-coast-brisbane',undefined,cutoff).quoteRequired,true);
+});
+
+
+test('withdrawn shipping promotion restores only existing tariffs and drops new checkout promotion metadata',()=>{
+  const now=Date.parse(offer.shippingEndsAt);
+  for(const time of [now,now+1,Date.parse('2026-10-31T14:00:00Z')]){
+    assert.equal(offer.freeShippingActive(time),false);
+    for(const sku of [...offer.skus,...offer.yogaSkus])for(const quantity of [1,2]){
+      const items=normaliseCheckoutItems([{sku,quantity}],catalog,time);
+      const cases=offer.isCoastGo(sku)?[['coastgo-metro',3000],['coastgo-standard',3500],['coastgo-country',7500],['coastgo-remote-north',12000],['coastgo-remote-west',12000],['coastgo-express',12000]]:[['gold-coast-brisbane',2500],['qld-nsw-main',4500],['canberra-melbourne',4500],['adelaide',12900],['perth',17900],['tasmania',14900]];
+      for(const [region,amount] of cases){
+        const shipping=calculateShipping(items,region,undefined,time,offer.shippingCode);
+        assert.equal(shipping.amount,amount*quantity,`${sku} ${region}`);
+        assert.equal(shipping.quoteRequired,false);
+        assert.equal(shipping.promotionApplied,false);
+        const params=buildCheckoutParams({items,shipping,siteUrl:'http://localhost',now:time/1000});
+        assert.equal(params.get('metadata[aura_shipping_promotion_id]'),'');
+        assert.equal(params.get('metadata[aura_promotion_code]'),'');
+        assert.equal(params.get('metadata[aura_shipping_amount]'),String(amount*quantity));
+        assert.doesNotMatch(params.get('custom_text[submit][message]')||'',/AURAFREESHIP|FREE standard shipping/);
+      }
+      if(offer.isYoga(sku))assert.equal(calculateShipping(items,'remote',undefined,time).quoteRequired,true);
+    }
+  }
+  const feed=renderCoastGoFeed(fs.readFileSync(new URL('../merchant-feed.xml',import.meta.url),'utf8'),now);
+  for(const item of feed.match(/<item>[\s\S]*?<\/item>/g).filter(i=>offer.skus.some(sku=>i.includes(`<g:id>${sku}</g:id>`))))assert.doesNotMatch(item,/<g:shipping>/);
+  for(const file of ['index.html','policies/index.html'])assert.doesNotMatch(fs.readFileSync(new URL('../'+file,import.meta.url),'utf8'),/AURAFREESHIP|FREE SHIPPING|free-shipping offer/);
 });

@@ -6,7 +6,8 @@
   const discounted=(now=Date.now())=>now<Date.parse(endsAt);
   const price=(now=Date.now())=>discounted(now)?28900:29900;
   const code="COASTGO10";
-  const shippingEndsAt="2026-11-01T00:00:00+10:00";
+  // End the October shipping promotion immediately; preserve historical order rules.
+  const shippingEndsAt="2026-10-27T21:47:27Z";
   const shippingPromotionId="aura_free_shipping_202610";
   const shippingCode="AURAFREESHIP";
   const yogaSkus=["AP734955","AP505002","AP233694","AP587273"];
