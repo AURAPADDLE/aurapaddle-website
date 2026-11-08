@@ -168,7 +168,7 @@ const productCopy={
     why:"Its 14-foot length, 30-inch width, V hull and speed tail favour directional efficiency and sustained glide."
   },
   "coast-go":{
-    description:"An easy-going all-round iSUP package that makes getting on the water straightforward. The familiar 10'6\" shape blends everyday stability with manageable handling, then packs down for simple storage, transport and spontaneous weekend paddles.",
+    description:"A stable, beginner-friendly all-round iSUP package for your first paddles and relaxed paddles on calm water. The 10'6\" × 33\" × 6\" shape provides a reassuring platform for learning to balance, with easy handling as your confidence grows. It packs down for simple storage, transport and weekend adventures.",
     bestFor:"First-time paddlers, casual beach and lake sessions, and customers who want an accessible complete package for everyday use.",
     notFor:"Choose another board for heavy fishing loads, a yoga-specific deck or the speed and tracking of a dedicated long-distance tourer.",
     why:"The 10'6\" × 33\" all-round format balances reassuring stability, practical portability and uncomplicated handling."
