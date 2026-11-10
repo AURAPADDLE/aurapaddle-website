@@ -1,3 +1,4 @@
+import {captureNewsletterSignup,renderNewsletterCapture,syncNewsletterUpdates,createSignupLimiter,SIGNUP_RESPONSE} from './newsletter-capture.mjs';
 import {recordNewsletterEvidence,createNewsletterDraft,newsletterView} from './newsletter.mjs';
 import fs from "node:fs";
 import http from "node:http";
@@ -72,6 +73,8 @@ const stripeMap=allowLive
 const store=createStateStore({databaseUrl,statePath});
 const geoResolver=await createGeoResolver();
 const reviewThrottle=new Map();
+const newsletterLimiter=createSignupLimiter();
+const newsletterCaptureEnabled=process.env.NEWSLETTER_ADMIN_ENABLED==="true"&&process.env.NEWSLETTER_CAPTURE_ENABLED==="true";
 const metaPurchaseThrottle=new Map();
 const mime={".html":"text/html; charset=utf-8",".js":"text/javascript; charset=utf-8",".mjs":"text/javascript; charset=utf-8",".css":"text/css; charset=utf-8",".json":"application/json; charset=utf-8",".png":"image/png",".jpg":"image/jpeg",".jpeg":"image/jpeg",".webp":"image/webp",".svg":"image/svg+xml",".txt":"text/plain; charset=utf-8",".xml":"application/xml; charset=utf-8"};
 
@@ -481,6 +484,10 @@ async function staticFile(req,res,url){
   if(!target.startsWith(`${siteDir}${path.sep}`))return send(res,403,"Forbidden");
   let stat;try{stat=fs.statSync(target);if(stat.isDirectory()){target=path.join(target,"index.html");stat=fs.statSync(target)}}catch{return send(res,404,"Not found")}
   if(!stat.isFile())return send(res,404,"Not found");
+  if(newsletterCaptureEnabled&&['/index.html','/redesign-preview.html'].includes(pathname)){
+    const body=Buffer.from(renderNewsletterCapture(fs.readFileSync(target,'utf8'),crypto.randomUUID()));
+    res.writeHead(200,{'Content-Type':'text/html; charset=utf-8','Content-Length':body.length,'Cache-Control':'no-store'});return res.end(req.method==='HEAD'?undefined:body);
+  }
   if(pathname==="/merchant-feed.xml"||/^\/products\/[a-z0-9-]+\.html$/.test(pathname)){
     const raw=fs.readFileSync(target,"utf8"),slug=path.basename(pathname,".html");
     const state=await store.read(),html=renderInventoryContent(pathname.endsWith(".xml")?renderCoastGoFeed(raw):renderReviews(slug==="coast-go"?renderCoastGoPage(raw):raw,publicReviewData(state,slug)),state,{feed:pathname.endsWith('.xml')});
@@ -492,6 +499,24 @@ async function staticFile(req,res,url){
   fs.createReadStream(target).pipe(res);
 }
 
+async function newsletterSubscribe(req,res){
+  if(!newsletterCaptureEnabled)return send(res,503,{error:'Signup is temporarily unavailable.'});
+  if(req.method!=='POST')return send(res,405,{error:'Method not allowed.'});
+  if(req.headers.origin!==new URL(siteUrl).origin)return send(res,403,{error:'Please use the website signup form.'});
+  const type=String(req.headers['content-type']||'').split(';')[0];
+  if(!['application/json','application/x-www-form-urlencoded'].includes(type))return send(res,415,{error:'Unsupported form format.'});
+  let input;try{const raw=(await readBody(req,4096)).toString('utf8');input=type==='application/json'?JSON.parse(raw):Object.fromEntries(new URLSearchParams(raw))}catch{return send(res,400,{error:'Invalid signup.'})}
+  const address=renderClientIp(req)||req.socket.remoteAddress||'unknown';
+  if(!newsletterLimiter.allow(address,String(input?.email||'').trim().toLowerCase()))return send(res,429,{error:'Please try again later.'},{'Retry-After':'3600'});
+  try{await store.mutate(state=>captureNewsletterSignup(state,input))}catch{return send(res,400,{error:'Please check the form and reload it before trying again.'})}
+  if(String(req.headers.accept||'').includes('application/json'))return send(res,202,SIGNUP_RESPONSE);
+  return send(res,202,'<!doctype html><meta name="viewport" content="width=device-width"><title>AURA signup recorded</title><h1>Thank you</h1><p>Your signup request has been recorded for review.</p><p><a href="/">Return to AURA PADDLE</a></p>',{'Content-Type':'text/html; charset=utf-8'});
+}
+async function importPublishedNewsletterUpdates(){
+  if(process.env.NEWSLETTER_ADMIN_ENABLED!=='true'||process.env.NEWSLETTER_UPDATES_ENABLED!=='true')return;
+  const manifest=JSON.parse(fs.readFileSync(process.env.NEWSLETTER_UPDATES_PATH||path.join(here,'newsletter-updates.json'),'utf8'));
+  return store.mutate(state=>syncNewsletterUpdates(state,manifest));
+}
 async function newsletterAdmin(req,res,url){
   if(!requireAdmin(req))return send(res,401,{error:"Admin authorisation required."});
   if(process.env.NEWSLETTER_ADMIN_ENABLED!=="true")return send(res,404,{error:"Newsletter review is not enabled."});
@@ -509,6 +534,7 @@ async function newsletterAdmin(req,res,url){
 const server=http.createServer(async(req,res)=>{
   try{
     const url=parseRequestUrl(req.url,siteUrl);
+    if(url.pathname==="/api/newsletter/subscribe")return await newsletterSubscribe(req,res);
     if(url.pathname.startsWith("/api/admin/newsletter"))return await newsletterAdmin(req,res,url);
     if(req.method==="GET"&&url.pathname==="/api/health"){const state=await store.read(),analyticsEntries=Object.values(state.analyticsOutbox||{}),amountIssues=Object.values(state.analyticsAmountIssues||{}),recoveryEntries=Object.values(state.recoveryEmailOutbox||{}),orderEmailEntries=Object.values(state.transactionalEmailOutbox||{}),sentAnalytics=analyticsEntries.filter(item=>item.status==="sent"),latestAnalyticsSentAt=Math.max(0,...sentAnalytics.map(item=>Number(item.sentAt||0)));return send(res,200,{ok:true,mode:allowLive?"live-enabled":"sandbox-only",storage:store.kind,stripeConfigured:Boolean(stripeKey),webhookConfigured:Boolean(webhookSecret),adminConfigured:Boolean(adminApiToken),geoRegion:{database:geoResolver.status(),renderHeaderTrust:process.env.RENDER==="true"&&process.env.TRUST_RENDER_CF_CONNECTING_IP==="true"},orderInvoices:{enabled:orderInvoicesEnabled,gstTaxRateConfigured:/^txr_[A-Za-z0-9]+$/.test(gstTaxRateId)},catalogueSkus:catalog.variants.length,mappedStripePrices:stripeMap.bySku.size,stripeAccount:stripeMap.accountId,analytics:{serverEventsEnabled:analyticsDispatchEnabled,configured:Boolean(ga4ApiSecret),validationMode:analyticsValidationMode,enhancedConversionsEnabled,pending:analyticsEntries.filter(item=>["pending","retry","sending"].includes(item.status)).length,failed:analyticsEntries.filter(item=>item.status==="failed").length,amountIssues:amountIssues.length,sent:sentAnalytics.length,latestSentAt:latestAnalyticsSentAt||null},checkoutRecovery:{enabled:true,emailConfigured:Boolean(agentMailApiKey),emailReady:recoveryEmailReady,configurationError:Boolean(recoveryEmailInitError),smsEnabled:false,pending:recoveryEntries.filter(item=>["pending","retry","sending"].includes(item.status)).length,failed:recoveryEntries.filter(item=>item.status==="failed").length},orderNotifications:{enabled:true,emailConfigured:Boolean(agentMailApiKey),emailReady:recoveryEmailReady,recipient:orderNotificationEmail,pending:orderEmailEntries.filter(item=>["pending","retry","sending"].includes(item.status)).length,failed:orderEmailEntries.filter(item=>item.status==="failed").length},account:"AURA PADDLE PTY LTD"})}
     if(req.method==="GET"&&url.pathname==="/api/region"){const region=geoResolver.resolve(renderClientIp(req));return send(res,200,{region,source:region==="UNKNOWN"?"none":"trusted-server",basis:region==="UNKNOWN"?"none":"dbip-country-lite"},{"Cache-Control":"no-store","CDN-Cache-Control":"no-store"})}
@@ -540,6 +566,8 @@ const server=http.createServer(async(req,res)=>{
 
 await store.init();
 await store.mutate(state=>{ensureReviewState(state)});
+await importPublishedNewsletterUpdates().catch(()=>console.error('Newsletter update import failed; review manifest. No email sent.'));
+setInterval(()=>void importPublishedNewsletterUpdates().catch(()=>console.error('Newsletter update import failed; review manifest. No email sent.')),60_000).unref();
 setInterval(()=>void flushAnalyticsOutbox().catch(error=>console.error("GA4 outbox flush failed",error)),60_000).unref();
 setInterval(()=>void flushRecoveryEmailOutbox().catch(error=>console.error("Recovery email outbox flush failed",error)),60_000).unref();
 setInterval(()=>void flushOrderEmailOutbox().catch(error=>console.error("Order email outbox flush failed",error)),60_000).unref();

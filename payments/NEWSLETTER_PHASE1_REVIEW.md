@@ -1,5 +1,7 @@
 # Newsletter phase 1: private ledger and draft review
 
+Historical phase-one report. See NEWSLETTER_CAPTURE_REVIEW.md for the subsequent capture/release integration and current test totals.
+
 ## Scope and release status
 Isolated implementation based on `4bd079c75150ca1504d067e0cefa80f87fc29360`. Not deployed, pushed, or imported into production. No sending implementation exists. Existing payment/order and email queues are not changed.
 

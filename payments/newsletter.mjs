@@ -22,7 +22,7 @@ function internal(email,state,contact){return contact?.internal===true||/@(aurap
 export function recordNewsletterEvidence(state,input,now=new Date().toISOString()){
   const email=emailKey(input.email),source=text(input.source,100),sourceId=text(input.sourceId,200),evidence=text(input.evidence,2000),consentText=text(input.consentText,2000),at=timestamp(input.at);
   if(!present(source)||!present(sourceId)||!present(evidence))throw new Error('Source, source record ID and evidence are required.');
-  const status=text(input.status,30);if(!['subscribed','unsubscribed','unknown'].includes(status))throw new Error('Invalid consent status.');
+  const status=text(input.status,30);if(!['subscribed','unsubscribed','unknown','pending_review'].includes(status))throw new Error('Invalid consent status.');
   if(status==='subscribed'&&(input.purpose!=='newsletter'||input.verified!==true||!present(consentText)||!present(text(input.textVersion,100))))throw new Error('Newsletter consent must be verified with exact consent text and version.');
   const data=ledger(state),id=hash(JSON.stringify([source,sourceId])),payload={email,originalEmail:input.email,source,sourceId,evidence,consentText,at,originalAt:input.at,status,purpose:text(input.purpose,60),verified:flag(input.verified,'Verified'),textVersion:text(input.textVersion,100),internal:flag(input.internal,'Internal')};
   if(data.events[id]){if(data.events[id].fingerprint!==hash(JSON.stringify(payload)))throw new Error('Source record already exists with different evidence.');return {duplicate:true,contact:data.contacts[hash(email)]}}
