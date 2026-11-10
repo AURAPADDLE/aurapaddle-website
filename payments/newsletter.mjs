@@ -11,7 +11,7 @@ function flag(value,label){if(value!==undefined&&typeof value!=='boolean')throw 
 const present=value=>value.trim().length>0;
 export function emailKey(value){const email=text(value,254,'Email').trim().toLowerCase();if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))throw new Error('A valid email is required.');return email}
 function ledger(state){return state.newsletter??={contacts:{},events:{},drafts:{}}}
-function timestamp(value){
+export function newsletterTimestamp(value){
   const raw=text(value,40,'Timestamp'),parts=/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d{1,3})?(?:Z|[+-]\d{2}:\d{2})$/.exec(raw),date=new Date(raw);
   if(!parts||Number.isNaN(date.valueOf()))throw new Error('A valid evidence timestamp is required.');
   const [year,month,day,hour,minute,second]=parts.slice(1).map(Number),calendar=new Date(Date.UTC(year,month-1,day));
@@ -20,7 +20,7 @@ function timestamp(value){
 }
 function internal(email,state,contact){return contact?.internal===true||/@(aurapaddle\.com|example\.(com|org|net))$/.test(email)||Object.values(state.orders||{}).some(o=>o.internalTest===true&&String(o.customerEmail||'').trim().toLowerCase()===email)}
 export function recordNewsletterEvidence(state,input,now=new Date().toISOString()){
-  const email=emailKey(input.email),source=text(input.source,100),sourceId=text(input.sourceId,200),evidence=text(input.evidence,2000),consentText=text(input.consentText,2000),at=timestamp(input.at);
+  const email=emailKey(input.email),source=text(input.source,100),sourceId=text(input.sourceId,200),evidence=text(input.evidence,2000),consentText=text(input.consentText,2000),at=newsletterTimestamp(input.at);
   if(!present(source)||!present(sourceId)||!present(evidence))throw new Error('Source, source record ID and evidence are required.');
   const status=text(input.status,30);if(!['subscribed','unsubscribed','unknown','pending_review'].includes(status))throw new Error('Invalid consent status.');
   if(status==='subscribed'&&(input.purpose!=='newsletter'||input.verified!==true||!present(consentText)||!present(text(input.textVersion,100))))throw new Error('Newsletter consent must be verified with exact consent text and version.');
@@ -30,7 +30,7 @@ export function recordNewsletterEvidence(state,input,now=new Date().toISOString(
   const event={...payload,id,recordedAt:now,fingerprint:hash(JSON.stringify(payload))};data.events[id]=event;contact.eventIds.push(id);contact.internal||=payload.internal;contact.updatedAt=now;
   // A historical import can never remove suppression. Re-subscription is a separate future workflow.
   if(status==='unsubscribed'){contact.status='unsubscribed';contact.suppressedAt=at}
-  else if(contact.status!=='unsubscribed'&&(!contact.consentAt||at>=contact.consentAt)){contact.status=status;contact.consentAt=at;contact.consentEventId=id}
+  else if(contact.status!=='unsubscribed'&&!(status==='pending_review'&&contact.status==='subscribed')&&(!contact.consentAt||at>=contact.consentAt)){contact.status=status;contact.consentAt=at;contact.consentEventId=id}
   data.contacts[key]=contact;return {duplicate:false,contact};
 }
 export function newsletterAudience(state){const data=ledger(state),candidates=[],excluded=[];for(const contact of Object.values(data.contacts)){
@@ -47,4 +47,17 @@ export function createNewsletterDraft(state,input,now=new Date().toISOString()){
   const audience=newsletterAudience(state),draft={id,...source,subject:title,body:`Hi there,\n\n${summary}\n\nFind out more: ${url.href}\n\nThe AURA PADDLE team\n\n[Sender postal address and newsletter unsubscribe link required before sending]`,status:'awaiting_review',sendingEnabled:false,createdAt:now,sourceFingerprint:hash(JSON.stringify(source)),audience,audienceFingerprint:hash(JSON.stringify(audience)),warning:'Draft only. Recipient consent must be rechecked at sending. Sender identity and unsubscribe must be configured. No sending is implemented.'};
   data.drafts[id]=draft;return {duplicate:false,draft};
 }
-export function newsletterView(state){const data=ledger(state);return {sendingEnabled:false,contacts:Object.values(data.contacts),events:Object.values(data.events),drafts:Object.values(data.drafts).map(d=>({...d,currentAudience:newsletterAudience(state),audienceChanged:d.audienceFingerprint!==hash(JSON.stringify(newsletterAudience(state)))})),audience:newsletterAudience(state)}}
+export function newsletterDraftStatus(draft,now=new Date().toISOString()){
+  if(draft.trigger!=='published_update_manifest')return draft.status;
+  let current,published,expires;try{current=Date.parse(newsletterTimestamp(now));published=Date.parse(newsletterTimestamp(draft.publishedAt));if(draft.kind==='promotion')expires=Date.parse(newsletterTimestamp(draft.expiresAt))}catch{return 'publication_metadata_invalid'}
+  if(draft.kind==='promotion'){
+    if(!Number.isFinite(expires)||expires<=published)return 'publication_metadata_invalid';
+    if(expires<=current)return 'expired';
+  }
+  if(published>current)return 'not_yet_published';
+  return draft.status;
+}
+export function newsletterView(state,now=new Date().toISOString()){
+  const data=ledger(state),audience=newsletterAudience(state),audienceFingerprint=hash(JSON.stringify(audience));
+  return {sendingEnabled:false,contacts:Object.values(data.contacts),events:Object.values(data.events),drafts:Object.values(data.drafts).map(d=>({...d,recordedStatus:d.status,status:newsletterDraftStatus(d,now),currentAudience:audience,audienceChanged:d.audienceFingerprint!==audienceFingerprint})),audience};
+}

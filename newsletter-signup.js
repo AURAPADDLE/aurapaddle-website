@@ -14,7 +14,7 @@
       window.AURATracking?.event('sign_up',{method:'newsletter',form_location:'homepage'});form.reset();
       if(ownCapture)form.elements.request_id.value=crypto.randomUUID();
     }catch{
-      status.textContent='We could not confirm your subscription was saved. Please try again or email admin@aurapaddle.com.';
+      status.textContent=response?.status===400?'Please reload this page and check your signup details before trying again. You can also email admin@aurapaddle.com.':'We could not confirm your subscription was saved. Please try again or email admin@aurapaddle.com.';
       window.AURATracking?.event('form_submit_error',{form_type:'newsletter',error_code:window.AURATracking?.errorCode(response)||'request_failed'});
     }finally{button.disabled=false}
   });

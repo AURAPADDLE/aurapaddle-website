@@ -9,3 +9,23 @@ test('manifest batch is atomic and timing changes require version changes',()=>{
 test('expired promotions and withdrawn release drafts cannot stay awaiting review',()=>{const s={},promo=update({kind:'promotion',expiresAt:'2026-11-11T00:00:00Z'});sync(s,manifest([promo]),'2026-11-10T01:00:00Z');sync(s,manifest([promo]),'2026-11-12T01:00:00Z');assert.equal(newsletterView(s).drafts[0].status,'expired');const s2={};sync(s2,manifest([update()]),'2026-11-10T01:00:00Z');sync(s2,manifest([]),'2026-11-10T02:00:00Z');assert.equal(newsletterView(s2).drafts[0].status,'withdrawn_or_superseded')});
 test('limiter bounds repeated addresses and resets after expiry',()=>{let now=1000;const limiter=createSignupLimiter({now:()=>now});for(let i=0;i<5;i++)assert.equal(limiter.allow('ip','email'),true);assert.equal(limiter.allow('different-ip','email'),false);now+=3600001;assert.equal(limiter.allow('ip','email'),true)});
 test('capture render changes newsletter only, not contact Formspree',()=>{const html='<form class="newsletter-form" id="newsletterForm" action="https://formspree.io/f/xaqrowoy" method="post"></form><form id="contactForm" action="https://formspree.io/f/xaqrowoy"></form>';const result=renderNewsletterCapture(html,'12345678-1234-1234-1234-123456789012');assert.match(result,/action="\/api\/newsletter\/subscribe"/);assert.match(result,/id="contactForm" action="https:\/\/formspree.io\/f\/xaqrowoy"/);assert.match(result,/name="consent_version"/)});
+test('public pending submissions never replace verified consent while evidence is retained',()=>{
+const s={};recordNewsletterEvidence(s,{email:'signup@customer.test',source:'verified',sourceId:'1',evidence:'Original verified consent',at:'2026-11-09T00:00:00Z',status:'subscribed',purpose:'newsletter',verified:true,consentText:'Please send newsletter updates.',textVersion:'verified-v1'});
+const before=newsletterView(s).contacts[0],consentEventId=before.consentEventId,consentAt=before.consentAt;
+capture(s,input(),'2026-11-10T01:00:00Z');capture(s,input({request_id:'22345678-1234-1234-1234-123456789012'}),'2026-11-10T02:00:00Z');
+const view=newsletterView(s);assert.equal(view.contacts[0].status,'subscribed');assert.equal(view.contacts[0].consentEventId,consentEventId);assert.equal(view.contacts[0].consentAt,consentAt);assert.equal(view.events.length,3);assert.equal(view.audience.candidates.length,1);assert.equal(view.events.filter(e=>e.status==='pending_review').length,2);
+});
+test('bad manifest cannot keep an expired promotion reviewable; read derives expiry without mutating history',()=>{
+const s={},promo=update({kind:'promotion',expiresAt:'2026-11-11T00:00:00Z'});sync(s,manifest([promo]),'2026-11-10T01:00:00Z');assert.throws(()=>sync(s,manifest([promo,update({sourceId:'bad',publishedAt:'invalid'})]),'2026-11-12T01:00:00Z'));
+const stored=Object.values(s.newsletter.drafts)[0];assert.equal(stored.status,'awaiting_review');const view=newsletterView(s,'2026-11-12T01:00:00Z');assert.equal(view.drafts[0].status,'expired');assert.equal(view.drafts[0].recordedStatus,'awaiting_review');assert.equal(stored.status,'awaiting_review');assert.equal(view.drafts[0].sendingEnabled,false);
+});
+test('read-time publication validation fails safely for invalid or future metadata',()=>{
+const s={},promo=update({kind:'promotion',expiresAt:'2026-11-11T00:00:00Z'});sync(s,manifest([promo]),'2026-11-10T01:00:00Z');const d=Object.values(s.newsletter.drafts)[0];assert.equal(newsletterView(s,'2026-11-09T01:00:00Z').drafts[0].status,'not_yet_published');d.expiresAt='invalid';assert.equal(newsletterView(s,'2026-11-10T01:00:00Z').drafts[0].status,'publication_metadata_invalid');
+});
+test('publication and expiry reject missing timezones and invalid calendar dates',()=>{
+for(const value of ['2026-11-10T10:00:00','2026-02-30T00:00:00Z','2026-11-10','2026-11-10T24:00:00Z']){
+assert.throws(()=>sync({},manifest([update({publishedAt:value})]),'2026-11-10T01:00:00Z'),/timestamp/);
+assert.throws(()=>sync({},manifest([update({kind:'promotion',publishedAt:'2026-11-20T00:00:00Z',expiresAt:value})]),'2026-11-10T01:00:00Z'),/timestamp/);
+}
+const s={};sync(s,manifest([update({publishedAt:'2026-11-10T10:00:00+10:00'})]),'2026-11-10T01:00:00Z');assert.equal(newsletterView(s).drafts.length,1);
+});

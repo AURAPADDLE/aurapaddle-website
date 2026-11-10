@@ -1,5 +1,5 @@
 import crypto from 'node:crypto';
-import {emailKey,recordNewsletterEvidence,createNewsletterDraft} from './newsletter.mjs';
+import {emailKey,recordNewsletterEvidence,createNewsletterDraft,newsletterTimestamp,newsletterDraftStatus} from './newsletter.mjs';
 export const NEWSLETTER_CONSENT_VERSION='homepage-marketing-2026-11-v1';
 export const NEWSLETTER_CONSENT_TEXT='I agree to receive marketing emails from AURA PADDLE. I can unsubscribe at any time. See the Privacy Policy.';
 export const SIGNUP_RESPONSE={received:true,message:'Thank you. Your signup request has been recorded for review.'};
@@ -22,20 +22,22 @@ export function renderNewsletterCapture(html,requestId){
 // Only explicitly authored, published newsletter updates create drafts. Ordinary code deploys do not.
 export function syncNewsletterUpdates(state,manifest,now=new Date().toISOString()){
   if(!manifest||manifest.schemaVersion!==1||!Array.isArray(manifest.updates)||manifest.updates.length>100)throw new Error('Invalid newsletter updates manifest.');
+  const nowTime=Date.parse(newsletterTimestamp(now));
   const eligible=manifest.updates.filter(update=>update.newsletter===true&&update.status==='published');
   const staged=structuredClone(state),results=[],active=new Set();
   for(const update of eligible){
-    const published=Date.parse(update.publishedAt);if(!Number.isFinite(published))throw new Error('Published newsletter updates require publishedAt.');if(published>Date.parse(now))continue;
+    const published=Date.parse(newsletterTimestamp(update.publishedAt));let expires;
     if(update.kind==='promotion'){
-      const expires=Date.parse(update.expiresAt);if(!Number.isFinite(expires)||expires<=published)throw new Error('Promotions require a valid expiry after publication.');if(expires<=Date.parse(now))continue;
+      expires=Date.parse(newsletterTimestamp(update.expiresAt));if(expires<=published)throw new Error('Promotions require a valid expiry after publication.');
     }
+    if(published>nowTime||(expires!==undefined&&expires<=nowTime))continue;
     const result=createNewsletterDraft(staged,update,now),publicationFingerprint=crypto.createHash('sha256').update(JSON.stringify([update.publishedAt,update.expiresAt||null])).digest('hex');
     if(result.duplicate&&result.draft.publicationFingerprint!==publicationFingerprint)throw new Error('Publication timing changed without a new update version.');
     if(!result.duplicate){result.draft.trigger='published_update_manifest';result.draft.publishedAt=update.publishedAt;result.draft.expiresAt=update.expiresAt||null;result.draft.publicationFingerprint=publicationFingerprint}
     result.draft.status='awaiting_review';active.add(result.draft.id);results.push({id:result.draft.id,duplicate:result.duplicate});
   }
   for(const draft of Object.values(staged.newsletter?.drafts||{}))if(draft.trigger==='published_update_manifest'&&!active.has(draft.id)){
-    draft.status=draft.expiresAt&&Date.parse(draft.expiresAt)<=Date.parse(now)?'expired':'withdrawn_or_superseded';
+    const effective=newsletterDraftStatus(draft,now);draft.status=['expired','publication_metadata_invalid','not_yet_published'].includes(effective)?effective:'withdrawn_or_superseded';
   }
   // Validate the whole batch before committing any draft to the caller's transaction.
   if(staged.newsletter)state.newsletter=staged.newsletter;return results;
