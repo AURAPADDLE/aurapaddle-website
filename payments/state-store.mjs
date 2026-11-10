@@ -25,7 +25,7 @@ function jsonStore(statePath){
 }
 
 function postgresState(row){
-  const object=value=>value!==null&&typeof value==="object"&&!Array.isArray(value);
+  const object=value=>value!==null&&typeof value==="object"&&!Array.isArray(value)&&(Object.getPrototypeOf(value)===Object.prototype||Object.getPrototypeOf(value)===null)&&typeof value.toJSON!=="function";
   const invalid=()=>{const error=new Error("PostgreSQL state is missing or invalid; restore the verified database backup before restarting.");error.code="AURA_STATE_INTEGRITY";throw error;};
   const state=row?.data;
   if(!object(state))invalid();
@@ -72,7 +72,9 @@ function postgresStore(databaseUrl,{bootstrap=false}={}){
         const current=await client.query("SELECT data FROM aura_state WHERE id = 1 FOR UPDATE");
         const state=postgresState(current.rows[0]),result=await mutator(state);
         postgresState({data:state});
-        const updated=await client.query("UPDATE aura_state SET data = $1::jsonb, updated_at = now() WHERE id = 1",[JSON.stringify(state)]);
+        const serialized=JSON.stringify(state);
+        postgresState({data:JSON.parse(serialized)});
+        const updated=await client.query("UPDATE aura_state SET data = $1::jsonb, updated_at = now() WHERE id = 1",[serialized]);
         if(updated.rowCount!==1){const error=new Error("PostgreSQL state update did not persist exactly one row.");error.code="AURA_STATE_INTEGRITY";throw error;}
         await client.query("COMMIT");
         return result;

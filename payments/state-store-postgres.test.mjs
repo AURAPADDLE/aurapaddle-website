@@ -72,6 +72,19 @@ test('real PostgreSQL state integrity and explicit bootstrap', {skip:!testUrl}, 
       await assert.rejects(normal.mutate(state=>{delete state.events}),error);
       assert.deepEqual((await sql.query('SELECT data FROM aura_state')).rows[0].data,valid);
     });
+    await t.test('non-plain and custom-serialization containers cannot write invalid JSON shapes',async()=>{
+      const valid={orders:{fixture:{synthetic:true}},events:{}};
+      await sql.query('UPDATE aura_state SET data=$1::jsonb',[JSON.stringify(valid)]);
+      for(const value of [new Date(),new Map(),new Set(),Object.create({custom:true}),{toJSON(){return null}}]){
+        await assert.rejects(normal.mutate(state=>{state.orders=value}),error);
+        assert.deepEqual((await sql.query('SELECT data FROM aura_state')).rows[0].data,valid);
+      }
+      await assert.rejects(normal.mutate(state=>{state.toJSON=()=>({orders:[],events:{}})}),error);
+      await assert.rejects(normal.mutate(state=>{Object.defineProperty(state,'orders',{enumerable:false})}),error);
+      assert.deepEqual((await sql.query('SELECT data FROM aura_state')).rows[0].data,valid);
+      await normal.mutate(state=>{state.orders=Object.assign(Object.create(null),state.orders)});
+      assert.deepEqual((await normal.read()).orders,valid.orders);
+    });
     await t.test('missing row fails read/init/mutate, never invokes callback or creates empty state',async()=>{
       await sql.query('DELETE FROM aura_state WHERE id=1');
       let called=false;
