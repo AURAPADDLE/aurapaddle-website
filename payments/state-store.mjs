@@ -24,31 +24,53 @@ function jsonStore(statePath){
   };
 }
 
-function postgresStore(databaseUrl){
+function postgresState(row){
+  if(!row||!row.data||typeof row.data!=="object"||Array.isArray(row.data)){
+    const error=new Error("PostgreSQL state is missing or invalid; restore the verified database backup before restarting.");
+    error.code="AURA_STATE_INTEGRITY";throw error;
+  }
+  return normaliseState(row.data);
+}
+
+function postgresStore(databaseUrl,{bootstrap=false}={}){
   const local=/localhost|127\.0\.0\.1/.test(databaseUrl);
   const pool=new Pool({connectionString:databaseUrl,ssl:local?false:{rejectUnauthorized:false},max:5});
   return {
     kind:"postgres",
     async init(){
-      await pool.query("CREATE TABLE IF NOT EXISTS aura_state (id integer PRIMARY KEY CHECK (id = 1), data jsonb NOT NULL, updated_at timestamptz NOT NULL DEFAULT now())");
-      await pool.query("INSERT INTO aura_state (id, data) VALUES (1, $1::jsonb) ON CONFLICT (id) DO NOTHING",[JSON.stringify(emptyState())]);
+      const client=await pool.connect();
+      try{
+        await client.query("BEGIN");
+        // Serialize explicit first-time provisioning across independent instances.
+        await client.query("SELECT pg_advisory_xact_lock(192837462, 1)");
+        const table=await client.query("SELECT to_regclass('aura_state') AS relation");
+        if(!table.rows[0]?.relation){
+          if(bootstrap!==true){const error=new Error("PostgreSQL state table is missing; restore a verified backup or explicitly provision a new empty database.");error.code="AURA_STATE_INTEGRITY";throw error;}
+          await client.query("CREATE TABLE aura_state (id integer PRIMARY KEY CHECK (id = 1), data jsonb NOT NULL, updated_at timestamptz NOT NULL DEFAULT now())");
+          await client.query("INSERT INTO aura_state (id, data) VALUES (1, $1::jsonb)",[JSON.stringify(emptyState())]);
+        }
+        const current=await client.query("SELECT data FROM aura_state WHERE id = 1 FOR UPDATE");
+        postgresState(current.rows[0]);
+        await client.query("COMMIT");
+      }catch(error){try{await client.query("ROLLBACK")}catch{}throw error}finally{client.release()}
     },
-    async read(){const result=await pool.query("SELECT data FROM aura_state WHERE id = 1");return normaliseState(result.rows[0]?.data)},
+    async read(){const result=await pool.query("SELECT data FROM aura_state WHERE id = 1");return postgresState(result.rows[0])},
     async mutate(mutator){
       const client=await pool.connect();
       try{
         await client.query("BEGIN");
         const current=await client.query("SELECT data FROM aura_state WHERE id = 1 FOR UPDATE");
-        const state=normaliseState(current.rows[0]?.data),result=await mutator(state);
-        await client.query("UPDATE aura_state SET data = $1::jsonb, updated_at = now() WHERE id = 1",[JSON.stringify(state)]);
+        const state=postgresState(current.rows[0]),result=await mutator(state);
+        const updated=await client.query("UPDATE aura_state SET data = $1::jsonb, updated_at = now() WHERE id = 1",[JSON.stringify(state)]);
+        if(updated.rowCount!==1){const error=new Error("PostgreSQL state update did not persist exactly one row.");error.code="AURA_STATE_INTEGRITY";throw error;}
         await client.query("COMMIT");
         return result;
-      }catch(error){await client.query("ROLLBACK");throw error}finally{client.release()}
+      }catch(error){try{await client.query("ROLLBACK")}catch{}throw error}finally{client.release()}
     },
     async close(){await pool.end()}
   };
 }
 
-export function createStateStore({databaseUrl,statePath}){
-  return databaseUrl?postgresStore(databaseUrl):jsonStore(statePath);
+export function createStateStore({databaseUrl,statePath,bootstrapPostgres=false}){
+  return databaseUrl?postgresStore(databaseUrl,{bootstrap:bootstrapPostgres}):jsonStore(statePath);
 }
