@@ -41,6 +41,37 @@ test('real PostgreSQL state integrity and explicit bootstrap', {skip:!testUrl}, 
       await assert.rejects(normal.mutate(state=>{state.orders={};throw new Error('synthetic rollback')}),/synthetic rollback/);
       assert.equal((await normal.read()).orders.fixture.synthetic,true);
     });
+    await t.test('legacy optional absence is accepted without rewriting or dropping unknown fields',async()=>{
+      const legacy={orders:{fixture:{synthetic:true}},events:{},extension:{preserved:true}};
+      await sql.query('UPDATE aura_state SET data=$1::jsonb',[JSON.stringify(legacy)]);
+      await normal.init();await normal.read();
+      assert.deepEqual((await sql.query('SELECT data FROM aura_state')).rows[0].data,legacy);
+      await normal.mutate(state=>{state.counter=1});
+      assert.deepEqual((await normal.read()).extension,legacy.extension);
+    });
+    await t.test('invalid core and optional container types fail without rewriting data',async()=>{
+      const optional=['reservations','checkoutRequests','analyticsOutbox','abandonedCheckouts','recoveryEmailOutbox','recoverySuppressions','transactionalEmailOutbox','reviews','reviewNotificationOutbox','analyticsAmountIssues','metaPurchaseReceipts','newsletter','inventory'];
+      const invalid=[{}, {orders:{}}, {events:{}}];
+      for(const key of ['orders','events',...optional])for(const value of [[],null,'invalid',0,true])invalid.push({orders:{},events:{},[key]:value});
+      for(const key of ['contacts','events','drafts'])for(const value of [[],null,'invalid'])invalid.push({orders:{},events:{},newsletter:{contacts:{},events:{},drafts:{},[key]:value}});
+      invalid.push({orders:{},events:{},newsletter:{}});
+      for(const key of ['products','balances','allocations'])invalid.push({orders:{},events:{},inventory:{[key]:[]}});
+      for(const key of ['movements','sourceHistory'])invalid.push({orders:{},events:{},inventory:{[key]:{}}});
+      for(const bad of invalid){
+        await sql.query('UPDATE aura_state SET data=$1::jsonb',[JSON.stringify(bad)]);
+        let called=false;
+        await assert.rejects(normal.read(),error);await assert.rejects(normal.init(),error);
+        await assert.rejects(normal.mutate(()=>{called=true}),error);assert.equal(called,false);
+        assert.deepEqual((await sql.query('SELECT data FROM aura_state')).rows[0].data,bad);
+      }
+    });
+    await t.test('callback cannot replace core maps with arrays or remove them',async()=>{
+      const valid={orders:{fixture:{synthetic:true}},events:{}};
+      await sql.query('UPDATE aura_state SET data=$1::jsonb',[JSON.stringify(valid)]);
+      await assert.rejects(normal.mutate(state=>{state.orders=[];state.orders.fixture={lost:true}}),error);
+      await assert.rejects(normal.mutate(state=>{delete state.events}),error);
+      assert.deepEqual((await sql.query('SELECT data FROM aura_state')).rows[0].data,valid);
+    });
     await t.test('missing row fails read/init/mutate, never invokes callback or creates empty state',async()=>{
       await sql.query('DELETE FROM aura_state WHERE id=1');
       let called=false;
@@ -59,11 +90,11 @@ test('real PostgreSQL state integrity and explicit bootstrap', {skip:!testUrl}, 
       assert.deepEqual((await sql.query('SELECT data FROM aura_state')).rows[0].data,[]);
     });
     await t.test('update affecting zero rows fails instead of reporting success',async()=>{
-      await sql.query("UPDATE aura_state SET data='{}'::jsonb");
+      await sql.query('UPDATE aura_state SET data=$1::jsonb',[JSON.stringify({orders:{},events:{}})]);
       await sql.query('CREATE FUNCTION suppress_update() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RETURN NULL; END; $$');
       await sql.query('CREATE TRIGGER suppress_update BEFORE UPDATE ON aura_state FOR EACH ROW EXECUTE FUNCTION suppress_update()');
       await assert.rejects(normal.mutate(state=>{state.shouldNotPersist=true}),error);
-      assert.deepEqual((await sql.query('SELECT data FROM aura_state')).rows[0].data,{});
+      assert.deepEqual((await sql.query('SELECT data FROM aura_state')).rows[0].data,{orders:{},events:{}});
     });
   }finally{
     await Promise.all(stores.map(store=>store.close()));

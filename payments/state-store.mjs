@@ -25,11 +25,21 @@ function jsonStore(statePath){
 }
 
 function postgresState(row){
-  if(!row||!row.data||typeof row.data!=="object"||Array.isArray(row.data)){
-    const error=new Error("PostgreSQL state is missing or invalid; restore the verified database backup before restarting.");
-    error.code="AURA_STATE_INTEGRITY";throw error;
+  const object=value=>value!==null&&typeof value==="object"&&!Array.isArray(value);
+  const invalid=()=>{const error=new Error("PostgreSQL state is missing or invalid; restore the verified database backup before restarting.");error.code="AURA_STATE_INTEGRITY";throw error;};
+  const state=row?.data;
+  if(!object(state))invalid();
+  // Orders and Stripe event deduplication are core, not optional migrations.
+  for(const key of ["orders","events"])if(!Object.hasOwn(state,key)||!object(state[key]))invalid();
+  const optional=["reservations","checkoutRequests","analyticsOutbox","abandonedCheckouts","recoveryEmailOutbox","recoverySuppressions","transactionalEmailOutbox","reviews","reviewNotificationOutbox","analyticsAmountIssues","metaPurchaseReceipts","newsletter","inventory"];
+  for(const key of optional)if(Object.hasOwn(state,key)&&!object(state[key]))invalid();
+  if(Object.hasOwn(state,"newsletter"))for(const key of ["contacts","events","drafts"])if(!Object.hasOwn(state.newsletter,key)||!object(state.newsletter[key]))invalid();
+  if(Object.hasOwn(state,"inventory")){
+    for(const key of ["products","balances","allocations"])if(Object.hasOwn(state.inventory,key)&&!object(state.inventory[key]))invalid();
+    for(const key of ["movements","sourceHistory"])if(Object.hasOwn(state.inventory,key)&&!Array.isArray(state.inventory[key]))invalid();
   }
-  return normaliseState(row.data);
+  // Missing optional namespaces are normal for earlier releases; retain unknown keys.
+  return normaliseState(state);
 }
 
 function postgresStore(databaseUrl,{bootstrap=false}={}){
@@ -61,6 +71,7 @@ function postgresStore(databaseUrl,{bootstrap=false}={}){
         await client.query("BEGIN");
         const current=await client.query("SELECT data FROM aura_state WHERE id = 1 FOR UPDATE");
         const state=postgresState(current.rows[0]),result=await mutator(state);
+        postgresState({data:state});
         const updated=await client.query("UPDATE aura_state SET data = $1::jsonb, updated_at = now() WHERE id = 1",[JSON.stringify(state)]);
         if(updated.rowCount!==1){const error=new Error("PostgreSQL state update did not persist exactly one row.");error.code="AURA_STATE_INTEGRITY";throw error;}
         await client.query("COMMIT");
