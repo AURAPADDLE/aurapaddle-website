@@ -40,6 +40,8 @@ function writeRoute(route,source){
   const target=route?path.join(site,route,"index.html"):path.join(site,"index.html");
   fs.mkdirSync(path.dirname(target),{recursive:true});
   let html=productionHtml(source);
+  // A root base URL otherwise sends policy-section fragments to the homepage.
+  if(route==="policies")html=html.replace(/href="#(top|shipping|returns|preorders|privacy|terms|contact-details|pricing-delivery)"/g,'href="/policies/#$1"');
   if(route)html=html.replace(/<head>/i,'<head><base href="/">');
   fs.writeFileSync(target,html);
 }
