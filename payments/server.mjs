@@ -1,3 +1,4 @@
+import {recordNewsletterEvidence,createNewsletterDraft,newsletterView} from './newsletter.mjs';
 import fs from "node:fs";
 import http from "node:http";
 import path from "node:path";
@@ -491,9 +492,24 @@ async function staticFile(req,res,url){
   fs.createReadStream(target).pipe(res);
 }
 
+async function newsletterAdmin(req,res,url){
+  if(!requireAdmin(req))return send(res,401,{error:"Admin authorisation required."});
+  if(process.env.NEWSLETTER_ADMIN_ENABLED!=="true")return send(res,404,{error:"Newsletter review is not enabled."});
+  if(req.method==="GET"&&url.pathname==="/api/admin/newsletter")return send(res,200,newsletterView(await store.read()));
+  if(req.method!=="POST")return send(res,405,{error:"Method not allowed."});
+  const origin=req.headers.origin;if(origin&&origin!==new URL(siteUrl).origin)return send(res,403,{error:"Cross-origin writes are not allowed."});
+  if(!String(req.headers['content-type']||'').startsWith('application/json'))return send(res,415,{error:"JSON required."});
+  let input;try{input=JSON.parse((await readBody(req,20000)).toString('utf8'))}catch{return send(res,400,{error:"Invalid JSON request."})}
+  try{
+    if(url.pathname==="/api/admin/newsletter/evidence")return send(res,200,await store.mutate(state=>recordNewsletterEvidence(state,input)));
+    if(url.pathname==="/api/admin/newsletter/drafts")return send(res,200,await store.mutate(state=>createNewsletterDraft(state,input)));
+    return send(res,404,{error:"Not found. Sending is not implemented."});
+  }catch(error){return send(res,400,{error:error.message})}
+}
 const server=http.createServer(async(req,res)=>{
   try{
     const url=parseRequestUrl(req.url,siteUrl);
+    if(url.pathname.startsWith("/api/admin/newsletter"))return await newsletterAdmin(req,res,url);
     if(req.method==="GET"&&url.pathname==="/api/health"){const state=await store.read(),analyticsEntries=Object.values(state.analyticsOutbox||{}),amountIssues=Object.values(state.analyticsAmountIssues||{}),recoveryEntries=Object.values(state.recoveryEmailOutbox||{}),orderEmailEntries=Object.values(state.transactionalEmailOutbox||{}),sentAnalytics=analyticsEntries.filter(item=>item.status==="sent"),latestAnalyticsSentAt=Math.max(0,...sentAnalytics.map(item=>Number(item.sentAt||0)));return send(res,200,{ok:true,mode:allowLive?"live-enabled":"sandbox-only",storage:store.kind,stripeConfigured:Boolean(stripeKey),webhookConfigured:Boolean(webhookSecret),adminConfigured:Boolean(adminApiToken),geoRegion:{database:geoResolver.status(),renderHeaderTrust:process.env.RENDER==="true"&&process.env.TRUST_RENDER_CF_CONNECTING_IP==="true"},orderInvoices:{enabled:orderInvoicesEnabled,gstTaxRateConfigured:/^txr_[A-Za-z0-9]+$/.test(gstTaxRateId)},catalogueSkus:catalog.variants.length,mappedStripePrices:stripeMap.bySku.size,stripeAccount:stripeMap.accountId,analytics:{serverEventsEnabled:analyticsDispatchEnabled,configured:Boolean(ga4ApiSecret),validationMode:analyticsValidationMode,enhancedConversionsEnabled,pending:analyticsEntries.filter(item=>["pending","retry","sending"].includes(item.status)).length,failed:analyticsEntries.filter(item=>item.status==="failed").length,amountIssues:amountIssues.length,sent:sentAnalytics.length,latestSentAt:latestAnalyticsSentAt||null},checkoutRecovery:{enabled:true,emailConfigured:Boolean(agentMailApiKey),emailReady:recoveryEmailReady,configurationError:Boolean(recoveryEmailInitError),smsEnabled:false,pending:recoveryEntries.filter(item=>["pending","retry","sending"].includes(item.status)).length,failed:recoveryEntries.filter(item=>item.status==="failed").length},orderNotifications:{enabled:true,emailConfigured:Boolean(agentMailApiKey),emailReady:recoveryEmailReady,recipient:orderNotificationEmail,pending:orderEmailEntries.filter(item=>["pending","retry","sending"].includes(item.status)).length,failed:orderEmailEntries.filter(item=>item.status==="failed").length},account:"AURA PADDLE PTY LTD"})}
     if(req.method==="GET"&&url.pathname==="/api/region"){const region=geoResolver.resolve(renderClientIp(req));return send(res,200,{region,source:region==="UNKNOWN"?"none":"trusted-server",basis:region==="UNKNOWN"?"none":"dbip-country-lite"},{"Cache-Control":"no-store","CDN-Cache-Control":"no-store"})}
     if(req.method==="GET"&&url.pathname==="/api/admin/analytics-issues"){if(!requireAdmin(req))return send(res,401,{error:"Admin authorisation required."});const state=await store.read();return send(res,200,{items:Object.values(state.analyticsAmountIssues||{}).sort((a,b)=>Number(b.createdAt||0)-Number(a.createdAt||0))})}
