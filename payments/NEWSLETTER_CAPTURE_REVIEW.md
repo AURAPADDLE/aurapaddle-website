@@ -26,8 +26,8 @@ An entry must explicitly set `newsletter: true`, `status: published`, a unique s
 This is explicit content-release integration, not a crawler or an AI that guesses every website change. To use it, the website release author adds the meaningful update entry as part of the release; the service then creates the draft and candidate snapshot automatically. Review must still approve the facts and audience before any future sending system could act. No sending system is included here.
 
 ## Verification and limits
-- Newsletter automated coverage: 36/36 passing (unit, local HTTP, frontend script race/error/retry tests).
-- Full suite: 215 tests, 214 passing; existing unchanged Geo-IP test fails because the isolated checkout lacks its untracked MMDB data file.
+- Newsletter automated coverage: 38/38 passing (unit, local HTTP, frontend script race/error/retry tests).
+- Full suite: 217 tests, 216 passing; existing unchanged Geo-IP test fails because the isolated checkout lacks its untracked MMDB data file.
 - Tested enabled/disabled paths, persisted pending consent, exact wording/version, duplicate retry, honeypot, missing checkbox, invalid origin, no-JS form, admin access, no public PII, no outbox changes, contact Formspree preservation, release idempotency/atomicity/expiry, network failure without fallback, repeated clicks and existing phase-one safeguards.
 - PostgreSQL concurrency/failover, reverse-proxy/edge controls and a real mobile browser are not verified. Browser QA for the phase-one admin predates this capture integration; the new frontend has script-level tests but not a new end-to-end browser recording.
 - Production historical subscriber reconciliation/import and approval-gated marketing delivery remain separate. Sender identity, unsubscribe/complaint/bounce suppression, provider marketing permission/cost and per-send consent checks must be resolved before any sending feature.
@@ -37,3 +37,5 @@ Disable capture and update flags. Homepage returns to its previous Formspree pat
 
 ## Independent review corrections
 Unverified public submissions now append evidence without replacing existing verified subscribed consent or any suppression. Read-time draft status independently validates publication/expiry and returns expired or invalid even if the manifest transaction failed, retaining recordedStatus for audit. Publication and expiry use the same strict explicit-timezone/calendar validator as consent evidence; missing zones and rolled-over dates are rejected. Invalid/old signup forms advise reload without revealing whether an address exists. Tests cover anonymous same-email submissions, bad manifest plus old expired promotion, invalid metadata, UTC/Brisbane parity and safe reload guidance.
+
+Consent resolution is now deterministic from retained evidence, rather than import order: any suppression wins; otherwise the latest explicit verified newsletter grant wins; pending/unknown records only describe a contact with no verified grant. Pending/unknown records never advance the consent decision timestamp. Both pending-first and verified-first imports yield the same verified grant, and old incorrectly stored pending decision fields are corrected in read views and on duplicate re-import. Unknown means missing evidence, not withdrawal; use suppression for a withdrawal.

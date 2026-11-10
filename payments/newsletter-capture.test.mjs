@@ -29,3 +29,13 @@ assert.throws(()=>sync({},manifest([update({kind:'promotion',publishedAt:'2026-1
 }
 const s={};sync(s,manifest([update({publishedAt:'2026-11-10T10:00:00+10:00'})]),'2026-11-10T01:00:00Z');assert.equal(newsletterView(s).drafts.length,1);
 });
+test('trusted historical consent wins in both import orders; unverified evidence never sets decision time',()=>{
+const verified={email:'signup@customer.test',source:'verified',sourceId:'history',evidence:'Original verified consent',at:'2026-11-09T00:00:00Z',status:'subscribed',purpose:'newsletter',verified:true,consentText:'Please send newsletter updates.',textVersion:'verified-v1'};
+for(const pendingFirst of [true,false]){const s={};if(pendingFirst){capture(s,input(),'2026-11-10T01:00:00Z');const pending=newsletterView(s).contacts[0];assert.equal(pending.consentAt,undefined);assert.equal(pending.consentEventId,undefined)}recordNewsletterEvidence(s,verified);if(!pendingFirst)capture(s,input(),'2026-11-10T01:00:00Z');const v=newsletterView(s);assert.equal(v.contacts[0].status,'subscribed');assert.equal(v.contacts[0].consentAt,'2026-11-09T00:00:00.000Z');assert.equal(v.audience.candidates.length,1);assert.equal(v.events.length,2);
+recordNewsletterEvidence(s,{...verified,sourceId:'unknown-newer',status:'unknown',verified:false,at:'2026-11-11T00:00:00Z'});assert.equal(newsletterView(s).audience.candidates.length,1);
+recordNewsletterEvidence(s,{...verified,sourceId:'withdrawal',status:'unsubscribed',at:'2026-11-08T00:00:00Z'});assert.equal(newsletterView(s).audience.candidates.length,0);assert.equal(newsletterView(s).contacts[0].status,'unsubscribed');}
+});
+test('legacy pending decision timestamps do not block verified history; duplicate replay repairs stored decision',()=>{
+const s={},verified={email:'signup@customer.test',source:'verified',sourceId:'old',evidence:'Verified evidence',at:'2026-11-09T00:00:00Z',status:'subscribed',purpose:'newsletter',verified:true,consentText:'Newsletter consent',textVersion:'v1'};recordNewsletterEvidence(s,verified);capture(s,input(),'2026-11-10T01:00:00Z');const contact=Object.values(s.newsletter.contacts)[0],pending=Object.values(s.newsletter.events).find(e=>e.status==='pending_review');contact.status='pending_review';contact.consentAt=pending.at;contact.consentEventId=pending.id;
+assert.equal(newsletterView(s).audience.candidates.length,1);assert.equal(newsletterView(s).contacts[0].consentAt,'2026-11-09T00:00:00.000Z');assert.equal(recordNewsletterEvidence(s,verified).duplicate,true);assert.equal(Object.values(s.newsletter.contacts)[0].status,'subscribed');
+});

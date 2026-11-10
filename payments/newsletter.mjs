@@ -19,21 +19,31 @@ export function newsletterTimestamp(value){
   return date.toISOString();
 }
 function internal(email,state,contact){return contact?.internal===true||/@(aurapaddle\.com|example\.(com|org|net))$/.test(email)||Object.values(state.orders||{}).some(o=>o.internalTest===true&&String(o.customerEmail||'').trim().toLowerCase()===email)}
+function resolveConsent(data,contact){
+  const result={...contact},events=contact.eventIds.map(id=>data.events[id]).filter(Boolean).sort((a,b)=>a.at.localeCompare(b.at)||a.id.localeCompare(b.id));
+  const withdrawn=events.filter(event=>event.status==='unsubscribed').at(-1);
+  if(withdrawn||contact.status==='unsubscribed'){
+    result.status='unsubscribed';if(withdrawn)result.suppressedAt=withdrawn.at;return result;
+  }
+  const granted=events.filter(event=>event.status==='subscribed'&&event.purpose==='newsletter'&&event.verified===true).at(-1);
+  if(granted){result.status='subscribed';result.consentAt=granted.at;result.consentEventId=granted.id;delete result.fallbackEvidenceId;return result}
+  // Pending/unknown evidence is not a consent decision and must never set its clock.
+  const latest=events.at(-1);result.status=latest?.status==='pending_review'?'pending_review':'unknown';
+  delete result.consentAt;delete result.consentEventId;if(latest)result.fallbackEvidenceId=latest.id;return result;
+}
 export function recordNewsletterEvidence(state,input,now=new Date().toISOString()){
   const email=emailKey(input.email),source=text(input.source,100),sourceId=text(input.sourceId,200),evidence=text(input.evidence,2000),consentText=text(input.consentText,2000),at=newsletterTimestamp(input.at);
   if(!present(source)||!present(sourceId)||!present(evidence))throw new Error('Source, source record ID and evidence are required.');
   const status=text(input.status,30);if(!['subscribed','unsubscribed','unknown','pending_review'].includes(status))throw new Error('Invalid consent status.');
   if(status==='subscribed'&&(input.purpose!=='newsletter'||input.verified!==true||!present(consentText)||!present(text(input.textVersion,100))))throw new Error('Newsletter consent must be verified with exact consent text and version.');
   const data=ledger(state),id=hash(JSON.stringify([source,sourceId])),payload={email,originalEmail:input.email,source,sourceId,evidence,consentText,at,originalAt:input.at,status,purpose:text(input.purpose,60),verified:flag(input.verified,'Verified'),textVersion:text(input.textVersion,100),internal:flag(input.internal,'Internal')};
-  if(data.events[id]){if(data.events[id].fingerprint!==hash(JSON.stringify(payload)))throw new Error('Source record already exists with different evidence.');return {duplicate:true,contact:data.contacts[hash(email)]}}
+  if(data.events[id]){if(data.events[id].fingerprint!==hash(JSON.stringify(payload)))throw new Error('Source record already exists with different evidence.');const key=hash(email);data.contacts[key]=resolveConsent(data,data.contacts[key]);return {duplicate:true,contact:data.contacts[key]}}
   const key=hash(email),contact=data.contacts[key]??={id:key,email,status:'unknown',internal:false,eventIds:[],createdAt:now};
   const event={...payload,id,recordedAt:now,fingerprint:hash(JSON.stringify(payload))};data.events[id]=event;contact.eventIds.push(id);contact.internal||=payload.internal;contact.updatedAt=now;
-  // A historical import can never remove suppression. Re-subscription is a separate future workflow.
-  if(status==='unsubscribed'){contact.status='unsubscribed';contact.suppressedAt=at}
-  else if(contact.status!=='unsubscribed'&&!(status==='pending_review'&&contact.status==='subscribed')&&(!contact.consentAt||at>=contact.consentAt)){contact.status=status;contact.consentAt=at;contact.consentEventId=id}
-  data.contacts[key]=contact;return {duplicate:false,contact};
+  data.contacts[key]=resolveConsent(data,contact);return {duplicate:false,contact:data.contacts[key]};
 }
-export function newsletterAudience(state){const data=ledger(state),candidates=[],excluded=[];for(const contact of Object.values(data.contacts)){
+export function newsletterAudience(state){const data=ledger(state),candidates=[],excluded=[];for(const stored of Object.values(data.contacts)){
+  const contact=resolveConsent(data,stored);
   const event=data.events[contact.consentEventId];let reason='';
   if(internal(contact.email,state,contact))reason='internal_or_test';else if(contact.status==='unsubscribed')reason='unsubscribed';else if(contact.status!=='subscribed'||event?.purpose!=='newsletter'||!event?.verified)reason='newsletter_consent_not_verified';
   const entry={id:contact.id,email:contact.email,consentEventId:contact.consentEventId||null};if(reason)excluded.push({...entry,reason});else candidates.push(entry);
@@ -59,5 +69,5 @@ export function newsletterDraftStatus(draft,now=new Date().toISOString()){
 }
 export function newsletterView(state,now=new Date().toISOString()){
   const data=ledger(state),audience=newsletterAudience(state),audienceFingerprint=hash(JSON.stringify(audience));
-  return {sendingEnabled:false,contacts:Object.values(data.contacts),events:Object.values(data.events),drafts:Object.values(data.drafts).map(d=>({...d,recordedStatus:d.status,status:newsletterDraftStatus(d,now),currentAudience:audience,audienceChanged:d.audienceFingerprint!==audienceFingerprint})),audience};
+  return {sendingEnabled:false,contacts:Object.values(data.contacts).map(contact=>resolveConsent(data,contact)),events:Object.values(data.events),drafts:Object.values(data.drafts).map(d=>({...d,recordedStatus:d.status,status:newsletterDraftStatus(d,now),currentAudience:audience,audienceChanged:d.audienceFingerprint!==audienceFingerprint})),audience};
 }
