@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en-AU">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="robots" content="noindex,nofollow">
+  <meta name="referrer" content="no-referrer">
+  <title>Payment confirmed | AURA PADDLE</title>
+  <link rel="stylesheet" href="stripe-checkout.css">
+</head>
+<body>
+  <main class="checkout-shell"><section class="checkout-card">
+    <div class="brand">AURA PADDLE</div><p class="eyebrow">Secure payment confirmation</p>
+    <h1>Payment confirmed.</h1><p id="statusCopy">Your payment was verified. We will send your order details by email.</p>
+    <div class="actions"><a class="btn btn-primary" href="shop/">Return to the range</a><a class="btn btn-secondary" href="/">Back to home</a></div>
+  </section></main>
+  <script>
+  (async()=>{
+    if(location.search||location.hash||document.referrer){document.getElementById("statusCopy").textContent="For privacy, advertising measurement was not started on this page.";return}
+    let receipt="";try{receipt=sessionStorage.getItem("aura-meta-purchase-receipt-v1")||"";sessionStorage.removeItem("aura-meta-purchase-receipt-v1")}catch{}
+    if(!receipt)return;
+    try{
+      const response=await fetch("/api/meta-purchase/redeem",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({receipt})});if(!response.ok)return;
+      const purchase=await response.json();if(purchase.metaChoice==="default_au")window.AURA_TRUSTED_REGION={country:"AU",source:"trusted-server"};
+      window.AURA_META_DEFERRED=true;const script=document.createElement("script");script.src="/meta-pixel.js";script.onload=()=>window.AURAMeta?.purchase(purchase);document.head.append(script);
+    }catch{}
+  })();
+  </script>
+</body>
+</html>

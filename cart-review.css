@@ -1,0 +1,39 @@
+/* Checkout clarity refresh. No changes to prices, offers or payment rules. */
+.summary [hidden] { display: none !important; }
+.summary > .eyebrow { margin-bottom: .4rem; }
+.summary h2 { margin-bottom: .75rem; }
+.summary-row { padding-block: .55rem; }
+.summary-row.total { margin-top: .35rem; }
+.summary .shipping-choice { padding-block: .75rem; }
+.summary .promo-code { padding-block: .65rem; }
+.promo-details, .payment-details { font-size: .8rem; line-height: 1.5; }
+.promo-details summary, .payment-details summary { cursor: pointer; padding: .5rem 0; font-weight: 600; }
+.promo-details > label { display: block; margin: .5rem 0; }
+.payment-details { border-top: 1px solid rgba(255,255,255,.2); margin-top: .75rem; }
+.summary .checkout-email { margin-top: .85rem; }
+.summary .recovery-consent { font-size: .75rem; line-height: 1.4; margin-block: .65rem; }
+.summary .recovery-consent-badge { display: none; }
+.summary .btn-outline { padding-block: .6rem; border: none; text-decoration: underline; }
+.summary .secure-note { margin-block: .5rem; }
+.summary select { font-size: 16px; }
+.checkout-email input, .promo-code input { font-size: 16px; }
+.btn-checkout:focus-visible, summary:focus-visible { outline: 3px solid #61c5c9; outline-offset: 3px; }
+@media(max-width:600px) {
+  .cart-shell { padding: 1.75rem 0 2rem; }
+  .cart-shell > .wrap > .eyebrow { display: none; }
+  .cart-shell h1 { font-size: 2.1rem; margin-bottom: .4rem; }
+  .cart-shell .intro { font-size: .85rem; margin-bottom: 1rem; }
+  .cart-layout { gap: 1rem; }
+  .cart-item { padding: .85rem; gap: .65rem; }
+  .cart-item h2 { font-size: 1rem; }
+  .cart-item .variant { font-size: .7rem; }
+  .item-controls { grid-column: 1 / -1; display: grid; grid-template-columns: 1fr auto; align-items: center; gap: .2rem .7rem; }
+  .item-controls .each-price { grid-column: 1; grid-row: 2; margin: 0; }
+  .item-controls .qty { grid-column: 2; grid-row: 1; }
+  .item-controls .remove { grid-column: 2; grid-row: 2; justify-self: end; min-height: 32px; margin: 0; }
+  .qty button { min-width: 40px; min-height: 40px; }
+  .summary { padding: 1rem; }
+  .summary > h2 { font-size: 1.25rem; }
+  .summary > .eyebrow, .summary-row:has(#itemCount) { display: none; }
+  .summary p { font-size: .78rem; line-height: 1.45; }
+}
