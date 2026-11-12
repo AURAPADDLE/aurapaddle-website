@@ -59,13 +59,18 @@ test("approved metro geography maps each product without claiming carrier covera
   assert.equal(shippingRegionForItems(melbourne,[coast],{deliveryService:"express"}),"coastgo-express");
 });
 
-test("generated geography covers only reviewed AURA areas and excludes Dooen",()=>{
+test("generated geography covers reviewed metro areas and excludes rural or ambiguous locations",()=>{
   const generated=JSON.parse(fs.readFileSync(new URL("./shipping-coverage.review.json",import.meta.url),"utf8"));
   assert.equal(generated.status,"approved");
   assert.deepEqual(generated.promotion.freeAreas,["gold-coast","brisbane","sydney","canberra","melbourne"]);
   assert.ok(generated.locations.length>4000);
   assert.equal(generated.locations.some(item=>item.suburb==="Dooen"&&item.state==="VIC"&&item.postcode==="3401"),false);
+  assert.equal(generated.locations.some(item=>item.suburb==="Southport (Qld)"&&item.state==="QLD"&&item.postcode==="4215"&&item.auraArea==="gold-coast"),true);
+  for(const suburb of ["Natural Bridge","Numinbah Valley","Springbrook","Currumbin Valley","Tallebudgera Valley"]){
+    assert.equal(generated.locations.some(item=>item.suburb===suburb&&item.auraArea==="gold-coast"),false,`${suburb} must require manual confirmation`);
+  }
   assert.match(generated.purpose,/not carrier coverage/i);
+  assert.match(generated.boundaryPolicy,/statistical approximations/i);
 });
 
 test("production enforcement rejects a draft or empty carrier table",()=>{

@@ -10,8 +10,6 @@ from __future__ import annotations
 import argparse
 import json
 import re
-import urllib.parse
-import urllib.request
 import xml.etree.ElementTree as ET
 import zipfile
 from collections import defaultdict
@@ -65,48 +63,61 @@ def worksheet_rows(path: Path):
                 row.clear()
 
 
-def request_json(url: str, data: dict[str, str] | None = None) -> dict:
-    body = urllib.parse.urlencode(data).encode() if data else None
-    request = urllib.request.Request(url, data=body, headers={"User-Agent": "AURA-PADDLE-geography-builder/1.0"})
-    with urllib.request.urlopen(request, timeout=60) as response:
-        return json.load(response)
+def ucl_delivery_pairs(mb_path: Path, ucl_path: Path, sal_path: Path, poa_path: Path) -> dict[tuple[str, str, str], str]:
+    """Return unambiguous 2021 suburb/state/postcode pairs inside approved UCLs.
 
-
-def canberra_sal_codes() -> set[str]:
-    ucl_url = (
-        "https://geo.abs.gov.au/arcgis/rest/services/ASGS2021/UCL/MapServer/0/query"
-        "?where=ucl_code_2021%3D%27802001%27&outFields=ucl_code_2021"
-        "&returnGeometry=true&outSR=4283&f=json"
-    )
-    ucl = request_json(ucl_url)
-    geometry = ucl["features"][0]["geometry"]
-    sal = request_json(
-        "https://geo.abs.gov.au/arcgis/rest/services/ASGS2026/SAL/MapServer/0/query",
-        {
-            "geometry": json.dumps(geometry, separators=(",", ":")),
-            "geometryType": "esriGeometryPolygon",
-            "inSR": "4283",
-            "spatialRel": "esriSpatialRelIntersects",
-            "outFields": "SAL_CODE_2026,SAL_NAME_2026,STATE_CODE_2026",
-            "returnGeometry": "false",
-            "resultRecordCount": "2000",
-            "f": "json",
-        },
-    )
+    UCL is an exact 2021 SA1 allocation. A pair is accepted only when it has an
+    urban Mesh Block and no non-urban block other than Water, Parkland or
+    Transport. Mixed urban/rural pairs therefore fall back to manual review.
+    """
+    group_by_ucl = {"302001": "gold-coast", "802001": "canberra"}
+    group_by_sa1 = {
+        row.get("SA1_CODE_2021", ""): group_by_ucl[row.get("UCL_CODE_2021", "")]
+        for row in worksheet_rows(ucl_path)
+        if row.get("UCL_CODE_2021") in group_by_ucl
+    }
+    mb_info = {
+        row.get("MB_CODE_2021", ""): (group_by_sa1.get(row.get("SA1_CODE_2021", "")), row.get("MB_CATEGORY_2021", ""))
+        for row in worksheet_rows(mb_path)
+        if row.get("MB_CODE_2021")
+    }
+    sal_by_mb = {
+        row.get("MB_CODE_2021", ""): (row.get("SAL_NAME_2021", ""), row.get("STATE_CODE_2021", ""))
+        for row in worksheet_rows(sal_path)
+        if row.get("MB_CODE_2021")
+    }
+    harmless_outside_categories = {"Water", "Parkland", "Transport"}
+    pairs: dict[tuple[str, str, str], dict[str, object]] = defaultdict(lambda: {"groups": set(), "outside": False})
+    for row in worksheet_rows(poa_path):
+        mb = row.get("MB_CODE_2021", "")
+        sal = sal_by_mb.get(mb)
+        info = mb_info.get(mb)
+        postcode = row.get("POA_CODE_2021", "")
+        if not sal or not info or not re.fullmatch(r"\d{4}", postcode):
+            continue
+        suburb, state = sal
+        group, category = info
+        key = (suburb, state, postcode)
+        if group:
+            pairs[key]["groups"].add(group)
+        elif category not in harmless_outside_categories:
+            pairs[key]["outside"] = True
     return {
-        str(item["attributes"]["SAL_CODE_2026"])
-        for item in sal.get("features", [])
-        if str(item["attributes"].get("STATE_CODE_2026")) == "8"
-        and not str(item["attributes"].get("SAL_NAME_2026", "")).startswith("ACT Remainder")
+        key: next(iter(result["groups"]))
+        for key, result in pairs.items()
+        if not result["outside"] and len(result["groups"]) == 1
     }
 
 
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--mb", type=Path, required=True)
-    parser.add_argument("--lga", type=Path, required=True)
     parser.add_argument("--sal", type=Path, required=True)
     parser.add_argument("--poa", type=Path, required=True)
+    parser.add_argument("--mb-2021", type=Path, required=True)
+    parser.add_argument("--ucl-2021", type=Path, required=True)
+    parser.add_argument("--sal-2021", type=Path, required=True)
+    parser.add_argument("--poa-2021", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
 
@@ -118,11 +129,6 @@ def main() -> None:
             gccsa_by_mb[mb] = row.get("GCCSA_CODE_2026", "")
             state_by_mb[mb] = row.get("STATE_CODE_2026", "")
 
-    gold_coast_mbs = {
-        row.get("MB_CODE_2026", "")
-        for row in worksheet_rows(args.lga)
-        if row.get("LGA_CODE_2026") == "33430"
-    }
     sal_by_mb: dict[str, tuple[str, str, str]] = {}
     for row in worksheet_rows(args.sal):
         mb = row.get("MB_CODE_2026", "")
@@ -133,7 +139,7 @@ def main() -> None:
                 row.get("STATE_CODE_2026", ""),
             )
 
-    canberra_sals = canberra_sal_codes()
+    ucl_pairs = ucl_delivery_pairs(args.mb_2021, args.ucl_2021, args.sal_2021, args.poa_2021)
     group_by_gccsa = {
         "3GBRI": "brisbane",
         "1GSYD": "sydney",
@@ -148,13 +154,11 @@ def main() -> None:
         sal = sal_by_mb.get(mb)
         if not sal or not re.fullmatch(r"\d{4}", postcode):
             continue
-        sal_code, suburb, state = sal
+        _, suburb, state = sal
         if not suburb or not state or suburb.startswith("No usual address") or suburb.startswith("Migratory"):
             continue
-        if mb in gold_coast_mbs:
-            group = "gold-coast"
-        elif sal_code in canberra_sals and state == "8":
-            group = "canberra"
+        if (suburb, state, postcode) in ucl_pairs:
+            group = ucl_pairs[(suburb, state, postcode)]
         elif state_by_mb.get(mb) == "6":
             group = "tasmania-paid"
         else:
@@ -215,12 +219,12 @@ def main() -> None:
         },
         "sources": {
             "mb": "ABS ASGS Edition 4 MB_2026_AUST.xlsx",
-            "lga": "ABS ASGS Edition 4 LGA_2026_AUST.xlsx; Gold Coast LGA 33430",
             "poa": "ABS ASGS Edition 4 POA_2026_AUST.xlsx",
             "sal": "ABS ASGS Edition 4 SAL_2026_AUST.xlsx",
-            "canberra": "ABS ASGS Edition 3 UCL 802001, Canberra - Queanbeyan (Canberra Part), intersected with 2026 ACT SALs; ACT Remainder excluded",
+            "goldCoast": "ABS ASGS Edition 3 UCL 302001, Gold Coast - Tweed Heads (Gold Coast Part), using same-edition 2021 SA1, Mesh Block, SAL and POA allocations; mixed urban/rural pairs are excluded",
+            "canberra": "ABS ASGS Edition 3 UCL 802001, Canberra - Queanbeyan (Canberra Part), using same-edition 2021 SA1, Mesh Block, SAL and POA allocations; mixed urban/rural pairs are excluded",
         },
-        "boundaryPolicy": "A suburb/state/postcode pair crossing an approved or paid-area boundary is omitted and requires manual confirmation.",
+        "boundaryPolicy": "A suburb/state/postcode pair crossing an approved or paid-area boundary, including a mixed urban/rural Gold Coast or Canberra pair, is omitted and requires manual confirmation. Water, parkland and transport Mesh Blocks do not by themselves make an otherwise urban delivery pair ambiguous. ABS Postal Areas are statistical approximations, not proof that Australia Post accepts an address.",
         "ambiguousPairCount": ambiguous,
         "locations": locations,
     }
