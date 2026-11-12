@@ -7,7 +7,7 @@ import {renderCoastGoPage,renderCoastGoFeed} from './coastgo-content.mjs';
 import {loadCatalog,normaliseCheckoutItems,calculateShipping,buildCheckoutParams,orderProgress,applyStripeEvent} from './lib.mjs';
 import {enqueueStripeAnalytics} from './analytics.mjs';
 import {customerOrderEmailContent} from './order-email.mjs';
-const catalog=loadCatalog(),cutoff=Date.parse(offer.endsAt),launch=Date.parse(offer.launchAt);
+const catalog=loadCatalog(),cutoff=Date.parse(offer.endsAt),launch=Date.parse(offer.launchAt),promotionStart=Date.parse(offer.shippingStartsAt);
 
 test('Queensland launch and price cutoff have exact boundaries',()=>{
   assert.equal(offer.codeFor([{sku:'AP734955'}],cutoff-1),'');
@@ -19,10 +19,10 @@ test('Queensland launch and price cutoff have exact boundaries',()=>{
     assert.equal(items[0].variant.checkoutAmount,amount);
     assert.equal(items[0].variant.retailAmount,34900);
     assert.equal(params.get('line_items[0][price_data][unit_amount]'),String(amount));
-    assert.equal(params.get('line_items[1][price_data][unit_amount]'),now<cutoff?'7000':null);
-    assert.equal(shipping.amount,now<cutoff?7000:0);
+    assert.equal(params.get('line_items[1][price_data][unit_amount]'),'7000');
+    assert.equal(shipping.amount,7000);
     assert.equal(params.get('metadata[aura_payment_stage]'),'paid_in_full');
-    assert.equal(params.get('metadata[aura_promotion_code]'),now<cutoff?'COASTGO10':offer.shippingCode);
+    assert.equal(params.get('metadata[aura_promotion_code]'),now<cutoff?'COASTGO10':'');
     assert.equal(params.get('metadata[aura_product_discount_amount]'),now<cutoff?'2000':'0');
     assert.equal(params.get('discounts[0][coupon]'),null);
     assert.equal(offer.codeFor(items,now),now<cutoff?'COASTGO10':'');
@@ -51,12 +51,11 @@ test('Merchant feed and structured data use launch date and auto-expiring sale',
     for(const v of variants){assert.equal(v.offers.price,offer.price(now)/100);assert.equal(v.offers.availability,`https://schema.org/${now<launch?'PreOrder':'InStock'}`)}
     const items=renderCoastGoFeed(feed,now).match(/<item>[\s\S]*?<\/item>/g).filter(i=>offer.skus.some(sku=>i.includes(`<g:id>${sku}</g:id>`)));
     assert.equal(items.length,3);for(const item of items){assert.match(item,/<g:price>299.00 AUD/);if(now<cutoff)assert.match(item,/2026-10-08T23:59:59\+10:00/);else assert.doesNotMatch(item,/<g:sale_price>/);assert.match(item,new RegExp(`<g:availability>${now<launch?'preorder':'in_stock'}`));}
-    if(now===cutoff)for(const item of items){assert.match(item,/<g:region>NSW<\/g:region>/);assert.match(item,/<g:max_transit_time>40/);assert.doesNotMatch(item,/<g:region>(QLD|WA|NT)<\/g:region>/);}
   }
 });
 
 test('homepage presents both products and common code only during the promotion',()=>{
-  let now=cutoff;
+  let now=promotionStart;
   const nodes=new Map(),events={},timers=[],tracking=[],seen=new Map();
   const node=selector=>{if(!nodes.has(selector))nodes.set(selector,{textContent:'',innerHTML:'',style:{},setAttribute(){},addEventListener(){},after(){},append(){},querySelector(){return {textContent:''}}});return nodes.get(selector)};
   const modal={open:false,querySelector:node,querySelectorAll(){return[]},showModal(){this.open=true},close(){this.open=false},addEventListener(){}};
@@ -72,36 +71,38 @@ test('homepage presents both products and common code only during the promotion'
 
 test('standard-only shipping promotion respects exact dates, quantity, remote and mixed-cart exclusions',()=>{
   const end=Date.parse(offer.shippingEndsAt);
-  assert.equal(new Date(end).toISOString(),'2026-10-27T21:47:27.000Z');
+  assert.equal(new Date(promotionStart).toISOString(),'2026-11-11T14:00:00.000Z');
+  assert.equal(new Date(end).toISOString(),'2026-11-30T14:00:00.000Z');
   for(const sku of offer.skus)for(const quantity of [1,2,20]){
-    for(const now of [cutoff-1,cutoff,cutoff+1,end-1,end,end+1]){
+    for(const now of [promotionStart-1,promotionStart,promotionStart+1,end-1,end,end+1]){
       const items=normaliseCheckoutItems([{sku,quantity}],catalog,now);
       for(const region of offer.standardRegionIds){
-        const shipping=calculateShipping(items,region,undefined,now);
-        assert.equal(shipping.promotionApplied,now>=cutoff&&now<end);
-        assert.equal(shipping.amount===0,now>=cutoff&&now<end);
+        const shipping=calculateShipping(items,region,undefined,now,"",true);
+        assert.equal(shipping.promotionApplied,now>=promotionStart&&now<end);
+        assert.equal(shipping.amount===0,now>=promotionStart&&now<end);
       }
       const express=calculateShipping(items,'coastgo-express',undefined,now);
       assert.equal(express.amount,12000*quantity);assert.equal(express.promotionApplied,false);
       for(const region of offer.remoteRegionIds){
         const remote=calculateShipping(items,region,undefined,now);
-        assert.equal(remote.quoteRequired,now>=cutoff&&now<end);
+        assert.equal(remote.quoteRequired,now>=promotionStart&&now<end);
         if(remote.quoteRequired){assert.equal(remote.amount,null);assert.throws(()=>buildCheckoutParams({items,shipping:remote,siteUrl:'http://localhost'}),/freight quote/);}
       }
     }
   }
-  const mixed=normaliseCheckoutItems([{sku:offer.skus[0],quantity:1},{sku:'AP734955',quantity:1}],catalog,cutoff);
-  assert.equal(calculateShipping(mixed,'coastgo-standard',undefined,cutoff).quoteRequired,true);
-  const yoga=normaliseCheckoutItems([{sku:'AP734955',quantity:1}],catalog,cutoff);
-  assert.equal(calculateShipping(yoga,'gold-coast-brisbane',undefined,cutoff).amount,0);
+  const mixed=normaliseCheckoutItems([{sku:offer.skus[0],quantity:1},{sku:'AP734955',quantity:1}],catalog,promotionStart);
+  assert.equal(calculateShipping(mixed,'coastgo-standard',undefined,promotionStart,"",true).quoteRequired,true);
+  const yoga=normaliseCheckoutItems([{sku:'AP734955',quantity:1}],catalog,promotionStart);
+  assert.equal(calculateShipping(yoga,'gold-coast-brisbane',undefined,promotionStart,"",true).amount,0);
+  assert.equal(calculateShipping(yoga,'gold-coast-brisbane',undefined,promotionStart,"",false).amount,2500);
 });
 
 test('free standard shipping is recorded once on a genuine paid webhook payload, not inferred from today',()=>{
-  const items=normaliseCheckoutItems([{sku:offer.skus[0],quantity:2}],catalog,cutoff),shipping=calculateShipping(items,'coastgo-standard',undefined,cutoff);
-  const params=buildCheckoutParams({items,shipping,siteUrl:'http://localhost',now:cutoff/1000,attribution:{consent:{analytics:true,marketing:false},analyticsClientId:'123.456'}});
+  const items=normaliseCheckoutItems([{sku:offer.skus[0],quantity:2}],catalog,promotionStart),shipping=calculateShipping(items,'coastgo-standard',undefined,promotionStart,"",true);
+  const params=buildCheckoutParams({items,shipping,siteUrl:'http://localhost',now:promotionStart/1000,attribution:{consent:{analytics:true,marketing:false},analyticsClientId:'123.456'}});
   assert.equal(params.get('metadata[aura_shipping_promotion_id]'),offer.shippingPromotionId);
   const metadata=Object.fromEntries([...params].filter(([k])=>k.startsWith('metadata[')).map(([k,v])=>[k.slice(9,-1),v]));
-  const event={id:'evt_offline_promo',type:'checkout.session.completed',created:cutoff/1000,data:{object:{id:'cs_offline_promo',metadata,payment_status:'paid',amount_total:59800,currency:'aud'}}};
+  const event={id:'evt_offline_promo',type:'checkout.session.completed',created:promotionStart/1000,data:{object:{id:'cs_offline_promo',metadata,payment_status:'paid',amount_total:59800,currency:'aud'}}};
   const stripeLineItems={data:[{description:'CoastGo',amount_total:59800,quantity:2,taxes:[]}]};
   const state={};applyStripeEvent(state,event);enqueueStripeAnalytics(state,event,catalog,{stripeLineItems});
   const purchase=state.analyticsOutbox['purchase:APO00000'];
@@ -120,35 +121,35 @@ test('full-payment CoastGo confirmation and tracking never promise one-day dispa
 test('Yoga free shipping covers both approved zones and aliases, preserves other products and expiry',()=>{
   const end=Date.parse(offer.shippingEndsAt);
   for(const sku of offer.yogaSkus)for(const quantity of [1,2]){
-    const items=normaliseCheckoutItems([{sku,quantity}],catalog,cutoff);
+    const items=normaliseCheckoutItems([{sku,quantity}],catalog,promotionStart);
     for(const region of offer.yogaRegionIds){
-      const shipping=calculateShipping(items,region,undefined,cutoff,offer.shippingCode);
+      const shipping=calculateShipping(items,region,undefined,promotionStart,offer.shippingCode,true);
       assert.equal(shipping.amount,0);assert.equal(shipping.promotionCode,offer.shippingCode);
-      const params=buildCheckoutParams({items,shipping,siteUrl:'http://localhost',now:cutoff/1000});
+      const params=buildCheckoutParams({items,shipping,siteUrl:'http://localhost',now:promotionStart/1000});
       assert.equal(params.get('metadata[aura_shipping_amount]'),'0');
       assert.equal(params.get('metadata[aura_shipping_promotion_id]'),offer.shippingPromotionId);
       assert.equal(params.get('metadata[aura_promotion_code]'),offer.shippingCode);
       assert.equal(params.get('line_items[1][price_data][unit_amount]'),null);
     }
-    assert.equal(calculateShipping(items,'adelaide',undefined,cutoff).amount,12900*quantity);
-    assert.equal(calculateShipping(items,'remote',undefined,cutoff).quoteRequired,true);
+    assert.equal(calculateShipping(items,'adelaide',undefined,promotionStart,"",false).amount,12900*quantity);
+    assert.equal(calculateShipping(items,'remote',undefined,promotionStart,"",false).quoteRequired,true);
     assert.equal(calculateShipping(items,'gold-coast-brisbane',undefined,end).amount,2500*quantity);
     assert.equal(calculateShipping(items,'qld-nsw-main',undefined,end).amount,4500*quantity);
   }
-  const others=normaliseCheckoutItems([{sku:'AP667703',quantity:1}],catalog,cutoff);
-  assert.equal(calculateShipping(others,'gold-coast-brisbane',undefined,cutoff).quoteRequired,true);
+  const others=normaliseCheckoutItems([{sku:'AP667703',quantity:1}],catalog,promotionStart);
+  assert.equal(calculateShipping(others,'gold-coast-brisbane',undefined,promotionStart,"",true).quoteRequired,true);
 });
 
 
 test('withdrawn shipping promotion restores only existing tariffs and drops new checkout promotion metadata',()=>{
   const now=Date.parse(offer.shippingEndsAt);
-  for(const time of [now,now+1,Date.parse('2026-10-31T14:00:00Z')]){
+  for(const time of [now,now+1,Date.parse('2026-12-15T00:00:00Z')]){
     assert.equal(offer.freeShippingActive(time),false);
     for(const sku of [...offer.skus,...offer.yogaSkus])for(const quantity of [1,2]){
-      const items=normaliseCheckoutItems([{sku,quantity}],catalog,time);
+      const items=normaliseCheckoutItems([{sku,quantity}],catalog,promotionStart);
       const cases=offer.isCoastGo(sku)?[['coastgo-metro',3000],['coastgo-standard',3500],['coastgo-country',7500],['coastgo-remote-north',12000],['coastgo-remote-west',12000],['coastgo-express',12000]]:[['gold-coast-brisbane',2500],['qld-nsw-main',4500],['canberra-melbourne',4500],['adelaide',12900],['perth',17900],['tasmania',14900]];
       for(const [region,amount] of cases){
-        const shipping=calculateShipping(items,region,undefined,time,offer.shippingCode);
+        const shipping=calculateShipping(items,region,undefined,time,offer.shippingCode,true);
         assert.equal(shipping.amount,amount*quantity,`${sku} ${region}`);
         assert.equal(shipping.quoteRequired,false);
         assert.equal(shipping.promotionApplied,false);
@@ -163,5 +164,5 @@ test('withdrawn shipping promotion restores only existing tariffs and drops new 
   }
   const feed=renderCoastGoFeed(fs.readFileSync(new URL('../merchant-feed.xml',import.meta.url),'utf8'),now);
   for(const item of feed.match(/<item>[\s\S]*?<\/item>/g).filter(i=>offer.skus.some(sku=>i.includes(`<g:id>${sku}</g:id>`))))assert.doesNotMatch(item,/<g:shipping>/);
-  for(const file of ['index.html','policies/index.html'])assert.doesNotMatch(fs.readFileSync(new URL('../'+file,import.meta.url),'utf8'),/AURAFREESHIP|FREE SHIPPING|free-shipping offer/);
+  assert.match(fs.readFileSync(new URL('../policies/index.html',import.meta.url),'utf8'),/12–30 November 2026 selected-metro offer/);
 });

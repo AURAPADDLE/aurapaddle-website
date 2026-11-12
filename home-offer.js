@@ -1,10 +1,10 @@
 (()=>{
   const offer=document.getElementById("preorderOffer"),policy=window.AURACoastGo;
   if(!offer||!policy)return;
-  const storageKey="aura-home-free-shipping-coastgo-yoga-20261008";
+  const storageKey="aura-home-free-shipping-coastgo-yoga-20261112";
   const promotion={promotion_id:policy.shippingPromotionId,promotion_name:"CoastGo & Yoga Cruiser — free shipping",creative_slot:"homepage_modal",coupon:policy.shippingCode,currency:"AUD",items:[...policy.skus.map(item_id=>({item_id,item_name:"AURA PADDLE CoastGo",price:299,quantity:1})),{item_id:"AP734955",item_name:"AURA PADDLE Yoga Cruiser",price:749,quantity:1}]};
   const track=(name,params={})=>window.AURATracking?.event(name,{...promotion,...params});
-  offer.querySelector('.preorder-offer__eyebrow').textContent="COASTGO + YOGA CRUISER · THROUGH 31 OCTOBER";
+  offer.querySelector('.preorder-offer__eyebrow').textContent="COASTGO + YOGA CRUISER · 12–30 NOVEMBER";
   offer.querySelector('#preorderOfferTitle').innerHTML='Two boards.<br><span>FREE SHIPPING*</span>';
   offer.querySelector('.preorder-offer__price').textContent='CoastGo AUD $299 · Yoga Cruiser AUD $749';
   offer.querySelector('.preorder-offer__value').textContent='One code. More time on the water.';
@@ -12,7 +12,7 @@
   copyButton.hidden=false;copyButton.style.display='';
   copyButton.innerHTML='<strong>AURAFREESHIP</strong><span>Copy code</span>';
   copyButton.setAttribute('aria-label','Copy promo code AURAFREESHIP');
-  offer.querySelector('.preorder-offer__copy').textContent='Automatically applied in the cart. CoastGo: eligible standard regions only; express extra, remote quote. Yoga Cruiser: Gold Coast / Brisbane Metro and QLD / NSW / ACT major cities, coastal areas & Melbourne Metro. Ends 31 October 2026, Queensland time. Select your region to confirm.';
+  offer.querySelector('.preorder-offer__copy').textContent='Automatically applied after the cart address check for verified Gold Coast, Brisbane, Sydney, Canberra and Melbourne metro addresses. Yoga Cruiser and CoastGo standard delivery only; express extra. Other addresses retain their confirmed published rate or need manual confirmation. Ends 30 November 2026, Brisbane time.';
   const coastLink=offer.querySelector('[data-preorder-offer-shop]');
   coastLink.href='products/coast-go.html';coastLink.textContent='Shop CoastGo';
   const yogaLink=document.createElement('a');yogaLink.className='btn btn-primary';yogaLink.href='products/yoga-cruiser.html?colour=glacier';yogaLink.textContent='Shop Yoga Cruiser';coastLink.after(yogaLink);

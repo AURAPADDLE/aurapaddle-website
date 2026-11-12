@@ -25,9 +25,12 @@ export function validateCoverageTable(table,rates){
     const key=deliveryLocationKey(entry);
     if(seen.has(key))throw new Error(`Duplicate shipping coverage location: ${key}`);
     seen.add(key);
-    const region=rates.byId.get(entry.regionId);
-    if(!region||region.aliasTo)throw new Error(`Unknown shipping region for ${key}: ${entry.regionId}`);
-    if(entry.reviewed!==true||!entry.source||!entry.effectiveFrom)throw new Error(`Unreviewed carrier coverage entry: ${key}`);
+    if(entry.reviewed!==true||!entry.source||!entry.effectiveFrom)throw new Error(`Unreviewed AURA shipping geography entry: ${key}`);
+    for(const field of ["yogaRegionId","coastGoRegionId"]){
+      const region=rates.byId.get(entry[field]);
+      if(!region||region.aliasTo)throw new Error(`Unknown ${field} for ${key}: ${entry[field]}`);
+    }
+    if(typeof entry.freeShippingEligible!=="boolean"||typeof entry.coastGoExpressEligible!=="boolean")throw new Error(`Incomplete AURA shipping classification: ${key}`);
   }
   return table;
 }
@@ -44,9 +47,21 @@ export function resolveDeliveryLocation(input,table,rates){
   const key=deliveryLocationKey(location);
   const matches=(table?.locations||[]).filter(entry=>deliveryLocationKey(entry)===key&&entry.reviewed===true);
   if(matches.length!==1)return {status:matches.length?"ambiguous":"manual_quote",quoteRequired:true,location,coverageVersion:table?.version||"draft-unversioned"};
-  const match=matches[0],region=rates.byId.get(match.regionId);
-  if(!region)return {status:"manual_quote",quoteRequired:true,location,coverageVersion:table?.version||"draft-unversioned"};
-  return {status:"verified",quoteRequired:false,location,regionId:region.id,coverageVersion:table.version,source:match.source,effectiveFrom:match.effectiveFrom};
+  const match=matches[0];
+  if(!rates.byId.get(match.yogaRegionId)||!rates.byId.get(match.coastGoRegionId))return {status:"manual_quote",quoteRequired:true,location,coverageVersion:table?.version||"draft-unversioned"};
+  return {status:"verified",quoteRequired:false,location,coverageVersion:table.version,source:match.source,effectiveFrom:match.effectiveFrom,auraArea:match.auraArea,auraAreaLabel:match.auraAreaLabel,yogaRegionId:match.yogaRegionId,coastGoRegionId:match.coastGoRegionId,coastGoExpressEligible:match.coastGoExpressEligible===true,freeShippingEligible:match.freeShippingEligible===true};
+}
+
+export function shippingRegionForItems(resolution,items,{deliveryService="standard"}={}){
+  if(resolution?.status!=="verified")return null;
+  const coastGo=items.filter(item=>item.variant?.slug==="coast-go").length;
+  const yoga=items.filter(item=>item.variant?.slug==="yoga-cruiser").length;
+  if(coastGo===items.length){
+    if(deliveryService==="express")return resolution.coastGoExpressEligible?"coastgo-express":null;
+    return deliveryService==="standard"?resolution.coastGoRegionId:null;
+  }
+  if(yoga===items.length&&deliveryService==="standard")return resolution.yogaRegionId;
+  return null;
 }
 
 export function compareDeliveryLocation(expected,actual){

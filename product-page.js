@@ -232,7 +232,7 @@
       try{const saved=sessionStorage.getItem(shippingRegionKey),normalisedSaved=saved==="canberra-melbourne"?"qld-nsw-main":saved;if(visibleRegions.some(region=>region.id===normalisedSaved))select.value=normalisedSaved;if(saved!==normalisedSaved&&normalisedSaved)sessionStorage.setItem(shippingRegionKey,normalisedSaved)}catch{}
     }
     const region=shippingRates.regions.find(item=>item.id===select.value),shippingClass=productShippingClass();
-    if(!region){result.textContent=["coast-go","yoga-cruiser"].includes(data.slug)&&coastGo.freeShippingActive()?"AURAFREESHIP: free shipping to eligible regions through 31 October (Queensland time). Choose your region to confirm.":"Shipping is additional. Choose a region to see your total before payment.";quote.hidden=true;return}
+    if(!region){result.textContent=["coast-go","yoga-cruiser"].includes(data.slug)&&coastGo.freeShippingActive()?"AURAFREESHIP: free standard shipping for verified Gold Coast, Brisbane, Sydney, Canberra and Melbourne metro addresses through 30 November (Brisbane time). The cart checks your suburb, state and postcode.":"Shipping is additional. Choose a region to see your total before payment.";quote.hidden=true;return}
     const multiSurfboard=shippingClass==="surfboard"&&quantity>1;
     const coastGoRate=data.slug==="coast-go"&&region.coastGoOnly&&Number.isInteger(region.coastGo);
     const coastGoFree=coastGoRate&&coastGo.freeShippingFor(region.id);
@@ -287,7 +287,7 @@
     const launchPromotion=(shippingRates?.promotions||[]).find(promotion=>promotion.sku===v.sku&&Date.now()>=Date.parse(promotion.startsAt)&&Date.now()<Date.parse(promotion.endsAt));
     $("priceNote").textContent=preorder?(v.retailAUD?`AUD $${(numericPrice(v)/2).toFixed(2)} today per ${item} · 50% initial payment. AUD $${campaign.discountAUD} incentive included in the full price.`:`Eligible ${item}s receive an AUD $${campaign.discountAUD} pre-order incentive after the standard retail price is confirmed · 50% initial payment required`):launchPromotion?.requiresCode?`New arrival offer · Use code ${launchPromotion.code} for eligible free shipping through 29 September 2026.`:launchPromotion?"New arrival offer · Free shipping to eligible metro and coastal regions through 29 September 2026.":v.saleAUD?"In-stock offer · Pay in full at checkout, including the published shipping rate.":"Australia-only range · Shipping calculated separately · See policy terms";
     $("preorderPanel").hidden=!preorder;
-    if(data.slug==="yoga-cruiser"&&coastGo.freeShippingActive())$("priceNote").textContent="AURAFREESHIP · FREE shipping to eligible regions through 31 October. Select your region below."+(preorder?" Pre-order payment and dispatch conditions still apply.":"");
+    if(data.slug==="yoga-cruiser"&&coastGo.freeShippingActive())$("priceNote").textContent="AURAFREESHIP · FREE standard shipping to verified Gold Coast, Brisbane, Sydney, Canberra and Melbourne metro addresses through 30 November. Address checked in cart."+(preorder?" Pre-order payment and dispatch conditions still apply.":"");
     if(data.slug==="coast-go"){
       $("availabilityText").textContent=coastGo.beforeLaunch()?"Advance orders open · Official release 8 October":"Available to order";
       $("priceNote").textContent=coastGo.priceNote();
@@ -548,12 +548,12 @@
       const active=(!yoga&&coastGo.discounted())||coastGo.freeShippingActive();trigger.hidden=!active;trigger.style.display=active?"block":"none";
       if(!active){dialog.close();return;}
       if(coastGo.freeShippingActive()){
-        trigger.innerHTML='FREE '+(yoga?'':'standard ')+'shipping*<small>AURAFREESHIP · Eligible regions · Through 31 October →</small>';
+        trigger.innerHTML='FREE '+(yoga?'':'standard ')+'shipping*<small>AURAFREESHIP · Five verified metro areas · Through 30 November →</small>';
         dialog.querySelector('.kicker').textContent=yoga?'YOGA CRUISER · AUD $749':'COASTGO · AUD $299';
         dialog.querySelector('h2').textContent=yoga?'FREE SHIPPING*':'FREE STANDARD SHIPPING*';dialog.querySelector('h2').style.fontSize='42px';
-        dialog.querySelector('.deadline').textContent='Through 31 October 2026 · Queensland time';
+        dialog.querySelector('.deadline').textContent='12–30 November 2026 · Brisbane time';
         dialog.querySelector('.coast-launch-code').textContent=coastGo.shippingCode;dialog.querySelector('.coast-launch-code').hidden=false;dialog.querySelector('.coast-launch-code').style.display='block';
-        dialog.querySelector('.auto').textContent='Automatically applied in the cart for eligible regions.';
+        dialog.querySelector('.auto').textContent='Automatically applied after the cart confirms an eligible suburb, state and postcode.';
         dialog.querySelector('.terms').textContent=yoga?coastGo.yogaShippingTerms:coastGo.shippingTerms;
         dialog.querySelector('.shop').textContent=yoga?'SHOP YOGA CRUISER':'SHOP COASTGO';
       }

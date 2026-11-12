@@ -17,7 +17,7 @@ import {renderCoastGoPage,renderCoastGoFeed} from "./coastgo-content.mjs";
 import {adminReviewData,attachReviewEmail,ensureReviewState,moderateReview,publicReviewData,renderReviews,submitReview} from "./reviews.mjs";
 import {issueMetaPurchaseReceipt,redeemMetaPurchaseReceipt} from "./meta-purchase.mjs";
 import {createGeoResolver,renderClientIp} from "./geo-region.mjs";
-import {assertShippingValidationConfiguration,resolveDeliveryLocation,validateCoverageTable} from "./shipping-location.mjs";
+import {assertShippingValidationConfiguration,resolveDeliveryLocation,shippingRegionForItems,validateCoverageTable} from "./shipping-location.mjs";
 
 const here=path.dirname(fileURLToPath(import.meta.url));
 const siteDir=path.resolve(here,"..");
@@ -65,7 +65,7 @@ for(const filename of fs.readdirSync(path.join(siteDir,"products")).filter(name=
 }
 const shippingRates=loadShippingRates();
 const shippingCoverage=validateCoverageTable(JSON.parse(fs.readFileSync(path.join(here,"shipping-coverage.review.json"),"utf8")),shippingRates);
-const shippingValidationMode=process.env.SHIPPING_LOCATION_VALIDATION_MODE||(process.env.RENDER==="true"?"off":"draft");
+const shippingValidationMode=process.env.SHIPPING_LOCATION_VALIDATION_MODE||(process.env.RENDER==="true"?"enforced":"draft");
 assertShippingValidationConfiguration(shippingValidationMode,shippingCoverage);
 const configuredStripeAccount=process.env.STRIPE_ACCOUNT_ID||"";
 const sandboxStripeMap=loadStripeMap(catalog);
@@ -176,11 +176,15 @@ async function checkout(req,res){
   const items=normaliseCheckoutItems(rawItems,catalog);
   if(items.some(item=>coastGoOffer.isCoastGo(item.variant.sku)&&!(Array.isArray(body.coastGoPrices)&&body.coastGoPrices.some(price=>price?.sku===item.variant.sku&&price.unitAmount===item.variant.checkoutAmount))))return send(res,409,{error:"CoastGo pricing has changed. Refresh your cart and review the full-payment total before continuing."});
   const promoCode=String(body.promoCode||"").trim().toUpperCase();
-  const locationResolution=shippingValidationMode==="off"?null:resolveDeliveryLocation(body.deliveryLocation,shippingCoverage,shippingRates);
+  const locationValidationRequired=shippingValidationMode!=="off"&&coastGoOffer.shippingLocationValidationRequired(items,Date.now());
+  const locationResolution=locationValidationRequired?resolveDeliveryLocation(body.deliveryLocation,shippingCoverage,shippingRates):null;
   if(locationResolution?.status==="invalid")return send(res,400,{error:locationResolution.error});
-  if(locationResolution&&locationResolution.status!=="verified")return send(res,400,{error:"We could not confirm a published SUP freight rate for this address. No payment has been taken. Contact AURA PADDLE for a freight quote.",quoteRequired:true});
-  if(locationResolution&&body.shippingRegion&&body.shippingRegion!==locationResolution.regionId)return send(res,409,{error:"The selected delivery region does not match the confirmed suburb, state and postcode. Review the delivery details before payment."});
-  const shipping=calculateShipping(items,locationResolution?.regionId||body.shippingRegion,shippingRates,Date.now(),promoCode);
+  if(locationResolution&&locationResolution.status!=="verified")return send(res,400,{error:"This address is outside the automatically confirmed areas or crosses a published boundary. No payment has been taken. Contact AURA PADDLE to confirm the delivery region.",quoteRequired:true});
+  const resolvedRegionId=locationResolution?shippingRegionForItems(locationResolution,items,{deliveryService:String(body.deliveryService||"standard")}):body.shippingRegion;
+  if(locationResolution&&!resolvedRegionId)return send(res,400,{error:"This product and delivery service need manual shipping confirmation. No payment has been taken.",quoteRequired:true});
+  if(locationResolution&&body.shippingRegion&&body.shippingRegion!==resolvedRegionId)return send(res,409,{error:"The selected delivery service does not match the confirmed suburb, state and postcode. Review the delivery details before payment."});
+  const promotionAddressVerified=Boolean(locationResolution?.freeShippingEligible&&String(body.deliveryService||"standard")==="standard");
+  const shipping=calculateShipping(items,resolvedRegionId,shippingRates,Date.now(),promoCode,promotionAddressVerified);
   if(items.some(item=>coastGoOffer.isCoastGo(item.variant.sku))&&body.coastGoShippingAmount!==shipping.amount)return send(res,409,{error:"CoastGo shipping has changed. Refresh your cart and review the delivery total before continuing."});
   if(promoCode&&!shipping.promotionCode&&promoCode!==coastGoOffer.codeFor(items))return send(res,400,{error:"This promo code is invalid or not available for this order, region or date."});
   if(items.some(item=>item.variant.orderMode==="available")&&shipping.quoteRequired)return send(res,400,{error:"Contact AURA PADDLE for a freight quote before ordering this in-stock board."});
@@ -202,11 +206,15 @@ async function shippingQuote(req,res){
   if(shippingValidationMode==="off")return send(res,503,{error:"Address-based freight validation is not enabled."});
   const rawItems=Array.isArray(body.items)?body.items:[];
   const items=normaliseCheckoutItems(rawItems,catalog);
+  if(!coastGoOffer.shippingLocationValidationRequired(items,Date.now()))return send(res,400,{error:"The selected-metro address check is not required for this cart or date."});
   const resolution=resolveDeliveryLocation(body.deliveryLocation,shippingCoverage,shippingRates);
   if(resolution.status==="invalid")return send(res,400,{error:resolution.error,status:resolution.status});
   if(resolution.status!=="verified")return send(res,200,{status:resolution.status,quoteRequired:true,location:resolution.location,coverageVersion:resolution.coverageVersion});
-  const shipping=calculateShipping(items,resolution.regionId,shippingRates,Date.now(),String(body.promoCode||"").trim().toUpperCase());
-  send(res,200,{status:"verified",quoteRequired:shipping.quoteRequired,location:resolution.location,coverageVersion:resolution.coverageVersion,shipping:{regionId:shipping.regionId,label:shipping.label,amount:shipping.amount,quoteRequired:shipping.quoteRequired,promotionApplied:shipping.promotionApplied===true,promotionCode:shipping.promotionCode||""}});
+  const deliveryService=String(body.deliveryService||"standard"),regionId=shippingRegionForItems(resolution,items,{deliveryService});
+  if(!regionId)return send(res,200,{status:"manual_quote",quoteRequired:true,location:resolution.location,coverageVersion:resolution.coverageVersion});
+  const promotionAddressVerified=resolution.freeShippingEligible&&deliveryService==="standard";
+  const shipping=calculateShipping(items,regionId,shippingRates,Date.now(),String(body.promoCode||"").trim().toUpperCase(),promotionAddressVerified);
+  send(res,200,{status:"verified",quoteRequired:shipping.quoteRequired,location:resolution.location,coverageVersion:resolution.coverageVersion,auraArea:resolution.auraArea,auraAreaLabel:resolution.auraAreaLabel,freeShippingEligible:resolution.freeShippingEligible,coastGoExpressEligible:resolution.coastGoExpressEligible,shipping:{regionId:shipping.regionId,label:shipping.label,amount:shipping.amount,quoteRequired:shipping.quoteRequired,promotionApplied:shipping.promotionApplied===true,promotionCode:shipping.promotionCode||""}});
 }
 async function sessionSummary(req,res,url){
   const id=url.searchParams.get("id")||"";

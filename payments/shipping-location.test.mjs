@@ -1,16 +1,20 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import {assertShippingValidationConfiguration,compareDeliveryLocation,normaliseDeliveryLocation,resolveDeliveryLocation,validateCoverageTable} from "./shipping-location.mjs";
+import fs from "node:fs";
+import {assertShippingValidationConfiguration,compareDeliveryLocation,normaliseDeliveryLocation,resolveDeliveryLocation,shippingRegionForItems,validateCoverageTable} from "./shipping-location.mjs";
 import {applyStripeEvent,buildCheckoutParams,updateOrderProgress} from "./lib.mjs";
 
 const rates={byId:new Map([
   ["gold-coast-brisbane",{id:"gold-coast-brisbane"}],
   ["qld-nsw-main",{id:"qld-nsw-main"}],
+  ["coastgo-metro",{id:"coastgo-metro"}],
+  ["coastgo-standard",{id:"coastgo-standard"}],
+  ["coastgo-express",{id:"coastgo-express"}],
   ["remote",{id:"remote",quoteRequired:true}]
 ])};
 const table={status:"draft",version:"test-reviewed-v1",locations:[
-  {suburb:"Southport",state:"QLD",postcode:"4215",regionId:"gold-coast-brisbane",reviewed:true,source:"carrier-test-fixture",effectiveFrom:"2026-10-01"},
-  {suburb:"Melbourne",state:"VIC",postcode:"3000",regionId:"qld-nsw-main",reviewed:true,source:"carrier-test-fixture",effectiveFrom:"2026-10-01"}
+  {suburb:"Southport",state:"QLD",postcode:"4215",auraArea:"gold-coast",auraAreaLabel:"Gold Coast",yogaRegionId:"gold-coast-brisbane",coastGoRegionId:"coastgo-standard",coastGoExpressEligible:false,freeShippingEligible:true,reviewed:true,source:"ABS test fixture",effectiveFrom:"2026-11-12"},
+  {suburb:"Melbourne",state:"VIC",postcode:"3000",auraArea:"melbourne",auraAreaLabel:"Melbourne metro",yogaRegionId:"qld-nsw-main",coastGoRegionId:"coastgo-metro",coastGoExpressEligible:true,freeShippingEligible:true,reviewed:true,source:"ABS test fixture",effectiveFrom:"2026-11-12"}
 ]};
 
 test("normalises an exact Australian suburb, state and postcode triplet",()=>{
@@ -41,7 +45,27 @@ test("detects a Stripe address change before fulfilment",()=>{
 
 test("coverage entries must be explicit, reviewed and attributable",()=>{
   assert.equal(validateCoverageTable(table,rates),table);
-  assert.throws(()=>validateCoverageTable({...table,locations:[{suburb:"Dooen",state:"VIC",postcode:"3401",regionId:"qld-nsw-main"}]},rates),/Unreviewed carrier coverage/);
+  assert.throws(()=>validateCoverageTable({...table,locations:[{suburb:"Dooen",state:"VIC",postcode:"3401",yogaRegionId:"qld-nsw-main",coastGoRegionId:"coastgo-metro",freeShippingEligible:true,coastGoExpressEligible:false}]},rates),/Unreviewed AURA shipping geography/);
+});
+
+test("approved metro geography maps each product without claiming carrier coverage",()=>{
+  const yoga={variant:{slug:"yoga-cruiser"}},coast={variant:{slug:"coast-go"}};
+  const southport=resolveDeliveryLocation({suburb:"Southport",state:"QLD",postcode:"4215"},table,rates);
+  const melbourne=resolveDeliveryLocation({suburb:"Melbourne",state:"VIC",postcode:"3000"},table,rates);
+  assert.equal(shippingRegionForItems(southport,[yoga]),"gold-coast-brisbane");
+  assert.equal(shippingRegionForItems(southport,[coast]),"coastgo-standard");
+  assert.equal(shippingRegionForItems(southport,[coast],{deliveryService:"express"}),null);
+  assert.equal(shippingRegionForItems(melbourne,[yoga]),"qld-nsw-main");
+  assert.equal(shippingRegionForItems(melbourne,[coast],{deliveryService:"express"}),"coastgo-express");
+});
+
+test("generated geography covers only reviewed AURA areas and excludes Dooen",()=>{
+  const generated=JSON.parse(fs.readFileSync(new URL("./shipping-coverage.review.json",import.meta.url),"utf8"));
+  assert.equal(generated.status,"approved");
+  assert.deepEqual(generated.promotion.freeAreas,["gold-coast","brisbane","sydney","canberra","melbourne"]);
+  assert.ok(generated.locations.length>4000);
+  assert.equal(generated.locations.some(item=>item.suburb==="Dooen"&&item.state==="VIC"&&item.postcode==="3401"),false);
+  assert.match(generated.purpose,/not carrier coverage/i);
 });
 
 test("production enforcement rejects a draft or empty carrier table",()=>{
