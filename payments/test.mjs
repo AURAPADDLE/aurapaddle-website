@@ -20,13 +20,13 @@ const checkoutLines=(productGross,productTax=0,{shippingGross=0,shippingTax=0,qu
   ...(shippingGross?[{description:"Shipping · test",amount_total:shippingGross,quantity:1,taxes:shippingTax?[{amount:shippingTax}]:[],price:{product:{metadata:{aura_line_kind:"shipping"}}}}]:[])
 ]});
 
-test("CoastGo region tariff charges per board with full product and shipping payment",()=>{
-  const tariff={"coastgo-metro":3000,"coastgo-standard":3500,"coastgo-country":7500,"coastgo-remote-north":12000,"coastgo-remote-west":12000,"coastgo-express":12000};
+test("CoastGo shares the Yoga standard tariff and keeps express per board",()=>{
+  const tariff={"gold-coast-brisbane":2500,"qld-nsw-main":4500,"canberra-melbourne":4500,"adelaide":12900,"perth":17900,"tasmania":14900,"coastgo-express":12000};
   for(const sku of ["AP081165","AP730047","AP388238"]){
     for(const quantity of [1,2,20])for(const [region,rate] of Object.entries(tariff)){
       const items=normaliseCheckoutItems([{sku,quantity}],catalog),shipping=shippingFor(items,region);
       assert.equal(shipping.amount,rate*quantity);assert.equal(shipping.quoteRequired,false);
-      assert.equal(shippingRates.byId.get(region).transitDays,region==="coastgo-express"?"7–11":"21–40");
+      if(region==="coastgo-express")assert.equal(shippingRates.byId.get(region).transitDays,"7–11");
       const params=buildCheckoutParams({items,priceBySku:stripeMap.bySku,siteUrl:"http://localhost:4242",returnPath:"/cart/",shipping});
       assert.equal(params.get("metadata[aura_shipping_amount]"),String(rate*quantity));
       assert.equal(params.get("metadata[aura_payment_stage]"),"paid_in_full");
@@ -38,17 +38,15 @@ test("CoastGo region tariff charges per board with full product and shipping pay
   }
 });
 
-test("CoastGo rejects old region selections and cannot grant its tariff to other products",()=>{
+test("CoastGo and Yoga can share standard shipping while express remains CoastGo-only",()=>{
   const coast=normaliseCheckoutItems([{sku:"AP081165",quantity:1}],catalog);
-  for(const region of shippingRates.regions.filter(region=>!region.coastGoOnly&&region.id!=="local-pickup"))assert.throws(()=>shippingFor(coast,region.id),/CoastGo delivery region/);
-  assert.throws(()=>shippingFor(coast,"local-pickup"),/region/i);
   const yoga=normaliseCheckoutItems([{sku:"AP734955",quantity:1}],catalog);
   assert.equal(shippingFor(yoga,"gold-coast-brisbane").amount,2500);
-  assert.equal(shippingFor(yoga,"coastgo-metro").quoteRequired,true);
-  assert.equal(shippingFor([...coast,...yoga],"coastgo-standard").amount,null);
+  assert.equal(shippingFor([...coast,...yoga],"qld-nsw-main").amount,9000);
+  assert.equal(shippingFor(yoga,"coastgo-express").quoteRequired,true);
   const colours=normaliseCheckoutItems([{sku:"AP081165",quantity:2},{sku:"AP730047",quantity:1}],catalog);
-  assert.equal(shippingFor(colours,"coastgo-standard").amount,10500);
-  assert.equal(shippingFor(coast,"coastgo-standard",Date.parse("2026-09-28T00:00:00+10:00"),"YOGAFREESHIP").amount,3500);
+  assert.equal(shippingFor(colours,"qld-nsw-main").amount,13500);
+  assert.equal(shippingFor(coast,"qld-nsw-main",Date.parse("2026-09-28T00:00:00+10:00"),"YOGAFREESHIP").amount,4500);
 });
 
 test("request URL parsing rejects malformed paths without escaping the server error handler",()=>{

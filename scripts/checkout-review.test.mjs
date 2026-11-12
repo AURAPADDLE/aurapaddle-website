@@ -51,7 +51,7 @@ function harness(allowed, url='https://www.aurapaddle.com/cart/?utm_source=googl
     dispatchEvent(){}, addEventListener(name,fn){if(!windowListeners.has(name))windowListeners.set(name,[]);windowListeners.get(name).push(fn);},
     AURA_OFFLINE_REVIEW:options.offlineReview===true,
     AURA_STRIPE:{enabled:true,shippingLocationValidation:options.shippingValidation}, AURACart:{read:()=>options.items||[yoga],count:()=>1,subscribe(){}},
-    fetch:async(url,requestOptions)=>{const body=JSON.parse(requestOptions.body);requests.push({url,body});if(String(url).includes('shipping-quote'))return {ok:true,json:async()=>options.shippingQuoteResponse||({status:'verified',coverageVersion:'test-v1',auraArea:'melbourne',auraAreaLabel:'Melbourne metro',freeShippingEligible:true,coastGoExpressEligible:true,location:body.deliveryLocation,shipping:{regionId:(options.items||[yoga]).some(item=>item.sku==='AP081165')?'coastgo-metro':'qld-nsw-main',label:'Verified metro',amount:0,quoteRequired:false,promotionApplied:true,promotionCode:'AURAFREESHIP'}})};return {ok:true,json:async()=>({url:'https://checkout.example.test/offline'})};},
+    fetch:async(url,requestOptions)=>{const body=JSON.parse(requestOptions.body);requests.push({url,body});if(String(url).includes('shipping-quote'))return {ok:true,json:async()=>options.shippingQuoteResponse||({status:'verified',coverageVersion:'test-v1',auraArea:'melbourne',auraAreaLabel:'Melbourne metro',freeShippingEligible:true,coastGoExpressEligible:true,location:body.deliveryLocation,shipping:{regionId:body.deliveryService==='express'?'coastgo-express':'qld-nsw-main',label:body.deliveryService==='express'?'Express':'Verified metro',amount:body.deliveryService==='express'?12000:0,quoteRequired:false,promotionApplied:body.deliveryService!=='express',promotionCode:body.deliveryService==='express'?'':'AURAFREESHIP'}})};return {ok:true,json:async()=>({url:'https://checkout.example.test/offline'})};},
     gtag(...args){calls.push(args);if(args[0]==='get')args[3](args[2]==='client_id'?'123.456':'1788729600');}
   };
   context.window = context;
@@ -324,15 +324,13 @@ test('Dooen and boundary-unclear addresses alone require manual confirmation',as
 });
 
 const coast={...yoga,sku:'AP081165',productName:'CoastGo',shortName:'CoastGo',productUrl:'products/coast-go.html',unitAmount:29900,orderMode:'available'};
-test('CoastGo standard/express/remote retain amounts, visible transit and payment gating',async()=>{
-  for(const [region,amount,enabled] of [['coastgo-metro','$329',true],['coastgo-express','$419',true],['coastgo-remote-north','$419',true]]){
-    const h=harness(false,undefined,{items:[coast],region,now:'2026-12-02T00:00:00Z'});h.startCart();
-    await new Promise(resolve=>setImmediate(resolve));
-    assert.equal(h.element('dueToday').textContent,amount,region);
-    assert.equal(!h.element('checkoutCart').disabled,enabled,region);
-    if(region==='coastgo-metro')assert.match(h.element('shippingHelp').textContent,/21.*40/);
-    if(region==='coastgo-express')assert.match(h.element('shippingHelp').textContent,/7.*11/);
-  }
+test('CoastGo standard remains available through the address check after promotion expiry',async()=>{
+  const h=harness(false,undefined,{items:[coast],now:'2026-12-02T00:00:00Z',shippingValidation:'enforced'});h.startCart();
+  const address=h.created.find(e=>e.className==='delivery-location');
+  address.querySelector('#shippingSuburb').value='Melbourne';address.querySelector('#shippingState').value='VIC';address.querySelector('#shippingPostcode').value='3000';address.querySelector('#shippingPostcode').listeners.input();
+  await new Promise(resolve=>setTimeout(resolve,400));
+  assert.equal(h.element('dueToday').textContent,'$344');
+  assert.equal(h.element('checkoutCart').disabled,false);
 });
 test('offer expiry restores actual standard shipping, without extending promotion',async()=>{
   const h=harness(false,undefined,{items:[{...yoga,orderMode:'available'}],now:'2026-11-30T14:00:00Z'});h.startCart();
@@ -387,7 +385,7 @@ test('withdrawal while the tag loads prevents even ID lookup calls',async()=>{
 
 test('withdrawn shipping promotion reprices browser checkout without advertising the old code',async()=>{
   const now='2026-11-30T14:00:00Z';
-  for(const [item,region,total,shipping] of [[{...yoga,orderMode:'available'},'gold-coast-brisbane','$774',2500],[{...yoga,orderMode:'available'},'qld-nsw-main','$794',4500],[coast,'coastgo-metro','$329',3000],[coast,'coastgo-standard','$334',3500],[coast,'coastgo-country','$374',7500],[coast,'coastgo-remote-north','$419',12000],[coast,'coastgo-express','$419',12000]]){
+  for(const [item,region,total,shipping] of [[{...yoga,orderMode:'available'},'gold-coast-brisbane','$774',2500],[{...yoga,orderMode:'available'},'qld-nsw-main','$794',4500]]){
     const h=harness(true,undefined,{items:[item],region,now});h.startCart();
     await new Promise(resolve=>setImmediate(resolve));
     assert.equal(h.element('dueToday').textContent,total,region);

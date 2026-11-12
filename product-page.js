@@ -227,15 +227,15 @@
     quote.href=shippingQuoteUrl();
     if(!shippingRates){result.textContent="Loading current delivery rates…";quote.hidden=true;return}
     if(!select.options.length){
-      const visibleRegions=shippingRates.regions.filter(region=>!region.hidden&&(data.slug==="coast-go"?region.coastGoOnly:!region.coastGoOnly));
+      const visibleRegions=shippingRates.regions.filter(region=>!region.hidden&&(data.slug==="coast-go"?(Number.isInteger(region.coastGo)||region.quoteRequired):!region.coastGoOnly));
       select.innerHTML=`<option value="">Choose delivery region</option>${visibleRegions.map(region=>`<option value="${region.id}">${region.label}</option>`).join("")}`;
       try{const saved=sessionStorage.getItem(shippingRegionKey),normalisedSaved=saved==="canberra-melbourne"?"qld-nsw-main":saved;if(visibleRegions.some(region=>region.id===normalisedSaved))select.value=normalisedSaved;if(saved!==normalisedSaved&&normalisedSaved)sessionStorage.setItem(shippingRegionKey,normalisedSaved)}catch{}
     }
     const region=shippingRates.regions.find(item=>item.id===select.value),shippingClass=productShippingClass();
     if(!region){result.textContent=["coast-go","yoga-cruiser"].includes(data.slug)&&coastGo.freeShippingActive()?"AURAFREESHIP: free standard shipping for verified Gold Coast, Brisbane, Sydney, Canberra and Melbourne metro addresses through 30 November (Brisbane time). The cart checks your suburb, state and postcode.":"Shipping is additional. Choose a region to see your total before payment.";quote.hidden=true;return}
     const multiSurfboard=shippingClass==="surfboard"&&quantity>1;
-    const coastGoRate=data.slug==="coast-go"&&region.coastGoOnly&&Number.isInteger(region.coastGo);
-    const coastGoFree=coastGoRate&&coastGo.freeShippingFor(region.id);
+    const coastGoRate=data.slug==="coast-go"&&Number.isInteger(region.coastGo);
+    const coastGoFree=coastGoRate&&coastGo.freeShippingFor(region.id,Date.now(),false);
     const quoteRequired=(region.quoteRequired&&!coastGoRate)||shippingClass==="quoteOnly"||multiSurfboard||(coastGoRate&&coastGo.remoteQuoteFor(region.id));
     if(quoteRequired){
       const reason=multiSurfboard?"Orders with two or more hard surfboards are quoted for the complete consignment.":"This product or destination needs an individual freight quote.";

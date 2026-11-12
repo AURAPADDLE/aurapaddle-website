@@ -171,14 +171,14 @@ def main() -> None:
 
     state_names = {"1": "NSW", "2": "VIC", "3": "QLD", "4": "SA", "5": "WA", "6": "TAS", "8": "ACT"}
     settings = {
-        "gold-coast": ("Gold Coast", "gold-coast-brisbane", "coastgo-standard", False, True),
-        "brisbane": ("Brisbane metro", "gold-coast-brisbane", "coastgo-standard", False, True),
-        "sydney": ("Sydney metro", "qld-nsw-main", "coastgo-metro", True, True),
-        "canberra": ("Canberra urban area", "qld-nsw-main", "coastgo-metro", True, True),
-        "melbourne": ("Melbourne metro", "qld-nsw-main", "coastgo-metro", True, True),
-        "adelaide-paid": ("Adelaide metro", "adelaide", "coastgo-standard", False, False),
-        "perth-paid": ("Perth metro", "perth", "coastgo-standard", False, False),
-        "tasmania-paid": ("Tasmania", "tasmania", "coastgo-standard", False, False),
+        "gold-coast": ("Gold Coast", "gold-coast-brisbane", "gold-coast-brisbane", False, True),
+        "brisbane": ("Brisbane metro", "gold-coast-brisbane", "gold-coast-brisbane", False, True),
+        "sydney": ("Sydney metro", "qld-nsw-main", "qld-nsw-main", True, True),
+        "canberra": ("Canberra urban area", "qld-nsw-main", "qld-nsw-main", True, True),
+        "melbourne": ("Melbourne metro", "qld-nsw-main", "qld-nsw-main", True, True),
+        "adelaide-paid": ("Adelaide metro", "adelaide", "adelaide", False, False),
+        "perth-paid": ("Perth metro", "perth", "perth", False, False),
+        "tasmania-paid": ("Tasmania", "tasmania", "tasmania", False, False),
     }
     locations = []
     ambiguous = 0

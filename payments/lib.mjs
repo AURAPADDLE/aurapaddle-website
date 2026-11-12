@@ -33,7 +33,7 @@ export function loadShippingRates(){
   for(const region of parsed.regions){
     if(!/^[a-z0-9-]+$/.test(region.id)||byId.has(region.id))throw new Error(`Invalid or duplicate shipping region: ${region.id}`);
     if(!region.quoteRequired&&(!Number.isInteger(region.isup)||!Number.isInteger(region.surfboard)||("yogaCruiser" in region&&!Number.isInteger(region.yogaCruiser))))throw new Error(`Invalid shipping prices for ${region.id}`);
-    if(region.coastGoOnly&&(!Number.isInteger(region.coastGo)||region.coastGo<0))throw new Error(`Invalid CoastGo shipping price for ${region.id}`);
+    if("coastGo" in region&&(!Number.isInteger(region.coastGo)||region.coastGo<0))throw new Error(`Invalid CoastGo shipping price for ${region.id}`);
     byId.set(region.id,Object.freeze(region));
   }
   return {...parsed,byId};
@@ -44,8 +44,6 @@ export function calculateShipping(items,regionId,rates=loadShippingRates(),now=D
   const region=requestedRegion?.aliasTo?rates.byId.get(requestedRegion.aliasTo):requestedRegion;
   if(!region)throw new Error("Select a valid Australian delivery region.");
   if(region.id==="local-pickup")return {regionId:region.id,label:region.label,amount:0,quoteRequired:false,pickup:true};
-  const hasCoastGo=items.some(item=>item.variant.slug==="coast-go");
-  if(hasCoastGo&&!region.coastGoOnly)throw new Error("Select a CoastGo delivery region to confirm the current shipping rate.");
   if(region.coastGoOnly){
     const quoteRequired=!items.length||items.some(item=>item.variant.slug!=="coast-go")||coastGoOffer.remoteQuoteFor(region.id,now);
     const promotionApplied=!quoteRequired&&coastGoOffer.freeShippingFor(region.id,now,promotionAddressVerified);
@@ -70,9 +68,10 @@ export function calculateShipping(items,regionId,rates=loadShippingRates(),now=D
       continue;
     }
     const promotion=activePromotions.find(entry=>entry.sku===item.variant.sku);
-    if(coastGoOffer.yogaFreeShippingFor(item.variant.sku,region.id,now,promotionAddressVerified))promotionIds.add(coastGoOffer.shippingPromotionId);
+    if((slug==="coast-go"&&coastGoOffer.freeShippingFor(region.id,now,promotionAddressVerified))||coastGoOffer.yogaFreeShippingFor(item.variant.sku,region.id,now,promotionAddressVerified))promotionIds.add(coastGoOffer.shippingPromotionId);
     else if(promotion)promotionIds.add(promotion.id);
     else if(slug==="yoga-cruiser"&&Number.isInteger(region.yogaCruiser))amount+=region.yogaCruiser*item.quantity;
+    else if(slug==="coast-go"&&Number.isInteger(region.coastGo))amount+=region.coastGo*item.quantity;
     else if(isup.has(slug))amount+=region.isup*item.quantity;
     else if(surfboard.has(slug)){
       surfboardQuantity+=item.quantity;

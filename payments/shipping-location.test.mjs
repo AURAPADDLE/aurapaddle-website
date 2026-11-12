@@ -7,14 +7,14 @@ import {applyStripeEvent,buildCheckoutParams,updateOrderProgress} from "./lib.mj
 const rates={byId:new Map([
   ["gold-coast-brisbane",{id:"gold-coast-brisbane"}],
   ["qld-nsw-main",{id:"qld-nsw-main"}],
-  ["coastgo-metro",{id:"coastgo-metro"}],
-  ["coastgo-standard",{id:"coastgo-standard"}],
+  ["gold-coast-brisbane",{id:"gold-coast-brisbane"}],
+  ["qld-nsw-main",{id:"qld-nsw-main"}],
   ["coastgo-express",{id:"coastgo-express"}],
   ["remote",{id:"remote",quoteRequired:true}]
 ])};
 const table={status:"draft",version:"test-reviewed-v1",locations:[
-  {suburb:"Southport",state:"QLD",postcode:"4215",auraArea:"gold-coast",auraAreaLabel:"Gold Coast",yogaRegionId:"gold-coast-brisbane",coastGoRegionId:"coastgo-standard",coastGoExpressEligible:false,freeShippingEligible:true,reviewed:true,source:"ABS test fixture",effectiveFrom:"2026-11-12"},
-  {suburb:"Melbourne",state:"VIC",postcode:"3000",auraArea:"melbourne",auraAreaLabel:"Melbourne metro",yogaRegionId:"qld-nsw-main",coastGoRegionId:"coastgo-metro",coastGoExpressEligible:true,freeShippingEligible:true,reviewed:true,source:"ABS test fixture",effectiveFrom:"2026-11-12"}
+  {suburb:"Southport",state:"QLD",postcode:"4215",auraArea:"gold-coast",auraAreaLabel:"Gold Coast",yogaRegionId:"gold-coast-brisbane",coastGoRegionId:"gold-coast-brisbane",coastGoExpressEligible:false,freeShippingEligible:true,reviewed:true,source:"ABS test fixture",effectiveFrom:"2026-11-12"},
+  {suburb:"Melbourne",state:"VIC",postcode:"3000",auraArea:"melbourne",auraAreaLabel:"Melbourne metro",yogaRegionId:"qld-nsw-main",coastGoRegionId:"qld-nsw-main",coastGoExpressEligible:true,freeShippingEligible:true,reviewed:true,source:"ABS test fixture",effectiveFrom:"2026-11-12"}
 ]};
 
 test("normalises an exact Australian suburb, state and postcode triplet",()=>{
@@ -45,7 +45,7 @@ test("detects a Stripe address change before fulfilment",()=>{
 
 test("coverage entries must be explicit, reviewed and attributable",()=>{
   assert.equal(validateCoverageTable(table,rates),table);
-  assert.throws(()=>validateCoverageTable({...table,locations:[{suburb:"Dooen",state:"VIC",postcode:"3401",yogaRegionId:"qld-nsw-main",coastGoRegionId:"coastgo-metro",freeShippingEligible:true,coastGoExpressEligible:false}]},rates),/Unreviewed AURA shipping geography/);
+  assert.throws(()=>validateCoverageTable({...table,locations:[{suburb:"Dooen",state:"VIC",postcode:"3401",yogaRegionId:"qld-nsw-main",coastGoRegionId:"qld-nsw-main",freeShippingEligible:true,coastGoExpressEligible:false}]},rates),/Unreviewed AURA shipping geography/);
 });
 
 test("approved metro geography maps each product without claiming carrier coverage",()=>{
@@ -53,7 +53,7 @@ test("approved metro geography maps each product without claiming carrier covera
   const southport=resolveDeliveryLocation({suburb:"Southport",state:"QLD",postcode:"4215"},table,rates);
   const melbourne=resolveDeliveryLocation({suburb:"Melbourne",state:"VIC",postcode:"3000"},table,rates);
   assert.equal(shippingRegionForItems(southport,[yoga]),"gold-coast-brisbane");
-  assert.equal(shippingRegionForItems(southport,[coast]),"coastgo-standard");
+  assert.equal(shippingRegionForItems(southport,[coast]),"gold-coast-brisbane");
   assert.equal(shippingRegionForItems(southport,[coast],{deliveryService:"express"}),null);
   assert.equal(shippingRegionForItems(melbourne,[yoga]),"qld-nsw-main");
   assert.equal(shippingRegionForItems(melbourne,[coast],{deliveryService:"express"}),"coastgo-express");

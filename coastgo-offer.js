@@ -13,12 +13,13 @@
   const yogaSkus=["AP734955","AP505002","AP233694","AP587273"];
   const yogaRegionIds=["gold-coast-brisbane","qld-nsw-main","canberra-melbourne"];
   const isYoga=sku=>yogaSkus.includes(String(sku||"").toUpperCase());
-  const standardRegionIds=["coastgo-metro","coastgo-standard","coastgo-country"];
-  const remoteRegionIds=["coastgo-remote-north","coastgo-remote-west"];
+  const standardRegionIds=["gold-coast-brisbane","qld-nsw-main","adelaide","perth","tasmania"];
+  const freeShippingRegionIds=["gold-coast-brisbane","qld-nsw-main"];
+  const remoteRegionIds=["remote"];
   const freeShippingActive=(now=Date.now())=>now>=Date.parse(shippingStartsAt)&&now<Date.parse(shippingEndsAt);
-  const freeShippingFor=(regionId,now=Date.now(),addressVerified=false)=>freeShippingActive(now)&&addressVerified&&standardRegionIds.includes(regionId);
+  const freeShippingFor=(regionId,now=Date.now(),addressVerified=false)=>freeShippingActive(now)&&addressVerified&&freeShippingRegionIds.includes(regionId);
   const yogaFreeShippingFor=(sku,regionId,now=Date.now(),addressVerified=false)=>freeShippingActive(now)&&addressVerified&&isYoga(sku)&&yogaRegionIds.includes(regionId);
-  const shippingLocationValidationRequired=(items,now=Date.now())=>freeShippingActive(now)&&(items||[]).some(item=>isYoga(item.variant?.sku||item.sku)||isCoastGo(item.variant?.sku||item.sku));
+  const shippingLocationValidationRequired=(items,now=Date.now())=>(items||[]).some(item=>isCoastGo(item.variant?.sku||item.sku)||(freeShippingActive(now)&&isYoga(item.variant?.sku||item.sku)));
   const remoteQuoteFor=(regionId,now=Date.now())=>freeShippingActive(now)&&remoteRegionIds.includes(regionId);
   const shippingTerms="AURAFREESHIP: free standard shipping for verified Gold Coast, Brisbane, Sydney, Canberra and Melbourne metro addresses from 12 to 30 November 2026 inclusive (Brisbane time), automatically applied after the delivery address check. Express shipping is charged separately. Other addresses retain their published rate where confirmed or require manual confirmation. Standard transit: 21–40 days after dispatch.";
   const yogaShippingTerms="AURAFREESHIP: free standard shipping for verified Gold Coast, Brisbane, Sydney, Canberra and Melbourne metro addresses from 12 to 30 November 2026 inclusive (Brisbane time), automatically applied after the delivery address check. Other addresses retain their published rate where confirmed or require manual confirmation.";
@@ -28,7 +29,7 @@
   const dispatch=(now=Date.now())=>beforeLaunch(now)?"Official release 8 October 2026. Advance orders dispatch within 2 days from release; subsequent orders dispatch within 2 days of order confirmation.":"Dispatch within 2 days of order confirmation.";
   const offer=(now=Date.now())=>discounted(now)?"RRP AUD $349 → new-product price AUD $299. Order through 8 October 2026 inclusive (Queensland time) for an extra AUD $10 off per board, automatically applied at checkout. Product total after discount: AUD $289. From 9 October: AUD $299. Pay in full; shipping is additional.":`RRP AUD $349 → new-product price AUD $299. Pay in full. ${freeShippingActive(now)?shippingTerms:"Shipping is additional."}`;
   const variant=(value,now=Date.now())=>isCoastGo(value.sku)?{...value,retailAUD:349,saleAUD:price(now)/100,retailAmount:34900,checkoutAmount:price(now),depositAmount:price(now),available:true,orderMode:"available",preorder:null,campaign:null,launchAt,dispatchLeadDays:2}:value;
-  const policy={skus,launchAt,endsAt,shippingStartsAt,shippingEndsAt,shippingPromotionId,shippingCode,yogaSkus,yogaRegionIds,isYoga,yogaFreeShippingFor,yogaShippingTerms,standardRegionIds,remoteRegionIds,freeShippingActive,freeShippingFor,shippingLocationValidationRequired,remoteQuoteFor,shippingTerms,priceNote,isCoastGo,discounted,price,code,codeFor,beforeLaunch,dispatch,offer,variant};
+  const policy={skus,launchAt,endsAt,shippingStartsAt,shippingEndsAt,shippingPromotionId,shippingCode,yogaSkus,yogaRegionIds,isYoga,yogaFreeShippingFor,yogaShippingTerms,standardRegionIds,freeShippingRegionIds,remoteRegionIds,freeShippingActive,freeShippingFor,shippingLocationValidationRequired,remoteQuoteFor,shippingTerms,priceNote,isCoastGo,discounted,price,code,codeFor,beforeLaunch,dispatch,offer,variant};
   if(typeof module!=="undefined"&&module.exports)module.exports=policy;
   else {
     root.AURACoastGo=policy;

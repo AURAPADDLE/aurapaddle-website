@@ -56,11 +56,8 @@ export function shippingRegionForItems(resolution,items,{deliveryService="standa
   if(resolution?.status!=="verified")return null;
   const coastGo=items.filter(item=>item.variant?.slug==="coast-go").length;
   const yoga=items.filter(item=>item.variant?.slug==="yoga-cruiser").length;
-  if(coastGo===items.length){
-    if(deliveryService==="express")return resolution.coastGoExpressEligible?"coastgo-express":null;
-    return deliveryService==="standard"?resolution.coastGoRegionId:null;
-  }
-  if(yoga===items.length&&deliveryService==="standard")return resolution.yogaRegionId;
+  if(deliveryService==="express")return coastGo===items.length&&resolution.coastGoExpressEligible?"coastgo-express":null;
+  if(deliveryService==="standard"&&coastGo+yoga===items.length&&resolution.coastGoRegionId===resolution.yogaRegionId)return resolution.yogaRegionId;
   return null;
 }
 
