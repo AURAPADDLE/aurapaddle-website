@@ -2,6 +2,10 @@ const AU_STATES=new Set(["ACT","NSW","NT","QLD","SA","TAS","VIC","WA"]);
 
 const cleanText=value=>String(value||"").trim().replace(/\s+/g," ");
 const keyText=value=>cleanText(value).toUpperCase().replace(/[^A-Z0-9 ]/g,"");
+const suburbMatchKey=(suburb,state)=>{
+  const value=keyText(suburb),suffix=` ${keyText(state)}`;
+  return value.endsWith(suffix)?value.slice(0,-suffix.length).trim():value;
+};
 
 export function normaliseDeliveryLocation(input={}){
   const suburb=cleanText(input.suburb||input.city).slice(0,80);
@@ -44,8 +48,13 @@ export function assertShippingValidationConfiguration(mode,table){
 export function resolveDeliveryLocation(input,table,rates){
   let location;
   try{location=normaliseDeliveryLocation(input)}catch(error){return {status:"invalid",quoteRequired:true,error:error.message,location:null,coverageVersion:table?.version||"draft-unversioned"}}
-  const key=deliveryLocationKey(location);
-  const matches=(table?.locations||[]).filter(entry=>deliveryLocationKey(entry)===key&&entry.reviewed===true);
+  const key=deliveryLocationKey(location),suburbKey=suburbMatchKey(location.suburb,location.state);
+  const matches=(table?.locations||[]).filter(entry=>{
+    if(entry.reviewed!==true)return false;
+    let candidate;
+    try{candidate=normaliseDeliveryLocation(entry)}catch{return false}
+    return candidate.state===location.state&&candidate.postcode===location.postcode&&suburbMatchKey(candidate.suburb,candidate.state)===suburbKey;
+  });
   if(matches.length!==1)return {status:matches.length?"ambiguous":"manual_quote",quoteRequired:true,location,coverageVersion:table?.version||"draft-unversioned"};
   const match=matches[0];
   if(!rates.byId.get(match.yogaRegionId)||!rates.byId.get(match.coastGoRegionId))return {status:"manual_quote",quoteRequired:true,location,coverageVersion:table?.version||"draft-unversioned"};

@@ -13,7 +13,7 @@ const rates={byId:new Map([
   ["remote",{id:"remote",quoteRequired:true}]
 ])};
 const table={status:"draft",version:"test-reviewed-v1",locations:[
-  {suburb:"Southport",state:"QLD",postcode:"4215",auraArea:"gold-coast",auraAreaLabel:"Gold Coast",yogaRegionId:"gold-coast-brisbane",coastGoRegionId:"gold-coast-brisbane",coastGoExpressEligible:false,freeShippingEligible:true,reviewed:true,source:"ABS test fixture",effectiveFrom:"2026-11-12"},
+  {suburb:"Southport (Qld)",state:"QLD",postcode:"4215",auraArea:"gold-coast",auraAreaLabel:"Gold Coast",yogaRegionId:"gold-coast-brisbane",coastGoRegionId:"gold-coast-brisbane",coastGoExpressEligible:false,freeShippingEligible:true,reviewed:true,source:"ABS test fixture",effectiveFrom:"2026-11-12"},
   {suburb:"Melbourne",state:"VIC",postcode:"3000",auraArea:"melbourne",auraAreaLabel:"Melbourne metro",yogaRegionId:"qld-nsw-main",coastGoRegionId:"qld-nsw-main",coastGoExpressEligible:true,freeShippingEligible:true,reviewed:true,source:"ABS test fixture",effectiveFrom:"2026-11-12"}
 ]};
 
@@ -57,6 +57,16 @@ test("approved metro geography maps each product without claiming carrier covera
   assert.equal(shippingRegionForItems(southport,[coast],{deliveryService:"express"}),null);
   assert.equal(shippingRegionForItems(melbourne,[yoga]),"qld-nsw-main");
   assert.equal(shippingRegionForItems(melbourne,[coast],{deliveryService:"express"}),"coastgo-express");
+});
+
+test("common suburb name omits only a matching state suffix when state and postcode are exact and unique",()=>{
+  const southport=resolveDeliveryLocation({suburb:"Southport",state:"QLD",postcode:"4215"},table,rates);
+  assert.equal(southport.status,"verified");
+  assert.equal(southport.auraArea,"gold-coast");
+  assert.equal(resolveDeliveryLocation({suburb:"Southport",state:"TAS",postcode:"4215"},table,rates).status,"manual_quote");
+  assert.equal(resolveDeliveryLocation({suburb:"Southport",state:"QLD",postcode:"7000"},table,rates).status,"manual_quote");
+  const duplicate={...table,locations:[...table.locations,{...table.locations[0],suburb:"Southport"}]};
+  assert.equal(resolveDeliveryLocation({suburb:"Southport",state:"QLD",postcode:"4215"},duplicate,rates).status,"ambiguous");
 });
 
 test("generated geography covers reviewed metro areas and excludes rural or ambiguous locations",()=>{
