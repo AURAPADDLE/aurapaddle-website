@@ -20,7 +20,8 @@
   const yogaImage=document.createElement('img');yogaImage.src='assets/products/yoga-cruiser/glacier-blue/AP734955_yoga-cruiser_11ft_glacier-blue_amazon-01-main-package.jpg';yogaImage.alt='Yoga Cruiser Glacier Blue';
   visual.append(yogaImage);
   const seen=()=>{try{return sessionStorage.getItem(storageKey)==='seen'}catch{return false}};
-  const open=(source,manual=false)=>{if(!policy.freeShippingActive()){if(offer.open)offer.close();return;}if(offer.open||document.querySelector('dialog[open]')||(!manual&&seen()))return;offer.showModal();try{sessionStorage.setItem(storageKey,'seen')}catch{}track('view_promotion',{promotion_source:source});};
+  const privacyNoticeOpen=()=>Boolean(document.querySelector('.cookie-consent.is-visible'));
+  const open=(source,manual=false)=>{if(!policy.freeShippingActive()){if(offer.open)offer.close();return;}if(offer.open||document.querySelector('dialog[open]')||privacyNoticeOpen()||(!manual&&seen()))return;offer.showModal();try{sessionStorage.setItem(storageKey,'seen')}catch{}track('view_promotion',{promotion_source:source});};
   document.querySelectorAll('[data-preorder-offer-open]').forEach(button=>button.addEventListener('click',()=>open('manual',true)));
   const dismiss=method=>{if(offer.open){offer.close();track('dismiss_promotion',{dismiss_method:method})}};
   offer.querySelectorAll('[data-preorder-offer-close]').forEach(button=>button.addEventListener('click',()=>dismiss('button')));
@@ -32,5 +33,6 @@
   window.addEventListener('pageshow',()=>open('return_visit'));
   window.addEventListener('aura:coastgo-change',()=>open('promotion_transition'));
   document.addEventListener('visibilitychange',()=>{if(!document.hidden)open('return_visit')});
+  new MutationObserver(()=>{if(!privacyNoticeOpen())open('after_privacy_notice')}).observe(document.body,{subtree:true,attributes:true,attributeFilter:['class']});
   if(policy.freeShippingActive())setTimeout(()=>open('automatic'),850);
 })();

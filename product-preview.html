@@ -132,5 +132,5 @@
     document.querySelectorAll(".detail-head").forEach(btn=>btn.addEventListener("click",()=>{const item=btn.parentElement,open=item.classList.toggle("open");btn.setAttribute("aria-expanded",String(open))}));document.querySelector(".modal-close").addEventListener("click",()=>$("stripeDialog").close());
     const menuButton=$("menuButton"),mobileMenu=$("mobileMenu");menuButton.addEventListener("click",()=>{const open=mobileMenu.classList.toggle("open");menuButton.setAttribute("aria-expanded",String(open));document.body.classList.toggle("menu-open",open)});mobileMenu.querySelectorAll("a").forEach(a=>a.addEventListener("click",()=>{mobileMenu.classList.remove("open");document.body.classList.remove("menu-open");menuButton.setAttribute("aria-expanded","false")}));
   </script>
-<script src="cookie-consent.js"></script></body>
+<script src="cookie-consent.js?v=20261113-au-measurement"></script></body>
 </html>

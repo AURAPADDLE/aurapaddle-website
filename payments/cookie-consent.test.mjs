@@ -6,21 +6,21 @@ import vm from "node:vm";
 const fullSource=fs.readFileSync(new URL("../cookie-consent.js",import.meta.url),"utf8");
 const source=`${fullSource.slice(0,fullSource.indexOf('  const banner=document.createElement("section");'))}})();`;
 
-function privacyFixture({savedConsent,session=new Map(),metaChoice="default_au"}={}){
+function privacyFixture({savedConsent,session=new Map(),metaChoice="default_au",region}={}){
   const storage=new Map([["aura-attribution-v1",JSON.stringify({metaChoice})]]);
   if(savedConsent!==undefined)storage.set("aura-cookie-consent-v1",JSON.stringify({necessary:true,analytics:false,marketing:savedConsent,updatedAt:"2026-10-20T00:00:00.000Z"}));
-  const window={dataLayer:[],AURA_OFFLINE_REVIEW:true};
+  const window={dataLayer:[],AURA_OFFLINE_REVIEW:true,AURA_TRUSTED_REGION:region};
   const context={window,document:{referrer:""},location:{href:"https://www.aurapaddle.com/",hostname:"www.aurapaddle.com",pathname:"/"},localStorage:{getItem:key=>storage.get(key)??null,setItem:(key,value)=>storage.set(key,String(value)),removeItem:key=>storage.delete(key)},sessionStorage:{getItem:key=>session.get(key)??null,setItem:(key,value)=>session.set(key,String(value)),removeItem:key=>session.delete(key)},URL,Date,JSON,Promise,clearTimeout,setTimeout};
   vm.runInNewContext(source,context);return {window,storage,session};
 }
 
-function browserFixture({consent={analytics:true,marketing:true},loadDelayMs=30,clientId="123456789.987654321",sessionId="1787635200",debug=false}={}){
-  const storage=new Map([["aura-cookie-consent-v1",JSON.stringify({necessary:true,...consent,updatedAt:"2026-10-12T00:00:00.000Z"})]]);
+function browserFixture({consent={analytics:true,marketing:true},saved=true,region,defaultAU=false,loadDelayMs=30,clientId="123456789.987654321",sessionId="1787635200",debug=false}={}){
+  const storage=new Map();if(saved)storage.set("aura-cookie-consent-v1",JSON.stringify({necessary:true,...consent,updatedAt:"2026-10-12T00:00:00.000Z"}));
   const dataLayer=[];
   const getCalls={client_id:0,session_id:0};
   const gtagCalls=[];
   let script;
-  const window={dataLayer};
+  const window={dataLayer,AURA_TRUSTED_REGION:region,auraAnalyticsDefault:defaultAU};
   const scaledTimeout=(callback,delay)=>setTimeout(callback,Math.max(1,Math.round(Number(delay||0)/100)));
   const document={
     referrer:"",
@@ -138,10 +138,38 @@ test("ordinary browser events do not receive an internal traffic label",async()=
   assert.equal(Object.hasOwn(event[2],"traffic_type"),false);
 });
 
-test("unoperated privacy state stays unsaved without automatically opening the notice",()=>{
+test("unoperated privacy state stays unsaved and presents a visible choice notice",()=>{
   const fixture=privacyFixture();assert.equal(fixture.window.AURAPrivacyNoticeState.shouldShow(),true);assert.equal(fixture.window.AURAPrivacyNoticeState.dismissed(),false);
   assert.doesNotMatch(fullSource,/setTimeout\([^)]*(?:banner|cookie-consent|dismiss)/);
-  assert.doesNotMatch(fullSource,/banner\.classList\.add\("is-visible"\)/);
+  assert.match(fullSource,/banner\.classList\.add\("is-visible"\)/);
+});
+
+test("trusted Australian default grants analytics measurement without recording affirmative consent",async()=>{
+  const fixture=browserFixture({saved:false,region:{country:"AU",source:"trusted-server"},defaultAU:true,loadDelayMs:1});
+  const attribution=await fixture.window.AURAAttribution.snapshot();
+  assert.equal(attribution.consent.analytics,false);
+  assert.equal(attribution.analyticsMeasurement,true);
+  assert.equal(attribution.analyticsChoice,"default_au");
+  assert.equal(fixture.storage.has("aura-cookie-consent-v1"),false);
+  assert.match(fullSource,/window\.auraAnalyticsDefault=trustedAustralianDefault\(\)/);
+  assert.match(fullSource,/analytics_storage:analytics\?"granted":"denied"/);
+  for(const type of ["ad_storage","ad_user_data","ad_personalization"])assert.match(fullSource,new RegExp(`${type}:marketing\\?"granted":"denied"`));
+});
+
+test("saved rejection overrides the trusted Australian measurement default",async()=>{
+  const fixture=browserFixture({consent:{analytics:false,marketing:false},region:{country:"AU",source:"trusted-server"},loadDelayMs:1});
+  const attribution=await fixture.window.AURAAttribution.snapshot();
+  assert.equal(attribution.analyticsMeasurement,false);
+  assert.equal(attribution.analyticsChoice,"explicit_deny");
+});
+
+test("non-Australian and unknown new visitors remain denied",async()=>{
+  for(const region of [undefined,{country:"NZ",source:"trusted-server"},{country:"AU",source:"client"}]){
+    const fixture=browserFixture({saved:false,region,loadDelayMs:1}),attribution=await fixture.window.AURAAttribution.snapshot();
+    assert.equal(Boolean(fixture.window.auraAnalyticsDefault),false);
+    assert.equal(attribution.analyticsMeasurement,false);
+    assert.equal(attribution.analyticsChoice,"none");
+  }
 });
 
 test("dismiss action records only a tab-session UI state and changes no privacy choice",()=>{
@@ -156,6 +184,13 @@ test("footer privacy entry can reopen detailed settings after the notice is dism
   const fixture=privacyFixture();fixture.window.AURAPrivacyNoticeState.dismiss();
   const home=fs.readFileSync(new URL("../index.html",import.meta.url),"utf8");
   assert.match(home,/data-open-cookie-settings>Cookie settings<\/button>/);assert.match(fullSource,/data-open-cookie-settings[^]*openSettings\(\)/);assert.equal(fixture.window.AURAPrivacyNoticeState.dismissed(),true);assert.equal(fixture.storage.has("aura-cookie-consent-v1"),false);
+});
+
+test("homepage promotion cannot cover the visible privacy opt-out",()=>{
+  const homeOffer=fs.readFileSync(new URL("../home-offer.js",import.meta.url),"utf8");
+  assert.match(homeOffer,/privacyNoticeOpen=\(\)=>Boolean\(document\.querySelector\('\.cookie-consent\.is-visible'\)\)/);
+  assert.match(homeOffer,/document\.querySelector\('dialog\[open\]'\)\|\|privacyNoticeOpen\(\)/);
+  assert.match(homeOffer,/after_privacy_notice/);
 });
 
 test("dismissal follows the same browser tab across pages but not persistent storage",()=>{

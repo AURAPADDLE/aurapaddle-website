@@ -72,7 +72,7 @@
     ad_storage:"denied",
     ad_user_data:"denied",
     ad_personalization:"denied",
-    wait_for_update:500
+    wait_for_update:2000
   });
 
   const loadGoogleTag=()=>{
@@ -104,17 +104,18 @@
     const timer=setTimeout(()=>finish(""),timeout);
     try{window.gtag("get",measurementId,name,finish)}catch{finish("")}
   });
+  const analyticsMeasurementEnabled=preferences=>Boolean(preferences.analytics)||window.auraAnalyticsDefault===true;
   const refreshAnalyticsIds=async preferences=>{
-    if(!preferences.analytics&&!preferences.marketing)return captureAttribution(preferences);
+    if(!analyticsMeasurementEnabled(preferences)&&!preferences.marketing)return captureAttribution(preferences);
     // Preserve the live bounded tag wait; diagnostics never manufacture IDs.
     const started=Date.now();
     await loadGoogleTag();
     preferences=window.auraConsent||preferences;
-    if(!preferences.analytics&&!preferences.marketing)return captureAttribution(preferences);
+    if(!analyticsMeasurementEnabled(preferences)&&!preferences.marketing)return captureAttribution(preferences);
     const [clientId,sessionId]=offlineReview?["",""]:await Promise.all([getGoogleTagValue("client_id"),getGoogleTagValue("session_id")]);
     // Respect a withdrawal made while the asynchronous Google tag lookup ran.
     preferences=window.auraConsent||preferences;
-    if(!preferences.analytics&&!preferences.marketing)return captureAttribution(preferences);
+    if(!analyticsMeasurementEnabled(preferences)&&!preferences.marketing)return captureAttribution(preferences);
     const current=captureAttribution(preferences)||{version:1,consent:{analytics:Boolean(preferences.analytics),marketing:Boolean(preferences.marketing)}};
     // Never manufacture a GA identity or reuse a potentially stale session.
     // Missing tag IDs must remain visible as missing, not create false stitching.
@@ -131,11 +132,13 @@
       const snapshot=current?JSON.parse(JSON.stringify(current)):{version:1,consent:{analytics:false,marketing:false,updatedAt:preferences.updatedAt||new Date().toISOString()}};
       snapshot.metaMeasurement=preferences.marketing===true||window.auraMetaDefault===true;
       snapshot.metaChoice=preferences.marketing===true?"explicit_allow":saved()?"explicit_deny":window.auraMetaDefault?"default_au":"none";
+      snapshot.analyticsMeasurement=analyticsMeasurementEnabled(preferences);
+      snapshot.analyticsChoice=preferences.analytics===true?"explicit_allow":saved()?"explicit_deny":window.auraAnalyticsDefault?"default_au":"none";
       return snapshot;
     }
   };
   const updateGoogleConsent=preferences=>{
-    const analytics=Boolean(preferences.analytics),marketing=Boolean(preferences.marketing);
+    const analytics=analyticsMeasurementEnabled(preferences),marketing=Boolean(preferences.marketing);
     window.gtag("consent","update",{
       analytics_storage:analytics?"granted":"denied",
       ad_storage:marketing?"granted":"denied",
@@ -161,7 +164,8 @@
     }
   };
   const apply=preferences=>{
-    window.auraMetaDefault=trustedAustralianDefault();
+    window.auraAnalyticsDefault=trustedAustralianDefault();
+    window.auraMetaDefault=window.auraAnalyticsDefault;
     window.auraConsent={...defaults,...preferences};
     updateGoogleConsent(window.auraConsent);
     captureAttribution(window.auraConsent);
@@ -183,7 +187,7 @@
   dialog.innerHTML=`<div class="cookie-settings__body"><div class="cookie-settings__top"><h2>Privacy settings</h2><button class="cookie-settings__close" type="button" data-cookie-dialog-cancel aria-label="Close">×</button></div><p>Choose separate permissions for analytics and advertising technologies.</p><label class="cookie-option"><span><strong>Necessary</strong><span>Required for core features and to remember your privacy choice.</span></span><input type="checkbox" checked disabled></label><label class="cookie-option"><span><strong>Analytics</strong><span>Allows analytics cookies and identifiers to measure visits, purchases, referral sources and site performance. Limited cookieless Google measurement may occur while denied.</span></span><input id="cookieAnalytics" type="checkbox"></label><label class="cookie-option"><span><strong>Marketing</strong><span>Allows advertising measurement, including Meta Pixel. Meta may receive IP address, browser, cookie and selected shopping-event data. We do not send payment-card details, contact fields or sensitive checkout URLs.</span></span><input id="cookieMarketing" type="checkbox"></label><div class="cookie-settings__actions"><button class="cookie-consent__secondary" type="button" data-cookie-dialog-cancel>Cancel</button><button class="save" type="button" data-cookie-dialog-save>Save choices</button></div></div>`;
   document.body.append(banner,dialog);
 
-  const openSettings=()=>{const p=read();dialog.returnValue="";dialog.querySelector("#cookieAnalytics").checked=Boolean(p.analytics);dialog.querySelector("#cookieMarketing").checked=Boolean(p.marketing);dialog.showModal()};
+  const openSettings=()=>{const p=read(),defaultAU=trustedAustralianDefault();dialog.returnValue="";dialog.querySelector("#cookieAnalytics").checked=Boolean(p.analytics)||defaultAU;dialog.querySelector("#cookieMarketing").checked=Boolean(p.marketing)||defaultAU;dialog.showModal()};
   banner.querySelector("[data-cookie-settings]").addEventListener("click",openSettings);
   banner.querySelector("[data-cookie-dismiss]").addEventListener("click",()=>{dismissNotice();banner.classList.remove("is-visible")});
   banner.querySelector("[data-cookie-reject]").addEventListener("click",()=>{save(defaults);banner.classList.remove("is-visible")});
@@ -200,11 +204,12 @@
   const showNotice=()=>{
     if(!shouldShowNotice())return;
     if(trustedAustralianDefault()){
-      banner.querySelector("h2").textContent="Meta advertising measurement";
+      banner.querySelector("h2").textContent="Analytics and advertising measurement";
       banner.querySelector("[data-cookie-settings]").textContent="Privacy settings";
-      banner.querySelector("p").innerHTML='Meta Pixel is running to measure selected shopping actions. It receives IP address, browser, cookie and event data, but not payment-card or form details. <a href="/policies/#privacy">Learn more</a>';
-      banner.querySelector("[data-cookie-accept]")?.remove();banner.querySelector("[data-cookie-reject]").textContent="Turn off marketing";
+      banner.querySelector("p").innerHTML='For new visitors reliably identified in Australia, Google Analytics and Meta Pixel are running by default to measure visits and selected shopping actions. They may receive IP address, browser, device, cookie, page and limited shopping-event data, but not payment-card or form details. This is not recorded as your active consent. Choose Privacy settings for separate controls or turn both off now. Closing this notice only hides it for this tab. <a href="/policies/#privacy">Learn more</a>';
+      banner.querySelector("[data-cookie-accept]")?.remove();banner.querySelector("[data-cookie-reject]").textContent="Turn off optional";
     }
+    banner.classList.add("is-visible");
   };
   const resolveRegion=async()=>{
     if(!shouldShowNotice()||trustedAustralianDefault()||offlineReview){showNotice();return}

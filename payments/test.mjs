@@ -673,6 +673,22 @@ test("marketing-consented purchase is queued once even when analytics consent is
   assert.equal(payload.consent.ad_user_data,"GRANTED");
 });
 
+test("trusted Australian analytics default is measured without being recorded as affirmative consent",()=>{
+  const attribution={version:1,consent:{analytics:false,marketing:false},analyticsMeasurement:true,analyticsChoice:"default_au",analyticsClientId:"123456789.987654321",analyticsSessionId:"1787635200",last:{source:"meta",medium:"paid_social",campaign:"australia_launch",landingPath:"/products/yoga-cruiser.html",evidence:"utm"}};
+  const state={events:{},orders:{},checkoutRequests:{request_default_au:{orderNumber:"APO48230",attribution}},analyticsOutbox:{}};
+  const event={id:"evt_default_au_purchase",type:"checkout.session.completed",created:1_787_635_200,data:{object:{id:"cs_test_default_au_purchase",customer:"cus_test",payment_status:"paid",payment_intent:"pi_test_default_au_purchase",amount_total:37450,currency:"aud",metadata:{aura_items:"AP734955:1",aura_order_number:"APO48230",aura_tracking_token:"secure_tracking_token_48230",aura_order_mode:"preorder",aura_payment_stage:"initial_50_percent"}}}};
+  assert.equal(applyStripeEvent(state,event),true);
+  const order=state.orders.cs_test_default_au_purchase;
+  assert.equal(order.attribution.consent.analytics,false);
+  assert.equal(order.attribution.analyticsMeasurement,true);
+  assert.equal(order.attribution.analyticsChoice,"default_au");
+  assert.equal(enqueueStripeAnalytics(state,event,catalog,{stripeLineItems:checkoutLines(37450)}),true);
+  const payload=measurementPayload(state.analyticsOutbox["purchase:APO48230"]);
+  assert.equal(payload.events[0].name,"purchase");
+  assert.equal(payload.consent.ad_user_data,"DENIED");
+  assert.equal(Object.hasOwn(payload,"user_data"),false);
+});
+
 test("purchase remains unqueued when neither analytics nor marketing measurement is allowed",()=>{
   const state={orders:{cs_test_private:{orderNumber:"APO48230",amountTotal:37450,currency:"aud",items:[{sku:"AP734955",quantity:1}],attribution:{consent:{analytics:false,marketing:false},analyticsClientId:"123456789.987654321"}}},analyticsOutbox:{}};
   const event={id:"evt_private_purchase",type:"checkout.session.completed",created:1_787_635_200,data:{object:{id:"cs_test_private",payment_status:"paid"}}};

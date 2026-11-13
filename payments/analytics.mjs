@@ -145,7 +145,7 @@ function queueEntry(state,key,entry){
 export function enqueueStripeAnalytics(state,event,catalog,{enhancedConversionsEnabled=false,stripeLineItems}={}){
   const object=event.data?.object||{},order=orderForEvent(state,event),consent=order?.attribution?.consent||{};
   if(isInternalTestOrder(order))return false;
-  if(!order||(consent.analytics!==true&&consent.marketing!==true)||!order.attribution?.analyticsClientId)return false;
+  if(!order||(consent.analytics!==true&&consent.marketing!==true&&order.attribution?.analyticsMeasurement!==true)||!order.attribution?.analyticsClientId)return false;
   const base={
     stripeEventId:event.id,
     orderNumber:order.orderNumber,

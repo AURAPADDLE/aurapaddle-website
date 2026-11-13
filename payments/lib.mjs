@@ -150,11 +150,14 @@ export function normaliseAttribution(value){
   const updatedAt=Date.parse(consentRaw.updatedAt||"");
   if(Number.isFinite(updatedAt))consent.updatedAt=new Date(updatedAt).toISOString();
   const attribution={version:1,consent};
+  attribution.analyticsMeasurement=raw.analyticsMeasurement===true;
+  attribution.analyticsChoice=["explicit_allow","explicit_deny","default_au","none"].includes(raw.analyticsChoice)?raw.analyticsChoice:"none";
   attribution.metaMeasurement=raw.metaMeasurement===true;
   attribution.metaChoice=["explicit_allow","explicit_deny","default_au","none"].includes(raw.metaChoice)?raw.metaChoice:"none";
-  attribution.first=normaliseAttributionTouch(raw.first,consent);
-  attribution.last=normaliseAttributionTouch(raw.last,consent);
-  if(consent.analytics||consent.marketing){
+  const measurementPermissions={analytics:consent.analytics||attribution.analyticsMeasurement,marketing:consent.marketing};
+  attribution.first=normaliseAttributionTouch(raw.first,measurementPermissions);
+  attribution.last=normaliseAttributionTouch(raw.last,measurementPermissions);
+  if(measurementPermissions.analytics||measurementPermissions.marketing){
     const clientId=attributionText(raw.analyticsClientId,80);
     const sessionId=attributionText(String(raw.analyticsSessionId||""),32);
     if(/^\d+\.\d+$/.test(clientId))attribution.analyticsClientId=clientId;
@@ -282,6 +285,8 @@ function orderMetadata(items,shipping,orderNumber,trackingToken,attribution,reco
     aura_attribution_version:"1",
     aura_consent_analytics:String(normalised.consent.analytics),
     aura_consent_marketing:String(normalised.consent.marketing),
+    aura_analytics_measurement:String(normalised.analyticsMeasurement),
+    aura_analytics_choice:normalised.analyticsChoice,
     aura_meta_measurement:String(normalised.metaMeasurement),
     aura_meta_choice:normalised.metaChoice
   };
@@ -431,6 +436,8 @@ function attributionFromMetadata(metadata={}){
     last,
     analyticsClientId:metadata.aura_ga_client_id||undefined,
     analyticsSessionId:metadata.aura_ga_session_id||undefined,
+    analyticsMeasurement:metadata.aura_analytics_measurement==="true",
+    analyticsChoice:metadata.aura_analytics_choice||"none",
     metaMeasurement:metadata.aura_meta_measurement==="true",
     metaChoice:metadata.aura_meta_choice||"none"
   });
