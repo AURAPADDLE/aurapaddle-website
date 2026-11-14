@@ -331,6 +331,15 @@ test('CoastGo standard remains available through the address check after promoti
   await new Promise(resolve=>setTimeout(resolve,400));
   assert.equal(h.element('dueToday').textContent,'$344');
   assert.equal(h.element('checkoutCart').disabled,false);
+  assert.doesNotMatch(h.element('shippingHelp').textContent,/undefined|transit:/i);
+  assert.match(h.element('shippingHelp').textContent,/Standard delivery selected for this verified address/);
+});
+test('Yoga buying information surfaces only existing verified purchase terms',()=>{
+  const sourceText=source('product-page.js');
+  assert.match(sourceText,/Complete kit: electric pump \(compatible car power socket required\)/);
+  assert.match(sourceText,/Glacier Blue: in stock · pay in full · dispatch within 1 business day after payment/);
+  assert.match(sourceText,/Free standard shipping to verified Gold Coast, Brisbane, Sydney, Canberra and Melbourne metro addresses through 30 November/);
+  assert.match(sourceText,/2-year recreational warranty/);
 });
 test('offer expiry restores actual standard shipping, without extending promotion',async()=>{
   const h=harness(false,undefined,{items:[{...yoga,orderMode:'available'}],now:'2026-11-30T14:00:00Z'});h.startCart();

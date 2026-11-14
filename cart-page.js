@@ -253,8 +253,11 @@
     if(shipping.details&&!shipping.quoteRequired)shippingHelp.textContent+=` ${shipping.service} transit: ${shipping.transitDays} days after dispatch, excluding handling / preparation time. ${window.AURACoastGo.dispatch()} ${shipping.details} Rate is per board. Contact us before ordering if your region is unclear.`;
     if(availableOnly&&shipping.selected&&!shipping.quoteRequired){
       // Keep the material transit/handling terms visible before the pay button.
+      const coastGoDelivery=shipping.service&&shipping.transitDays
+        ?`${shipping.service} transit: ${shipping.transitDays} days after dispatch. `
+        :"Standard delivery selected for this verified address. ";
       shippingHelp.textContent=hasCoastGo
-        ?`${shipping.promotionApplied?"AURAFREESHIP applied to standard delivery for this verified selected-metro address. ":""}${shipping.service} transit: ${shipping.transitDays} days after dispatch. ${window.AURACoastGo.dispatch()} Rate per board. Unsure of coverage? Contact us before ordering.`
+        ?`${shipping.promotionApplied?"AURAFREESHIP applied to standard delivery for this verified selected-metro address. ":""}${coastGoDelivery}Rate per board. Unsure of coverage? Contact us before ordering.`
         :"Glacier Blue dispatches within 1 business day after payment. Delivery transit time is additional.";
       if(shipping.details)paymentNote.textContent+=` Delivery coverage: ${shipping.details}`;
     }

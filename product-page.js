@@ -279,6 +279,9 @@
     document.querySelector("#availability .status-dot").classList.toggle("preorder",preorder);
     $("availabilityText").textContent=preorder?threshold?`Conditional pre-order · ${reserved}/${target} committed`:campaign.inventoryIncoming?"Incoming stock · No minimum-order target":`In production · No minimum-order target`:"Available now";
     const assurance=document.querySelector(".purchase-assurance");if(assurance)assurance.textContent=preorder?"50% today; remaining 50% + shipping before dispatch. Full refund within 48 hours. Conditions apply.":"In stock · Pay in full including known shipping · Dispatch within 1 business day after payment.";
+    const buyingAvailability=$("buyingAvailability"),buyingDelivery=$("buyingDelivery");
+    if(buyingAvailability)buyingAvailability.textContent=preorder?`${colour().name}: pre-order · 50% today and 50% plus shipping before dispatch.`:"Glacier Blue: in stock · pay in full · dispatch within 1 business day after payment.";
+    if(buyingDelivery)buyingDelivery.textContent=coastGo.freeShippingActive()?"Free standard shipping to verified Gold Coast, Brisbane, Sydney, Canberra and Melbourne metro addresses through 30 November; address checked in cart.":"Enter your delivery address in the cart to confirm the published rate or request a quote.";
     if($("introDispatch"))$("introDispatch").textContent=v.dispatchLeadBusinessDays?`In stock · Dispatch within ${v.dispatchLeadBusinessDays} business day after payment`:`Estimated dispatch: ${campaign.estimatedDelivery||"Confirmed with order"}${threshold?" · Subject to production target":""}`;
     $("productPrice").textContent=displayPrice(v);
     const showOriginal=!!v.retailAUD&&numericPrice(v)<Number(v.retailAUD);
@@ -361,7 +364,7 @@
     // Keep the authored H1 when moving it into the Yoga intro.
     intro.querySelector(".subtitle").textContent=yogaCruiserDescription;
     const benefits=info.querySelector(".product-benefits");if(benefits)intro.querySelector(".subtitle").after(benefits);
-    const kit=document.createElement("p");kit.className="kit-summary";kit.textContent="Electric pump · Wheeled carry bag · Adjustable paddle included";intro.append(kit);
+    const kit=document.createElement("p");kit.className="kit-summary";kit.textContent="Complete kit: electric pump (compatible car power socket required) · wheeled carry bag · adjustable paddle";intro.append(kit);
     const dispatch=document.createElement("p");dispatch.id="introDispatch";dispatch.className="dispatch-summary";intro.append(dispatch);
     layout.prepend(intro);
     const size=$("selectedSize").closest(".selector");if(data.sizes.length===1){size.querySelector(".option-row").hidden=true;size.classList.add("single-size");}
@@ -370,6 +373,7 @@
     $("purchaseActions").after(terms);terms.append($("preorderPanel"));terms.append(document.querySelector(".sku-box"));
     terms.append($("purchaseClarity").querySelector(".clarity-facts"));terms.append(size);
     const assurance=document.createElement("p");assurance.className="purchase-assurance";$("purchaseActions").after(assurance);
+    const buying=document.createElement("section");buying.className="buying-overview";buying.setAttribute("aria-label","Buying information");buying.innerHTML='<h2>Buying information</h2><ul><li id="buyingAvailability"></li><li id="buyingDelivery"></li><li>Complete kit includes an electric pump; a compatible car power socket is required during inflation.</li><li><a href="../policies/#warranty">2-year recreational warranty</a> for manufacturing defects under normal recreational use.</li></ul>';$("purchaseActions").before(buying);
     $("purchaseClarityTitle").textContent="Delivery & total";
     $("purchaseClarity").querySelector(".section-label").textContent="Know before you buy";
     $("purchaseClarity").querySelector("a").href="../pre-order/";
