@@ -340,6 +340,9 @@ test('Yoga buying information surfaces only existing verified purchase terms',()
   assert.match(sourceText,/Glacier Blue: in stock · pay in full · dispatch within 1 business day after payment/);
   assert.match(sourceText,/Free standard shipping to verified Gold Coast, Brisbane, Sydney, Canberra and Melbourne metro addresses through 30 November/);
   assert.match(sourceText,/2-year recreational warranty/);
+  assert.match(sourceText,/mobileYoga=yoga&&window\.matchMedia\?\.\("\(max-width: 650px\)"\)\.matches===true/);
+  assert.match(sourceText,/if\(!seen&&!mobileYoga\)setTimeout\(show,650\)/);
+  assert.match(sourceText,/trigger\.addEventListener\("click",show\)/);
 });
 test('offer expiry restores actual standard shipping, without extending promotion',async()=>{
   const h=harness(false,undefined,{items:[{...yoga,orderMode:'available'}],now:'2026-11-30T14:00:00Z'});h.startCart();
