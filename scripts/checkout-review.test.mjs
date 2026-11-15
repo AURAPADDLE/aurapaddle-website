@@ -226,10 +226,10 @@ test('invalid email blocks the request without emitting begin_checkout',async()=
 
 test('failed request releases controls and permits an explicit retry',async()=>{
   const h=harness(false);
-  let count=0;
-  h.context.fetch=async()=>{
-    count++;
-    if(count===1)throw new Error('Offline simulated network failure');
+  const attempts=[];
+  h.context.fetch=async(url,opts)=>{
+    attempts.push(JSON.parse(opts.body));
+    if(attempts.length===1)throw new Error('Offline simulated network failure');
     return {ok:true,json:async()=>({url:'https://checkout.example.test/retry'})};
   };
   h.startCart();
@@ -237,7 +237,8 @@ test('failed request releases controls and permits an explicit retry',async()=>{
   assert.equal(h.element('checkoutError').style.display,'block');
   assert.equal(h.element('checkoutCart').disabled,false);
   await h.element('checkoutCart').listeners.click();
-  assert.equal(count,2);
+  assert.equal(attempts.length,2);
+  assert.equal(attempts[0].requestId,attempts[1].requestId);
   assert.deepEqual(h.redirects,['https://checkout.example.test/retry']);
 });
 
@@ -272,6 +273,7 @@ test('cached return after checkout redirect unlocks the cart without submitting 
   assert.equal(h.requests.length,1);
   await h.element('checkoutCart').listeners.click();
   assert.equal(h.requests.length,2);
+  assert.notEqual(h.requests[0].body.requestId,h.requests[1].body.requestId);
 });
 
 test('pageshow does not unlock a checkout request that has not redirected',async()=>{

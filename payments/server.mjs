@@ -18,6 +18,7 @@ import {adminReviewData,attachReviewEmail,ensureReviewState,moderateReview,publi
 import {issueMetaPurchaseReceipt,redeemMetaPurchaseReceipt} from "./meta-purchase.mjs";
 import {createGeoResolver,renderClientIp} from "./geo-region.mjs";
 import {assertShippingValidationConfiguration,resolveDeliveryLocation,shippingRegionForItems,validateCoverageTable} from "./shipping-location.mjs";
+import {checkoutAttemptToken,checkoutBlockList,checkoutBlockReason,recordCheckoutBlock,resolveCheckoutBlocks} from "./checkout-attempt-log.mjs";
 
 const here=path.dirname(fileURLToPath(import.meta.url));
 const siteDir=path.resolve(here,"..");
@@ -101,7 +102,7 @@ async function stripeRequest(apiPath,options={}){
   assertStripeKeyMode();
   const response=await fetch(`${stripeApiBase}${apiPath}`,{...options,headers:{Authorization:`Bearer ${stripeKey}`,"Stripe-Version":"2026-07-29.dahlia",...options.headers}});
   const payload=await response.json().catch(()=>({}));
-  if(!response.ok)throw new Error(payload.error?.message||`Stripe returned HTTP ${response.status}.`);
+  if(!response.ok){const error=new Error(payload.error?.message||`Stripe returned HTTP ${response.status}.`);error.status=response.status;error.stripeType=String(payload.error?.type||"");error.stripeCode=String(payload.error?.code||"");throw error}
   return payload;
 }
 function assertOrderInvoiceConfiguration(){
@@ -170,33 +171,38 @@ async function checkout(req,res){
   const origin=req.headers.origin;
   if(origin&&origin!==new URL(siteUrl).origin)return send(res,403,{error:"Checkout requests must come from the AURA PADDLE website."});
   const body=JSON.parse((await readBody(req)).toString("utf8")||"{}");
+  const requestId=/^[a-zA-Z0-9_-]{8,80}$/.test(body.requestId||"")?body.requestId:`${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  const attemptToken=checkoutAttemptToken(requestId),rawItems=Array.isArray(body.items)?body.items:[{sku:body.sku,quantity:normaliseQuantity(body.quantity)}],itemCount=rawItems.reduce((sum,item)=>sum+Math.max(0,Math.trunc(Number(item?.quantity)||0)),0);
+  const inferredModes=new Set(rawItems.map(item=>catalog.bySku.get(String(item?.sku||"").toUpperCase())?.orderMode).filter(Boolean)),paymentMode=inferredModes.size===1?[...inferredModes][0]:"unknown";
+  const internalTest=["internal_test","aura_controlled_test"].includes(String(body.attribution?.last?.campaign||""));
+  const noteBlock=async(stage,reason)=>{try{await store.mutate(state=>recordCheckoutBlock(state,{attemptToken,stage,reason,paymentMode,itemCount,internalTest}))}catch(error){console.error("Checkout block telemetry write failed",error)}};
+  const blocked=async(status,payload,stage,reason)=>{await noteBlock(stage,reason);return send(res,status,payload)};
   const customerEmail=String(body.customerEmail||"").trim().toLowerCase();
-  if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(customerEmail)||customerEmail.length>254)return send(res,400,{error:"Enter a valid email address before continuing to secure payment."});
-  const rawItems=Array.isArray(body.items)?body.items:[{sku:body.sku,quantity:normaliseQuantity(body.quantity)}];
-  const items=normaliseCheckoutItems(rawItems,catalog);
-  if(items.some(item=>coastGoOffer.isCoastGo(item.variant.sku)&&!(Array.isArray(body.coastGoPrices)&&body.coastGoPrices.some(price=>price?.sku===item.variant.sku&&price.unitAmount===item.variant.checkoutAmount))))return send(res,409,{error:"CoastGo pricing has changed. Refresh your cart and review the full-payment total before continuing."});
+  if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(customerEmail)||customerEmail.length>254)return blocked(400,{error:"Enter a valid email address before continuing to secure payment."},"input","invalid_email");
+  let items;try{items=normaliseCheckoutItems(rawItems,catalog)}catch(error){return blocked(400,{error:error.message},"cart",checkoutBlockReason(error))}
+  if(items.some(item=>coastGoOffer.isCoastGo(item.variant.sku)&&!(Array.isArray(body.coastGoPrices)&&body.coastGoPrices.some(price=>price?.sku===item.variant.sku&&price.unitAmount===item.variant.checkoutAmount))))return blocked(409,{error:"CoastGo pricing has changed. Refresh your cart and review the full-payment total before continuing."},"cart","price_changed");
   const promoCode=String(body.promoCode||"").trim().toUpperCase();
   const locationValidationRequired=shippingValidationMode!=="off"&&coastGoOffer.shippingLocationValidationRequired(items,Date.now());
   const locationResolution=locationValidationRequired?resolveDeliveryLocation(body.deliveryLocation,shippingCoverage,shippingRates):null;
-  if(locationResolution?.status==="invalid")return send(res,400,{error:locationResolution.error});
-  if(locationResolution&&locationResolution.status!=="verified")return send(res,400,{error:"This address is outside the automatically confirmed areas or crosses a published boundary. No payment has been taken. Contact AURA PADDLE to confirm the delivery region.",quoteRequired:true});
+  if(locationResolution?.status==="invalid")return blocked(400,{error:locationResolution.error},"delivery","invalid_address");
+  if(locationResolution&&locationResolution.status!=="verified")return blocked(400,{error:"This address is outside the automatically confirmed areas or crosses a published boundary. No payment has been taken. Contact AURA PADDLE to confirm the delivery region.",quoteRequired:true},"delivery","manual_quote");
   const resolvedRegionId=locationResolution?shippingRegionForItems(locationResolution,items,{deliveryService:String(body.deliveryService||"standard")}):body.shippingRegion;
-  if(locationResolution&&!resolvedRegionId)return send(res,400,{error:"This product and delivery service need manual shipping confirmation. No payment has been taken.",quoteRequired:true});
-  if(locationResolution&&body.shippingRegion&&body.shippingRegion!==resolvedRegionId)return send(res,409,{error:"The selected delivery service does not match the confirmed suburb, state and postcode. Review the delivery details before payment."});
+  if(locationResolution&&!resolvedRegionId)return blocked(400,{error:"This product and delivery service need manual shipping confirmation. No payment has been taken.",quoteRequired:true},"delivery","manual_quote");
+  if(locationResolution&&body.shippingRegion&&body.shippingRegion!==resolvedRegionId)return blocked(409,{error:"The selected delivery service does not match the confirmed suburb, state and postcode. Review the delivery details before payment."},"delivery","region_mismatch");
   const promotionAddressVerified=Boolean(locationResolution?.freeShippingEligible&&String(body.deliveryService||"standard")==="standard");
   const shipping=calculateShipping(items,resolvedRegionId,shippingRates,Date.now(),promoCode,promotionAddressVerified);
-  if(items.some(item=>coastGoOffer.isCoastGo(item.variant.sku))&&body.coastGoShippingAmount!==shipping.amount)return send(res,409,{error:"CoastGo shipping has changed. Refresh your cart and review the delivery total before continuing."});
-  if(promoCode&&!shipping.promotionCode&&promoCode!==coastGoOffer.codeFor(items))return send(res,400,{error:"This promo code is invalid or not available for this order, region or date."});
-  if(items.some(item=>item.variant.orderMode==="available")&&shipping.quoteRequired)return send(res,400,{error:"Contact AURA PADDLE for a freight quote before ordering this in-stock board."});
+  if(items.some(item=>coastGoOffer.isCoastGo(item.variant.sku))&&body.coastGoShippingAmount!==shipping.amount)return blocked(409,{error:"CoastGo shipping has changed. Refresh your cart and review the delivery total before continuing."},"delivery","shipping_changed");
+  if(promoCode&&!shipping.promotionCode&&promoCode!==coastGoOffer.codeFor(items))return blocked(400,{error:"This promo code is invalid or not available for this order, region or date."},"cart","invalid_promo");
+  if(items.some(item=>item.variant.orderMode==="available")&&shipping.quoteRequired)return blocked(400,{error:"Contact AURA PADDLE for a freight quote before ordering this in-stock board."},"delivery","manual_quote");
   const fallback=items.length===1?items[0].variant:"/cart-preview.html";
   const returnPath=safeReturnPath(body.returnPath,fallback);
-  const requestId=/^[a-zA-Z0-9_-]{8,80}$/.test(body.requestId||"")?body.requestId:`${Date.now()}-${Math.random().toString(36).slice(2)}`;
   const attribution=normaliseAttribution(body.attribution);
   const metaBindingToken=crypto.randomBytes(32).toString("base64url"),metaCheckoutBindingHash=crypto.createHash("sha256").update(metaBindingToken).digest("hex");
-  const identity=await createOrderIdentity(requestId,attribution,customerEmail,items,metaCheckoutBindingHash);
+  let identity;try{identity=await createOrderIdentity(requestId,attribution,customerEmail,items,metaCheckoutBindingHash)}catch(error){return blocked(409,{error:error.message},"stock",checkoutBlockReason(error))}
   const shippingLocation=locationResolution?{...locationResolution.location,coverageVersion:locationResolution.coverageVersion}:undefined;
-  const params=buildCheckoutParams({items,priceBySku:stripeMap.bySku,siteUrl,returnPath,shipping,shippingLocation,attribution,customerEmail,recoveryEmailConsent:body.recoveryEmailConsent===true,orderInvoicesEnabled,gstTaxRateId,...identity});
-  const session=await stripeRequest("/v1/checkout/sessions",{method:"POST",headers:{"Content-Type":"application/x-www-form-urlencoded","Idempotency-Key":`aura-${requestId}`},body:params});
+  let params;try{params=buildCheckoutParams({items,priceBySku:stripeMap.bySku,siteUrl,returnPath,shipping,shippingLocation,attribution,customerEmail,recoveryEmailConsent:body.recoveryEmailConsent===true,orderInvoicesEnabled,gstTaxRateId,...identity})}catch(error){return blocked(400,{error:error.message},"cart",checkoutBlockReason(error))}
+  let session;try{session=await stripeRequest("/v1/checkout/sessions",{method:"POST",headers:{"Content-Type":"application/x-www-form-urlencoded","Idempotency-Key":`aura-${requestId}`},body:params})}catch(error){if(Number(error.status)===400&&error.stripeType==="invalid_request_error")await noteBlock("stripe","stripe_rejected");throw error}
+  try{await store.mutate(state=>resolveCheckoutBlocks(state,{attemptToken}))}catch(error){console.error("Checkout block resolution write failed",error)}
   send(res,200,{id:session.id,url:session.url,orderNumber:identity.orderNumber,testMode:!session.livemode},{"Set-Cookie":`aura_meta_checkout=${encodeURIComponent(metaBindingToken)}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=7200`});
 }
 async function shippingQuote(req,res){
@@ -336,6 +342,8 @@ async function abandonedCheckouts(req,res){
   if(!requireAdmin(req))return send(res,401,{error:"Admin authorisation required."});
   send(res,200,{generatedAt:Math.floor(Date.now()/1000),items:abandonedCheckoutList(await store.read(),catalog)});
 }
+
+async function checkoutBlocks(req,res){if(!requireAdmin(req))return send(res,401,{error:"Admin authorisation required."});const items=await store.mutate(state=>checkoutBlockList(state));send(res,200,{generatedAt:Math.floor(Date.now()/1000),retentionDays:14,items})}
 
 async function receiveReview(req,res){
   const forwarded=process.env.RENDER?String(req.headers["x-forwarded-for"]||"").split(",")[0].trim():"";
@@ -591,6 +599,7 @@ const server=http.createServer(async(req,res)=>{
     if(req.method==="POST"&&url.pathname==="/api/admin/order-status")return await updateFulfilment(req,res);
     if(req.method==="GET"&&url.pathname==="/api/admin/orders")return await orders(req,res);
     if(req.method==="GET"&&url.pathname==="/api/admin/abandoned-checkouts")return await abandonedCheckouts(req,res);
+    if(req.method==="GET"&&url.pathname==="/api/admin/checkout-blocks")return await checkoutBlocks(req,res);
     if(req.method==="GET"&&url.pathname==="/api/recovery/unsubscribe")return await unsubscribeRecovery(req,res,url);
     if(req.method==="POST"&&url.pathname==="/api/stripe-webhook")return await webhook(req,res);
     if(req.method==="GET"&&url.pathname==="/api/preorder-progress")return send(res,200,{campaigns:campaignProgress(await store.read(),catalog)});

@@ -3,11 +3,11 @@ import path from "node:path";
 import pg from "pg";
 
 const {Pool}=pg;
-const emptyState=()=>({events:{},orders:{},reservations:{},checkoutRequests:{},analyticsOutbox:{},abandonedCheckouts:{},recoveryEmailOutbox:{},recoverySuppressions:{},transactionalEmailOutbox:{},reviews:{},reviewNotificationOutbox:{}});
+const emptyState=()=>({events:{},orders:{},reservations:{},checkoutRequests:{},checkoutBlocks:{},analyticsOutbox:{},abandonedCheckouts:{},recoveryEmailOutbox:{},recoverySuppressions:{},transactionalEmailOutbox:{},reviews:{},reviewNotificationOutbox:{}});
 
 function normaliseState(value){
   const state=value&&typeof value==="object"?value:emptyState();
-  state.events??={};state.orders??={};state.reservations??={};state.checkoutRequests??={};state.analyticsOutbox??={};state.abandonedCheckouts??={};state.recoveryEmailOutbox??={};state.recoverySuppressions??={};state.transactionalEmailOutbox??={};state.reviews??={};state.reviewNotificationOutbox??={};
+  state.events??={};state.orders??={};state.reservations??={};state.checkoutRequests??={};state.checkoutBlocks??={};state.analyticsOutbox??={};state.abandonedCheckouts??={};state.recoveryEmailOutbox??={};state.recoverySuppressions??={};state.transactionalEmailOutbox??={};state.reviews??={};state.reviewNotificationOutbox??={};
   return state;
 }
 
@@ -31,7 +31,7 @@ function postgresState(row){
   if(!object(state))invalid();
   // Orders and Stripe event deduplication are core, not optional migrations.
   for(const key of ["orders","events"])if(!Object.hasOwn(state,key)||!object(state[key]))invalid();
-  const optional=["reservations","checkoutRequests","analyticsOutbox","abandonedCheckouts","recoveryEmailOutbox","recoverySuppressions","transactionalEmailOutbox","reviews","reviewNotificationOutbox","analyticsAmountIssues","metaPurchaseReceipts","newsletter","inventory"];
+  const optional=["reservations","checkoutRequests","checkoutBlocks","analyticsOutbox","abandonedCheckouts","recoveryEmailOutbox","recoverySuppressions","transactionalEmailOutbox","reviews","reviewNotificationOutbox","analyticsAmountIssues","metaPurchaseReceipts","newsletter","inventory"];
   for(const key of optional)if(Object.hasOwn(state,key)&&!object(state[key]))invalid();
   if(Object.hasOwn(state,"newsletter"))for(const key of ["contacts","events","drafts"])if(!Object.hasOwn(state.newsletter,key)||!object(state.newsletter[key]))invalid();
   if(Object.hasOwn(state,"inventory")){

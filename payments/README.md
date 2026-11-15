@@ -33,6 +33,7 @@ The server also exposes:
 - `POST /api/stripe-webhook`
 - `GET /api/preorder-progress`
 - `GET /api/admin/abandoned-checkouts` (Bearer `ADMIN_API_TOKEN` required)
+- `GET /api/admin/checkout-blocks` (Bearer `ADMIN_API_TOKEN` required)
 - `GET /api/recovery/unsubscribe?token=...`
 - `POST /api/reviews` and `GET /api/reviews?product=...`
 - `GET /api/admin/reviews` and `POST /api/admin/reviews` (Bearer `ADMIN_API_TOKEN` required)
@@ -52,6 +53,13 @@ The server also exposes:
 - The cart offers a default-on recovery-email checkbox before redirecting to Stripe. The server copies that explicit choice into Checkout metadata and queues one recovery email only when the customer kept it selected, an email is present and Stripe supplied a recovery URL.
 - Recovery sends use a durable outbox, AgentMail idempotency keys, retry backoff, a seven-day same-recipient deduplication window and a one-click suppression link. `AGENTMAIL_AGENTMAIL_API_KEY` is injected by Stripe Projects and never exposed to the browser.
 - The protected internal view is `/admin/abandoned-checkouts/`. Its token is held in `sessionStorage` for the current browser tab only. Contactable, anonymous and internal-test records are labelled separately; internal tests are excluded from the customer-record count. No SMS provider, SMS queue or SMS action is configured.
+
+## Checkout blocks before Stripe
+
+- The protected `/admin/checkout-blocks/` view is separate from abandoned Stripe Checkout Sessions. It records only an explicit `POST /api/checkout` attempt that the server rejects before a Session is created.
+- Records contain a one-way 24-character attempt token, timestamp, stage, fixed reason, payment mode, item count, repeat count and resolution state. They contain no customer identity, delivery details, IP, full URL, request body or Stripe Session ID.
+- Identical attempt/group/reason repeats are folded for 10 minutes. Records older than 14 days are removed when a new block is recorded, a block is resolved or an administrator opens the list; there is no scheduled cleanup claim. A later successful Session creation using the same cart operation identity marks earlier blocks resolved. Internal controlled-test campaigns are excluded.
+- Shipping quote browsing, cart additions and exits before `POST /api/checkout` are intentionally invisible. Ambiguous Stripe/network failures are not labelled as confirmed checkout blocks. Telemetry persistence failures are logged operationally but never change the checkout response.
 - Abandoned checkout and sent-email operational records are retained for 30 days. Email suppression hashes are retained so an unsubscribe choice continues to be honoured.
 
 ## Paid-order email confirmation and internal notification

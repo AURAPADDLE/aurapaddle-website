@@ -354,6 +354,14 @@
   });
   promoInput.addEventListener("keydown",event=>{if(event.key==="Enter"){event.preventDefault();applyPromoButton.click()}});
 
+  const checkoutAttemptIds=new Map();
+  const checkoutAttemptSignature=items=>items.map(item=>`${item.orderMode}:${item.sku}:${item.quantity}`).sort().join("|");
+  const checkoutAttemptId=items=>{
+    const signature=checkoutAttemptSignature(items);
+    if(!checkoutAttemptIds.has(signature))checkoutAttemptIds.set(signature,globalThis.crypto?.randomUUID?.()||`${Date.now()}-${Math.random().toString(36).slice(2)}`);
+    return checkoutAttemptIds.get(signature);
+  };
+
   checkout.addEventListener("click",async()=>{
     if(checkoutPending||checkout.disabled)return;
     const items=cart.read();
@@ -388,9 +396,10 @@
     try{
       const attribution=await window.AURAAttribution?.snapshot?.();
       const currentShipping=shippingFor(items,shippingRegion);
-      response=await fetch(config.checkoutEndpoint||"/api/checkout",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({items:items.map(({sku,quantity})=>({sku,quantity})),coastGoPrices:items.filter(item=>window.AURACoastGo?.isCoastGo(item.sku)).map(({sku,unitAmount})=>({sku,unitAmount})),coastGoShippingAmount:currentShipping.total,shippingRegion,...(needsLocation?{deliveryLocation:verifiedShipping?.location||deliveryLocation(),deliveryService:deliveryService.value}:{}),promoCode:window.AURACoastGo.codeFor(items)||(currentShipping.promotionApplied?appliedPromoCode:""),returnPath:location.pathname,customerEmail,recoveryEmailConsent:recoveryConsent,requestId:globalThis.crypto?.randomUUID?.()||`${Date.now()}-${Math.random().toString(36).slice(2)}`,attribution})});
+      response=await fetch(config.checkoutEndpoint||"/api/checkout",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({items:items.map(({sku,quantity})=>({sku,quantity})),coastGoPrices:items.filter(item=>window.AURACoastGo?.isCoastGo(item.sku)).map(({sku,unitAmount})=>({sku,unitAmount})),coastGoShippingAmount:currentShipping.total,shippingRegion,...(needsLocation?{deliveryLocation:verifiedShipping?.location||deliveryLocation(),deliveryService:deliveryService.value}:{}),promoCode:window.AURACoastGo.codeFor(items)||(currentShipping.promotionApplied?appliedPromoCode:""),returnPath:location.pathname,customerEmail,recoveryEmailConsent:recoveryConsent,requestId:checkoutAttemptId(items),attribution})});
       const payload=await response.json().catch(()=>({}));
       if(!response.ok||!payload.url)throw new Error(payload.error||"Stripe Checkout could not be prepared.");
+      checkoutAttemptIds.delete(checkoutAttemptSignature(items));
       const shipping=shippingFor(items,shippingRegion);
       track("add_shipping_info",{currency:"AUD",value:dueToday,shipping_tier:shippingRegion,shipping:Number(shipping.total||0)/100,items:pricedItems});
       track("begin_checkout",{currency:"AUD",value:dueToday,shipping:Number(shipping.total||0)/100,shipping_tier:shippingRegion,promotion_id:shipping.promotionId||"",coupon:shipping.promotionId===window.AURACoastGo.shippingPromotionId?window.AURACoastGo.shippingCode:"",items:pricedItems});
