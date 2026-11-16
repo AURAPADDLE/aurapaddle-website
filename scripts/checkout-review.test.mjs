@@ -50,7 +50,7 @@ function harness(allowed, url='https://www.aurapaddle.com/cart/?utm_source=googl
     sessionStorage:storage([['aura-shipping-region-v1',options.region??'gold-coast-brisbane']]),
     dispatchEvent(){}, addEventListener(name,fn){if(!windowListeners.has(name))windowListeners.set(name,[]);windowListeners.get(name).push(fn);},
     AURA_OFFLINE_REVIEW:options.offlineReview===true,
-    AURA_STRIPE:{enabled:true,shippingLocationValidation:options.shippingValidation}, AURACart:{read:()=>options.items||[yoga],count:()=>1,subscribe(){}},
+    AURA_STRIPE:{enabled:true,shippingLocationValidation:options.shippingValidation,combinedCheckoutEnabled:options.combinedCheckoutEnabled===true}, AURACart:{read:()=>options.items||[yoga],count:()=>1,subscribe(){}},
     fetch:async(url,requestOptions)=>{const body=JSON.parse(requestOptions.body);requests.push({url,body});if(String(url).includes('shipping-quote'))return {ok:true,json:async()=>options.shippingQuoteResponse||({status:'verified',coverageVersion:'test-v1',auraArea:'melbourne',auraAreaLabel:'Melbourne metro',freeShippingEligible:true,coastGoExpressEligible:true,location:body.deliveryLocation,shipping:{regionId:body.deliveryService==='express'?'coastgo-express':'qld-nsw-main',label:body.deliveryService==='express'?'Express':'Verified metro',amount:body.deliveryService==='express'?12000:0,quoteRequired:false,promotionApplied:body.deliveryService!=='express',promotionCode:body.deliveryService==='express'?'':'AURAFREESHIP'}})};return {ok:true,json:async()=>({url:'https://checkout.example.test/offline'})};},
     gtag(...args){calls.push(args);if(args[0]==='get')args[3](args[2]==='client_id'?'123.456':'1788729600');}
   };
@@ -357,6 +357,13 @@ test('mixed payment modes and missing region block checkout; preorder balances s
     const h=harness(false,undefined,opts);h.startCart();assert.equal(h.element('checkoutCart').disabled,true);
     assert.equal(h.element('remainingBalance').parentElement.hidden,false);
   }
+});
+test('default-off mixed cart becomes one explicit combined request only when the server flag is present',async()=>{
+  const stock={...yoga,orderMode:'available'},preorder={...yoga,sku:'AP505002',colour:'Matte Sandstone',orderMode:'preorder'};
+  const h=harness(false,undefined,{items:[stock,preorder],now:'2026-11-15T00:00:00Z',shippingValidation:'enforced',combinedCheckoutEnabled:true,shippingQuoteResponse:{status:'verified',coverageVersion:'test-v1',auraArea:'adelaide-paid',auraAreaLabel:'Adelaide metro',freeShippingEligible:false,coastGoExpressEligible:false,location:{suburb:'Adelaide',state:'SA',postcode:'5000'},shipping:{regionId:'adelaide',label:'Adelaide Metro',amount:12900,quoteRequired:false,promotionApplied:false,promotionCode:''}}});
+  h.startCart();const address=h.created.find(e=>e.className==='delivery-location');address.querySelector('#shippingSuburb').value='Adelaide';address.querySelector('#shippingState').value='SA';address.querySelector('#shippingPostcode').value='5000';address.querySelector('#shippingPostcode').listeners.input();await new Promise(resolve=>setTimeout(resolve,400));
+  assert.equal(h.element('checkoutCart').disabled,false);assert.equal(h.element('checkoutCart').textContent,"PAY TODAY'S TOTAL SECURELY");assert.equal(h.element('dueToday').textContent,'$1,252.50');assert.match(h.element('mixedNotice').textContent,/One secure payment today/);
+  await h.element('checkoutCart').listeners.click();assert.equal(h.requests[1].url,'/api/combined-checkout');assert.deepEqual(h.requests[1].body.items,[{sku:'AP734955',quantity:1},{sku:'AP505002',quantity:1}]);
 });
 test('slow tag waits for load and captures real returned IDs',async()=>{
   const h=harness(true,undefined,{manualTag:true});let finished=false;

@@ -189,6 +189,8 @@
     }
     const hasPreorder=items.some(item=>item.orderMode==="preorder");
     const hasAvailable=items.some(item=>item.orderMode==="available");
+    const combinedCart=hasPreorder&&hasAvailable;
+    const combinedEnabled=combinedCart&&config.combinedCheckoutEnabled===true;
     const pricing=bundlePricing(items);
     const shipping=shippingFor(items,regionSelect.value);
     list.hidden=!items.length;
@@ -214,10 +216,11 @@
     document.getElementById("beforeDispatch").parentElement.hidden=availableOnly;
     totalRow.hidden=availableOnly;
     paymentDetails.open=hasPreorder;
-    const dueToday=dueProducts+(availableOnly&&shipping.selected&&!shipping.quoteRequired?Number(shipping.total||0):0);
+    const stockItems=items.filter(item=>item.orderMode==="available"),stockShipping=combinedCart?shippingFor(stockItems,regionSelect.value):shipping;
+    const dueToday=dueProducts+((availableOnly||combinedEnabled)&&stockShipping.selected&&!stockShipping.quoteRequired?Number(stockShipping.total||0):0);
     document.getElementById("subtotal").previousElementSibling.textContent="Product total";
     document.getElementById("beforeDispatch").previousElementSibling.textContent=availableOnly?"Payment after today":"Total due before dispatch";
-    document.getElementById("mixedNotice").textContent="In-stock and pre-order items have different payment and dispatch schedules. Please place separate orders to keep each payment and shipment clear.";
+    document.getElementById("mixedNotice").textContent=combinedEnabled?"One secure payment today covers in-stock products in full, their confirmed shipping, and each pre-order initial payment. Pre-order balances and confirmed pre-order shipping remain payable before their later dispatch.":"In-stock and pre-order items have different payment and dispatch schedules. Please place separate orders to keep each payment and shipment clear.";
     paymentNote.textContent=availableOnly?"In-stock products and published shipping are paid in full today. Glacier Blue dispatches within 1 business day after successful payment; delivery transit time is additional. Quote-required regions must contact AURA PADDLE first.":"Pre-orders collect 50% of the product price today. Remaining product balance and shipping are paid before dispatch; conditional orders follow their published terms.";
     if(hasCoastGo&&availableOnly){
       paymentNote.textContent=`CoastGo: full payment including shipping; no remaining product balance. ${window.AURACoastGo.dispatch()} ${window.AURACoastGo.offer()}`;
@@ -268,8 +271,8 @@
     if(sharedPromo){promoHelp.className=shipping.promotionApplied?"success":"";promoHelp.textContent=shipping.promotionApplied?"AURAFREESHIP applied — standard shipping is free for this verified selected-metro address through 30 November (Brisbane time).":shipping.selected?"This verified address is not in the five automatic free-shipping metro areas, or express is selected. The displayed shipping rate applies.":"Enter the delivery suburb, state and postcode. Eligible Gold Coast, Brisbane, Sydney, Canberra and Melbourne metro addresses receive free standard shipping automatically.";}
     promoInput.readOnly=Boolean(coastPromo);
     applyPromoButton.textContent=coastPromo?"Applied ✓":"Apply";
-    checkout.textContent=availableOnly?"PAY IN FULL SECURELY":"PAY 50% SECURELY";
-    checkout.disabled=checkoutPending||(needsLocation&&(shippingQuotePending||!verifiedShipping))||location.protocol==="file:"||config.enabled===false||!shipping.selected||(hasPreorder&&hasAvailable)||(availableOnly&&shipping.quoteRequired);
+    checkout.textContent=combinedEnabled?"PAY TODAY'S TOTAL SECURELY":availableOnly?"PAY IN FULL SECURELY":"PAY 50% SECURELY";
+    checkout.disabled=checkoutPending||(needsLocation&&(shippingQuotePending||!verifiedShipping))||location.protocol==="file:"||config.enabled===false||!shipping.selected||(combinedCart&&!combinedEnabled)||((availableOnly||combinedEnabled)&&stockShipping.quoteRequired);
     regionSelect.disabled=checkoutPending;
     if(needsLocation)for(const field of [shippingSuburb,shippingState,shippingPostcode,deliveryService])field.disabled=checkoutPending;
     checkoutEmail.disabled=checkoutPending;
@@ -380,6 +383,7 @@
     const shippingRegion=regionSelect.value;
     const recoveryConsent=recoveryEmailConsent?.checked===true;
     const pricing=bundlePricing(items);
+    const combinedCart=items.some(item=>item.orderMode==="preorder")&&items.some(item=>item.orderMode==="available");
     const pricedItems=items.map(item=>{
       const fullLine=pricing.lineTotal(item),unitFull=fullLine/item.quantity/100;
       return analyticsItem(item,item.orderMode==="preorder"?unitFull/2:unitFull);
@@ -396,7 +400,8 @@
     try{
       const attribution=await window.AURAAttribution?.snapshot?.();
       const currentShipping=shippingFor(items,shippingRegion);
-      response=await fetch(config.checkoutEndpoint||"/api/checkout",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({items:items.map(({sku,quantity})=>({sku,quantity})),coastGoPrices:items.filter(item=>window.AURACoastGo?.isCoastGo(item.sku)).map(({sku,unitAmount})=>({sku,unitAmount})),coastGoShippingAmount:currentShipping.total,shippingRegion,...(needsLocation?{deliveryLocation:verifiedShipping?.location||deliveryLocation(),deliveryService:deliveryService.value}:{}),promoCode:window.AURACoastGo.codeFor(items)||(currentShipping.promotionApplied?appliedPromoCode:""),returnPath:location.pathname,customerEmail,recoveryEmailConsent:recoveryConsent,requestId:checkoutAttemptId(items),attribution})});
+      const endpoint=combinedCart&&config.combinedCheckoutEnabled===true?"/api/combined-checkout":config.checkoutEndpoint||"/api/checkout";
+      response=await fetch(endpoint,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({items:items.map(({sku,quantity})=>({sku,quantity})),coastGoPrices:items.filter(item=>window.AURACoastGo?.isCoastGo(item.sku)).map(({sku,unitAmount})=>({sku,unitAmount})),coastGoShippingAmount:currentShipping.total,shippingRegion,...(needsLocation?{deliveryLocation:verifiedShipping?.location||deliveryLocation(),deliveryService:deliveryService.value}:{}),promoCode:window.AURACoastGo.codeFor(items)||(currentShipping.promotionApplied?appliedPromoCode:""),returnPath:location.pathname,customerEmail,recoveryEmailConsent:recoveryConsent,requestId:checkoutAttemptId(items),attribution})});
       const payload=await response.json().catch(()=>({}));
       if(!response.ok||!payload.url)throw new Error(payload.error||"Stripe Checkout could not be prepared.");
       checkoutAttemptIds.delete(checkoutAttemptSignature(items));
