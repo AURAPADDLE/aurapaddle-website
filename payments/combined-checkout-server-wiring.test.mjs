@@ -10,7 +10,7 @@ test("production server wires combined checkout default-off without a second web
 });
 
 test("release test command includes combined checkout suites",()=>{
-  for(const file of ["combined-checkout-integration.test.mjs","combined-checkout-persistence.test.mjs","combined-checkout-postgres.test.mjs","combined-checkout-return-ui.test.mjs","combined-checkout-server-wiring.test.mjs","stripe-combined-adapter.test.mjs"])assert.match(pkg.scripts.test,new RegExp(file.replaceAll(".","\\.")));
+  for(const file of ["combined-checkout-integration.test.mjs","combined-checkout-persistence.test.mjs","combined-checkout-postgres.test.mjs","combined-checkout-return-ui.test.mjs","combined-checkout-server-wiring.test.mjs","combined-balance-service.test.mjs","stripe-combined-adapter.test.mjs"])assert.match(pkg.scripts.test,new RegExp(file.replaceAll(".","\\.")));
 });
 
 test("published policy explains one payment today without automatic preorder balance charging",()=>{

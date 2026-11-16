@@ -13,8 +13,9 @@ function verify(raw,header,secret,now=Math.floor(Date.now()/1000)){
   const expected=crypto.createHmac("sha256",secret).update(`${timestamp}.${raw}`).digest("hex");return crypto.timingSafeEqual(Buffer.from(signature),Buffer.from(expected));
 }
 
-// Deliberately not wired into production server.mjs. This adapter exists only for
-// non-production integration until the parent/group schema and Stripe test flow pass review.
+// The production server wires this handler behind COMBINED_CHECKOUT_ENABLED.
+// A disabled handler remains unavailable while signed callbacks continue through
+// the shared production webhook route for already-created Sessions and invoices.
 export function createCombinedCheckoutHttpHandler({coordinator,enabled=false,webhookSecret="",allowedOrigin="",now}={}){
   if(!coordinator?.createSession||!coordinator?.applyWebhook)throw Error("Combined checkout coordinator is required.");
   return async(req,res)=>{
