@@ -86,6 +86,7 @@
   document.querySelector(".secure-note").after(paymentDetails);
   paymentDetails.append(paymentNote);
   let appliedPromoCode="";
+  const flatPerBoard={"yoga-cruiser":5000,"angler-fishing":5000,"touring-performance":5000,gannet:15000,current:20000,meridian:25000};
   const regions={
     "gold-coast-brisbane":{label:"Gold Coast / Brisbane Metro",isup:4900,yogaCruiser:2500,coastGo:2500,surfboard:7900},
     "qld-nsw-main":{label:"QLD / NSW / ACT major cities, coastal areas & Melbourne Metro",isup:9900,yogaCruiser:4500,coastGo:4500,surfboard:14900},
@@ -95,8 +96,6 @@
     tasmania:{label:"Tasmania",isup:14900,yogaCruiser:14900,coastGo:14900,surfboard:22900},
     remote:{label:"NT, regional, remote and island destinations",quoteRequired:true}
   };
-  const isupSlugs=new Set(["yoga-cruiser","angler-fishing","touring-performance","coast-go"]);
-  const surfboardSlugs=new Set(["gannet","current","meridian"]);
   const yogaLaunchPromotion={code:"YOGAFREESHIP",sku:"AP734955",startsAt:Date.parse("2026-09-20T00:00:00+10:00"),endsAt:Date.parse("2026-09-30T00:00:00+10:00"),regionIds:new Set(["gold-coast-brisbane","qld-nsw-main"])};
   const launchPromotionActive=()=>Date.now()>=yogaLaunchPromotion.startsAt&&Date.now()<yogaLaunchPromotion.endsAt;
   const launchPromotionInCart=items=>launchPromotionActive()&&items.some(item=>item.sku===yogaLaunchPromotion.sku);
@@ -138,7 +137,7 @@
     }
     if(region.quoteRequired)return {selected:true,total:null,quoteRequired:true,label:region.label};
     const hasAngler=items.some(item=>slugFor(item)==="angler-fishing");
-    let total=0,surfboardQuantity=0,quoteRequired=false,promotionApplied=false;
+    let total=0,quoteRequired=false,promotionApplied=false;
     for(const item of items){
       const slug=slugFor(item);
       if(item.sku==="AP667703"){
@@ -147,16 +146,10 @@
       }
       const promotionActive=(slug==="coast-go"&&window.AURACoastGo.freeShippingFor(resolvedRegionId,Date.now(),promotionAddressVerified(items)))||window.AURACoastGo.yogaFreeShippingFor(item.sku,resolvedRegionId,Date.now(),promotionAddressVerified(items))||(item.sku===yogaLaunchPromotion.sku&&String(promoCode||"").trim().toUpperCase()===yogaLaunchPromotion.code&&yogaLaunchPromotion.regionIds.has(resolvedRegionId)&&Date.now()>=yogaLaunchPromotion.startsAt&&Date.now()<yogaLaunchPromotion.endsAt);
       if(promotionActive)promotionApplied=true;
-      else if(slug==="yoga-cruiser")total+=region.yogaCruiser*item.quantity;
       else if(slug==="coast-go")total+=region.coastGo*item.quantity;
-      else if(isupSlugs.has(slug))total+=region.isup*item.quantity;
-      else if(surfboardSlugs.has(slug)){
-        surfboardQuantity+=item.quantity;
-        total+=region.surfboard*item.quantity;
-        if(/^9['’]/.test(item.size))total+=5000*item.quantity;
-      }else quoteRequired=true;
+      else if(Number.isInteger(flatPerBoard[slug]))total+=flatPerBoard[slug]*item.quantity;
+      else quoteRequired=true;
     }
-    if(surfboardQuantity>1)quoteRequired=true;
     return {selected:true,total:quoteRequired?null:total,quoteRequired,label:region.label,promotionApplied,promotionId:promotionApplied&&window.AURACoastGo.freeShippingActive()?window.AURACoastGo.shippingPromotionId:"",regionId:resolvedRegionId};
   }
 
@@ -174,7 +167,7 @@
     const coastPromo=window.AURACoastGo.codeFor(items);
     if(coastPromo){appliedPromoCode=coastPromo;promoInput.value=coastPromo;}
     else if(appliedPromoCode===window.AURACoastGo.code){appliedPromoCode="";promoInput.value="";}
-    const sharedPromo=window.AURACoastGo.freeShippingActive()&&items.some(item=>window.AURACoastGo.isCoastGo(item.sku)||window.AURACoastGo.isYoga(item.sku));
+    const sharedPromo=window.AURACoastGo.freeShippingActive()&&items.some(item=>window.AURACoastGo.isCoastGo(item.sku));
     if(sharedPromo&&(!appliedPromoCode||appliedPromoCode===yogaLaunchPromotion.code)){appliedPromoCode=window.AURACoastGo.shippingCode;promoInput.value=appliedPromoCode;}
     if(!sharedPromo&&appliedPromoCode===window.AURACoastGo.shippingCode){appliedPromoCode="";promoInput.value="";}
     promoBlock.hidden=!launchPromotionInCart(items)&&!coastPromo&&!sharedPromo;
@@ -240,7 +233,7 @@
     if(!shipping.selected){
       shippingAmount.textContent="Select region";
       beforeDispatch.textContent="Select region";
-      shippingHelp.innerHTML=shippingQuoteMessage||(needsLocation?"Enter your suburb, state and postcode so we can confirm the AURA promotion area and published SUP freight zone before payment.":"Choose the published delivery region that matches your address.");
+      shippingHelp.innerHTML=shippingQuoteMessage||(needsLocation?"Enter your suburb, state and postcode so we can confirm the published freight rule before payment.":"Choose the published delivery region that matches your address.");
     }else if(shipping.pickup){
       shippingAmount.textContent="Free";
       beforeDispatch.textContent=availableOnly?"Paid today":money(remaining);
@@ -252,7 +245,7 @@
     }else{
       shippingAmount.textContent=shipping.promotionApplied&&shipping.total===0?"Free — promo applied":shipping.promotionApplied?`${money(shipping.total)} · promo applied`:money(shipping.total);
       beforeDispatch.textContent=availableOnly?"Paid today":money(remaining+shipping.total);
-      shippingHelp.textContent=shipping.promotionId===window.AURACoastGo.shippingPromotionId?(hasCoastGo?window.AURACoastGo.shippingTerms:window.AURACoastGo.yogaShippingTerms):shipping.promotionApplied?"YOGAFREESHIP applied. Free shipping ends 29 September 2026 for eligible regions.":availableOnly?"This shipping amount is included in today's secure payment.":"This shipping amount is recorded now and paid with the remaining product balance before dispatch.";
+      shippingHelp.textContent=shipping.promotionId===window.AURACoastGo.shippingPromotionId?window.AURACoastGo.shippingTerms:shipping.promotionApplied?"YOGAFREESHIP applied. Free shipping ends 29 September 2026 for eligible regions.":availableOnly?"This shipping amount is included in today's secure payment.":"This shipping amount is fixed in this checkout and paid with the remaining product balance before dispatch.";
     }
     const autoPromoPending=appliedPromoCode===yogaLaunchPromotion.code&&launchPromotionInCart(items)&&!shipping.selected;
     if(shipping.details&&!shipping.quoteRequired)shippingHelp.textContent+=` ${shipping.service} transit: ${shipping.transitDays} days after dispatch, excluding handling / preparation time. ${window.AURACoastGo.dispatch()} ${shipping.details} Rate is per board. Contact us before ordering if your region is unclear.`;
@@ -275,7 +268,7 @@
     promoHelp.className=promoValid?"success":autoPromoPending?"":appliedPromoCode?"error":"";
     promoHelp.textContent=promoValid?"YOGAFREESHIP automatically applied — this order qualifies for free shipping.":autoPromoPending?"YOGAFREESHIP is ready — select an eligible delivery region to apply free shipping.":appliedPromoCode?"YOGAFREESHIP is not available for the current product, region or date.":"Yoga Cruiser Glacier Blue: use YOGAFREESHIP for eligible free shipping through 29 September.";
     if(coastPromo){promoHelp.className="success";promoHelp.textContent="COASTGO10 applied automatically — $10 off each CoastGo. Ends 8 October (inclusive).";}
-    if(sharedPromo){promoHelp.className=shipping.promotionApplied?"success":"";promoHelp.textContent=shipping.promotionApplied?"AURAFREESHIP applied — standard shipping is free for this verified selected-metro address through 30 November (Brisbane time).":shipping.selected?"This verified address is not in the five automatic free-shipping metro areas, or express is selected. The displayed shipping rate applies.":"Enter the delivery suburb, state and postcode. Eligible Gold Coast, Brisbane, Sydney, Canberra and Melbourne metro addresses receive free standard shipping automatically.";}
+    if(sharedPromo){promoHelp.className=shipping.promotionApplied?"success":"";promoHelp.textContent=shipping.promotionApplied?"AURAFREESHIP applied to eligible CoastGo standard delivery through 30 November (Brisbane time).":shipping.selected?"This CoastGo address or delivery service is not eligible for the published promotion. The displayed shipping rate applies.":"Enter the delivery suburb, state and postcode. Eligible CoastGo standard deliveries receive free shipping automatically.";}
     promoInput.readOnly=Boolean(coastPromo);
     applyPromoButton.textContent=coastPromo?"Applied ✓":"Apply";
     checkout.textContent=combinedEnabled?"PAY TODAY'S TOTAL SECURELY":availableOnly?"PAY IN FULL SECURELY":"PAY 50% SECURELY";

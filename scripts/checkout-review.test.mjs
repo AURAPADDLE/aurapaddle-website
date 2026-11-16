@@ -289,7 +289,7 @@ test('pageshow does not unlock a checkout request that has not redirected',async
   await pending;
 });
 
-test('in-stock Yoga hides zero balances and charges full price with eligible free shipping',async()=>{
+test('in-stock Yoga hides zero balances and charges full price with the new flat freight',async()=>{
   const h=harness(true,undefined,{items:[{...yoga,orderMode:'available'}],now:'2026-11-15T00:00:00Z',shippingValidation:'enforced'});h.startCart();
   const address=h.created.find(e=>e.className==='delivery-location');
   address.querySelector('#shippingSuburb').value='Melbourne';address.querySelector('#shippingState').value='VIC';address.querySelector('#shippingPostcode').value='3000';
@@ -297,19 +297,19 @@ test('in-stock Yoga hides zero balances and charges full price with eligible fre
   await new Promise(resolve=>setTimeout(resolve,400));
   assert.equal(h.element('remainingBalance').parentElement.hidden,true);
   assert.equal(h.element('beforeDispatch').parentElement.hidden,true);
-  assert.equal(h.element('dueToday').textContent,'$749');
+  assert.equal(h.element('dueToday').textContent,'$799');
   assert.equal(h.element('checkoutCart').textContent,'PAY IN FULL SECURELY');
   await h.element('checkoutCart').listeners.click();
-  assert.equal(h.requests[1].body.promoCode,'AURAFREESHIP');
+  assert.equal(h.requests[1].body.promoCode,'');
   assert.deepEqual(h.requests[1].body.deliveryLocation,{suburb:'Melbourne',state:'VIC',postcode:'3000'});
 });
 
-test('confirmed paid metro keeps its published Yoga rate and sends no free-shipping code',async()=>{
+test('confirmed metro uses the published Yoga flat rate and sends no free-shipping code',async()=>{
   const h=harness(false,undefined,{items:[{...yoga,orderMode:'available'}],now:'2026-11-15T00:00:00Z',shippingValidation:'enforced',shippingQuoteResponse:{status:'verified',coverageVersion:'test-v1',auraArea:'adelaide-paid',auraAreaLabel:'Adelaide metro',freeShippingEligible:false,coastGoExpressEligible:false,location:{suburb:'Adelaide',state:'SA',postcode:'5000'},shipping:{regionId:'adelaide',label:'Adelaide Metro',amount:12900,quoteRequired:false,promotionApplied:false,promotionCode:''}}});h.startCart();
   const address=h.created.find(e=>e.className==='delivery-location');
   address.querySelector('#shippingSuburb').value='Adelaide';address.querySelector('#shippingState').value='SA';address.querySelector('#shippingPostcode').value='5000';address.querySelector('#shippingPostcode').listeners.input();
   await new Promise(resolve=>setTimeout(resolve,400));
-  assert.equal(h.element('dueToday').textContent,'$878');
+  assert.equal(h.element('dueToday').textContent,'$799');
   assert.equal(h.element('checkoutCart').disabled,false);
   await h.element('checkoutCart').listeners.click();
   assert.equal(h.requests[1].body.promoCode,'');
@@ -348,7 +348,7 @@ test('Yoga buying information surfaces only existing verified purchase terms',()
 });
 test('offer expiry restores actual standard shipping, without extending promotion',async()=>{
   const h=harness(false,undefined,{items:[{...yoga,orderMode:'available'}],now:'2026-11-30T14:00:00Z'});h.startCart();
-  assert.equal(h.element('dueToday').textContent,'$774');
+  assert.equal(h.element('dueToday').textContent,'$799');
   await h.element('checkoutCart').listeners.click();
   assert.equal(h.requests[0].body.promoCode,'');
 });
@@ -364,7 +364,7 @@ test('default-off mixed cart becomes one explicit combined request only when the
   assert.equal(off.element('checkoutCart').disabled,true);assert.match(off.element('mixedNotice').textContent,/place separate orders/i);assert.equal(off.requests.length,0);
   const h=harness(false,undefined,{items:[stock,preorder],now:'2026-11-15T00:00:00Z',shippingValidation:'enforced',combinedCheckoutEnabled:true,shippingQuoteResponse:{status:'verified',coverageVersion:'test-v1',auraArea:'adelaide-paid',auraAreaLabel:'Adelaide metro',freeShippingEligible:false,coastGoExpressEligible:false,location:{suburb:'Adelaide',state:'SA',postcode:'5000'},shipping:{regionId:'adelaide',label:'Adelaide Metro',amount:12900,quoteRequired:false,promotionApplied:false,promotionCode:''}}});
   h.startCart();const address=h.created.find(e=>e.className==='delivery-location');address.querySelector('#shippingSuburb').value='Adelaide';address.querySelector('#shippingState').value='SA';address.querySelector('#shippingPostcode').value='5000';address.querySelector('#shippingPostcode').listeners.input();await new Promise(resolve=>setTimeout(resolve,400));
-  assert.equal(h.element('checkoutCart').disabled,false);assert.equal(h.element('checkoutCart').textContent,"PAY TODAY'S TOTAL SECURELY");assert.equal(h.element('dueToday').textContent,'$1,252.50');assert.match(h.element('mixedNotice').textContent,/One secure payment today/);
+  assert.equal(h.element('checkoutCart').disabled,false);assert.equal(h.element('checkoutCart').textContent,"PAY TODAY'S TOTAL SECURELY");assert.equal(h.element('dueToday').textContent,'$1,173.50');assert.match(h.element('mixedNotice').textContent,/One secure payment today/);
   await h.element('checkoutCart').listeners.click();assert.equal(h.requests[1].url,'/api/combined-checkout');assert.deepEqual(h.requests[1].body.items,[{sku:'AP734955',quantity:1},{sku:'AP505002',quantity:1}]);
 });
 test('slow tag waits for load and captures real returned IDs',async()=>{
@@ -408,7 +408,7 @@ test('withdrawal while the tag loads prevents even ID lookup calls',async()=>{
 
 test('withdrawn shipping promotion reprices browser checkout without advertising the old code',async()=>{
   const now='2026-11-30T14:00:00Z';
-  for(const [item,region,total,shipping] of [[{...yoga,orderMode:'available'},'gold-coast-brisbane','$774',2500],[{...yoga,orderMode:'available'},'qld-nsw-main','$794',4500]]){
+  for(const [item,region,total,shipping] of [[{...yoga,orderMode:'available'},'gold-coast-brisbane','$799',5000],[{...yoga,orderMode:'available'},'qld-nsw-main','$799',5000]]){
     const h=harness(true,undefined,{items:[item],region,now});h.startCart();
     await new Promise(resolve=>setImmediate(resolve));
     assert.equal(h.element('dueToday').textContent,total,region);

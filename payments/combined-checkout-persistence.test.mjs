@@ -32,7 +32,7 @@ test("default-off HTTP adapter persists one parent payment and groups across res
     server=await listen(createCombinedCheckoutHttpHandler({coordinator}));let base=`http://127.0.0.1:${server.address().port}`;
     assert.equal((await post(base,"/api/combined-checkout",request)).status,404);await close(server);
     server=await listen(createCombinedCheckoutHttpHandler({coordinator,enabled:true}));base=`http://127.0.0.1:${server.address().port}`;
-    const created=await (await post(base,"/api/combined-checkout",request)).json();assert.equal(created.status,"session_created");assert.equal(created.amountTotal,125250);assert.equal(stripe.byKey.size,1);await close(server);await store.close();
+    const created=await (await post(base,"/api/combined-checkout",request)).json();assert.equal(created.status,"session_created");assert.equal(created.amountTotal,117350);assert.equal(stripe.byKey.size,1);await close(server);await store.close();
 
     store=createStateStore({statePath});await store.init();coordinator=createCombinedCheckoutCoordinator({store,stripe,previewDependencies:dependencies,clock:()=>request.now});server=await listen(createCombinedCheckoutHttpHandler({coordinator,enabled:true,webhookSecret:secret,now:()=>timestamp}));base=`http://127.0.0.1:${server.address().port}`;
     const retry=await (await post(base,"/api/combined-checkout",request)).json();assert.equal(retry.sessionId,created.sessionId);assert.equal(stripe.byKey.size,1);

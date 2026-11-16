@@ -41,8 +41,8 @@ test("CoastGo shares the Yoga standard tariff and keeps express per board",()=>{
 test("CoastGo and Yoga can share standard shipping while express remains CoastGo-only",()=>{
   const coast=normaliseCheckoutItems([{sku:"AP081165",quantity:1}],catalog);
   const yoga=normaliseCheckoutItems([{sku:"AP734955",quantity:1}],catalog);
-  assert.equal(shippingFor(yoga,"gold-coast-brisbane").amount,2500);
-  assert.equal(shippingFor([...coast,...yoga],"qld-nsw-main").amount,9000);
+  assert.equal(shippingFor(yoga,"gold-coast-brisbane").amount,5000);
+  assert.equal(shippingFor([...coast,...yoga],"qld-nsw-main").amount,9500);
   assert.equal(shippingFor(yoga,"coastgo-express").quoteRequired,true);
   const colours=normaliseCheckoutItems([{sku:"AP081165",quantity:2},{sku:"AP730047",quantity:1}],catalog);
   assert.equal(shippingFor(colours,"qld-nsw-main").amount,13500);
@@ -164,7 +164,7 @@ test("in-stock checkout collects full payment and shipping, pre-fills email and 
   assert.equal(params.get("line_items[0][price_data][product]"),stripeMap.bySku.get("AP734955").productId);
   assert.equal(params.get("line_items[0][price_data][unit_amount]"),"74900");
   assert.equal(params.get("line_items[0][quantity]"),"2");
-  assert.equal(params.get("line_items[1][price_data][unit_amount]"),"5000");
+  assert.equal(params.get("line_items[1][price_data][unit_amount]"),"10000");
   assert.equal(params.get("metadata[aura_payment_stage]"),"paid_in_full");
   assert.equal(params.get("payment_method_types[0]"),null);
   assert.equal(params.get("adaptive_pricing[enabled]"),"false");
@@ -253,23 +253,23 @@ test("multi-SKU pre-order cart is merged; mixed stock and pre-order is rejected"
   assert.equal(params.get("metadata[aura_order_mode]"),"preorder");
 });
 
-test("shipping regions use the approved iSUP and surfboard prices",()=>{
+test("shipping regions use the approved flat per-board prices",()=>{
   const isup=normaliseCheckoutItems([{sku:"AP734955",quantity:1}],catalog);
   assert.throws(()=>shippingFor(isup,"local-pickup"),/region/i);
-  assert.equal(shippingFor(isup,"gold-coast-brisbane").amount,2500);
-  assert.equal(shippingFor(isup,"qld-nsw-main").amount,4500);
-  assert.equal(shippingFor(isup,"canberra-melbourne").amount,4500);
+  assert.equal(shippingFor(isup,"gold-coast-brisbane").amount,5000);
+  assert.equal(shippingFor(isup,"qld-nsw-main").amount,5000);
+  assert.equal(shippingFor(isup,"canberra-melbourne").amount,5000);
   assert.equal(shippingFor(isup,"canberra-melbourne").regionId,"qld-nsw-main");
-  assert.equal(shippingFor(isup,"adelaide").amount,12900);
-  assert.equal(shippingFor(isup,"perth").amount,17900);
-  assert.equal(shippingFor(isup,"tasmania").amount,14900);
+  assert.equal(shippingFor(isup,"adelaide").amount,5000);
+  assert.equal(shippingFor(isup,"perth").amount,5000);
+  assert.equal(shippingFor(isup,"tasmania").amount,5000);
   assert.equal(shippingFor(isup,"remote").quoteRequired,true);
   const gannetVariant=catalog.variants.find(item=>item.slug==="gannet"),gannet=[{variant:gannetVariant,quantity:1}];
-  assert.equal(shippingFor(gannet,"gold-coast-brisbane").amount,7900);
-  assert.equal(shippingFor(gannet,"qld-nsw-main").amount,14900);
+  assert.equal(shippingFor(gannet,"gold-coast-brisbane").amount,15000);
+  assert.equal(shippingFor(gannet,"qld-nsw-main").amount,15000);
   const meridianVariant=catalog.variants.find(item=>item.slug==="meridian"),meridian=[{variant:meridianVariant,quantity:1}];
-  assert.equal(shippingFor(meridian,"perth").amount,27900);
-  assert.equal(shippingFor([{variant:gannetVariant,quantity:2}],"qld-nsw-main").quoteRequired,true);
+  assert.equal(shippingFor(meridian,"perth").amount,25000);
+  assert.equal(shippingFor([{variant:gannetVariant,quantity:2}],"qld-nsw-main").amount,30000);
 });
 
 test("Yoga Cruiser Glacier Blue launch promotion ends at the start of 30 September AEST",()=>{
@@ -278,19 +278,19 @@ test("Yoga Cruiser Glacier Blue launch promotion ends at the start of 30 Septemb
   assert.equal(active.amount,0);
   assert.deepEqual(active.promotionIds,["yoga-glacier-launch-free-shipping"]);
   assert.equal(active.promotionCode,"YOGAFREESHIP");
-  assert.equal(shippingFor(items,"qld-nsw-main",Date.parse("2026-09-26T12:00:00+10:00")).amount,4500);
-  assert.equal(shippingFor(items,"qld-nsw-main",Date.parse("2026-09-26T12:00:00+10:00"),"NOT-A-CODE").amount,4500);
-  assert.equal(shippingFor(items,"adelaide",Date.parse("2026-09-26T12:00:00+10:00")).amount,12900);
-  assert.equal(shippingFor(items,"qld-nsw-main",Date.parse("2026-09-30T00:00:00+10:00"),"YOGAFREESHIP").amount,4500);
+  assert.equal(shippingFor(items,"qld-nsw-main",Date.parse("2026-09-26T12:00:00+10:00")).amount,5000);
+  assert.equal(shippingFor(items,"qld-nsw-main",Date.parse("2026-09-26T12:00:00+10:00"),"NOT-A-CODE").amount,5000);
+  assert.equal(shippingFor(items,"adelaide",Date.parse("2026-09-26T12:00:00+10:00")).amount,5000);
+  assert.equal(shippingFor(items,"qld-nsw-main",Date.parse("2026-09-30T00:00:00+10:00"),"YOGAFREESHIP").amount,5000);
 });
 
 test("in-stock Checkout charges shipping today; quote-required region requires contact",()=>{
   const items=normaliseCheckoutItems([{sku:"AP734955",quantity:1}],catalog),shipping=shippingFor(items,"qld-nsw-main");
   const params=buildCheckoutParams({items,priceBySku:stripeMap.bySku,siteUrl:"http://localhost:4242",returnPath:"/cart-preview.html",shipping});
   assert.equal(params.get("metadata[aura_shipping_region]"),"qld-nsw-main");
-  assert.equal(params.get("metadata[aura_shipping_amount]"),"4500");
+  assert.equal(params.get("metadata[aura_shipping_amount]"),"5000");
   assert.equal(params.get("line_items[0][price_data][unit_amount]"),"74900");
-  assert.equal(params.get("line_items[1][price_data][unit_amount]"),"4500");
+  assert.equal(params.get("line_items[1][price_data][unit_amount]"),"5000");
   assert.match(params.get("custom_text[submit][message]"),/full product price and published shipping/);
   assert.throws(()=>buildCheckoutParams({items,siteUrl:"http://localhost:4242",returnPath:"/cart/",shipping:shippingFor(items,"remote")}),/freight quote/);
   assert.throws(()=>shippingFor(items,"local-pickup"),/region/i);

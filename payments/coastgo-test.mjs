@@ -54,7 +54,7 @@ test('Merchant feed and structured data use launch date and auto-expiring sale',
   }
 });
 
-test('homepage presents both products and common code only during the promotion',()=>{
+test('homepage presents CoastGo-only code during the promotion',()=>{
   let now=promotionStart;
   const nodes=new Map(),events={},timers=[],tracking=[],seen=new Map();
   const node=selector=>{if(!nodes.has(selector))nodes.set(selector,{textContent:'',innerHTML:'',style:{},setAttribute(){},addEventListener(){},after(){},append(){},querySelector(){return {textContent:''}}});return nodes.get(selector)};
@@ -64,8 +64,8 @@ test('homepage presents both products and common code only during the promotion'
   timers.find(t=>t.delay===850).fn();
   assert.equal(modal.open,true);assert.equal(tracking.at(-1).promotion_id,offer.shippingPromotionId);
   assert.match(node('[data-promo-code-copy]').innerHTML,/AURAFREESHIP/);
-  assert.match(node('.preorder-offer__eyebrow').textContent,/COASTGO \+ YOGA/);
-  assert.equal(node('a').href,'products/yoga-cruiser.html?colour=glacier');
+  assert.match(node('.preorder-offer__eyebrow').textContent,/COASTGO · 12–30 NOVEMBER/);
+  assert.equal(node('[data-preorder-offer-shop]').href,'products/coast-go.html');
   now=Date.parse(offer.shippingEndsAt);events.pageshow();assert.equal(modal.open,false);
 });
 
@@ -92,10 +92,10 @@ test('standard-only shipping promotion respects exact dates, quantity, remote an
     }
   }
   const mixed=normaliseCheckoutItems([{sku:offer.skus[0],quantity:1},{sku:'AP734955',quantity:1}],catalog,promotionStart);
-  assert.equal(calculateShipping(mixed,'qld-nsw-main',undefined,promotionStart,"",true).amount,0);
+  assert.equal(calculateShipping(mixed,'qld-nsw-main',undefined,promotionStart,"",true).amount,5000);
   const yoga=normaliseCheckoutItems([{sku:'AP734955',quantity:1}],catalog,promotionStart);
-  assert.equal(calculateShipping(yoga,'gold-coast-brisbane',undefined,promotionStart,"",true).amount,0);
-  assert.equal(calculateShipping(yoga,'gold-coast-brisbane',undefined,promotionStart,"",false).amount,2500);
+  assert.equal(calculateShipping(yoga,'gold-coast-brisbane',undefined,promotionStart,"",true).amount,5000);
+  assert.equal(calculateShipping(yoga,'gold-coast-brisbane',undefined,promotionStart,"",false).amount,5000);
 });
 
 test('free standard shipping is recorded once on a genuine paid webhook payload, not inferred from today',()=>{
@@ -119,23 +119,22 @@ test('full-payment CoastGo confirmation and tracking never promise one-day dispa
   assert.match(orderProgress(entry)[1].description,/from release/);
 });
 
-test('Yoga free shipping covers both approved zones and aliases, preserves other products and expiry',()=>{
+test('Yoga uses the new flat rate and never inherits the CoastGo promotion',()=>{
   const end=Date.parse(offer.shippingEndsAt);
   for(const sku of offer.yogaSkus)for(const quantity of [1,2]){
     const items=normaliseCheckoutItems([{sku,quantity}],catalog,promotionStart);
     for(const region of offer.yogaRegionIds){
       const shipping=calculateShipping(items,region,undefined,promotionStart,offer.shippingCode,true);
-      assert.equal(shipping.amount,0);assert.equal(shipping.promotionCode,offer.shippingCode);
+      assert.equal(shipping.amount,5000*quantity);assert.equal(shipping.promotionCode,'');
       const params=buildCheckoutParams({items,shipping,siteUrl:'http://localhost',now:promotionStart/1000});
-      assert.equal(params.get('metadata[aura_shipping_amount]'),'0');
-      assert.equal(params.get('metadata[aura_shipping_promotion_id]'),offer.shippingPromotionId);
-      assert.equal(params.get('metadata[aura_promotion_code]'),offer.shippingCode);
-      assert.equal(params.get('line_items[1][price_data][unit_amount]'),null);
+      assert.equal(params.get('metadata[aura_shipping_amount]'),String(5000*quantity));
+      assert.equal(params.get('metadata[aura_shipping_promotion_id]'),'');
+      assert.equal(params.get('metadata[aura_promotion_code]'),'');
     }
-    assert.equal(calculateShipping(items,'adelaide',undefined,promotionStart,"",false).amount,12900*quantity);
+    assert.equal(calculateShipping(items,'adelaide',undefined,promotionStart,"",false).amount,5000*quantity);
     assert.equal(calculateShipping(items,'remote',undefined,promotionStart,"",false).quoteRequired,true);
-    assert.equal(calculateShipping(items,'gold-coast-brisbane',undefined,end).amount,2500*quantity);
-    assert.equal(calculateShipping(items,'qld-nsw-main',undefined,end).amount,4500*quantity);
+    assert.equal(calculateShipping(items,'gold-coast-brisbane',undefined,end).amount,5000*quantity);
+    assert.equal(calculateShipping(items,'qld-nsw-main',undefined,end).amount,5000*quantity);
   }
   const others=normaliseCheckoutItems([{sku:'AP667703',quantity:1}],catalog,promotionStart);
   assert.equal(calculateShipping(others,'gold-coast-brisbane',undefined,promotionStart,"",true).quoteRequired,true);
@@ -148,7 +147,8 @@ test('withdrawn shipping promotion restores only existing tariffs and drops new 
     assert.equal(offer.freeShippingActive(time),false);
     for(const sku of [...offer.skus,...offer.yogaSkus])for(const quantity of [1,2]){
       const items=normaliseCheckoutItems([{sku,quantity}],catalog,promotionStart);
-      const cases=[['gold-coast-brisbane',2500],['qld-nsw-main',4500],['canberra-melbourne',4500],['adelaide',12900],['perth',17900],['tasmania',14900],...(offer.isCoastGo(sku)?[['coastgo-express',12000]]:[])];
+      const base=offer.isCoastGo(sku)?[['gold-coast-brisbane',2500],['qld-nsw-main',4500],['canberra-melbourne',4500],['adelaide',12900],['perth',17900],['tasmania',14900]]:[['gold-coast-brisbane',5000],['qld-nsw-main',5000],['canberra-melbourne',5000],['adelaide',5000],['perth',5000],['tasmania',5000]];
+      const cases=[...base,...(offer.isCoastGo(sku)?[['coastgo-express',12000]]:[])];
       for(const [region,amount] of cases){
         const shipping=calculateShipping(items,region,undefined,time,offer.shippingCode,true);
         assert.equal(shipping.amount,amount*quantity,`${sku} ${region}`);
@@ -165,5 +165,5 @@ test('withdrawn shipping promotion restores only existing tariffs and drops new 
   }
   const feed=renderCoastGoFeed(fs.readFileSync(new URL('../merchant-feed.xml',import.meta.url),'utf8'),now);
   for(const item of feed.match(/<item>[\s\S]*?<\/item>/g).filter(i=>offer.skus.some(sku=>i.includes(`<g:id>${sku}</g:id>`))))assert.doesNotMatch(item,/<g:shipping>/);
-  assert.match(fs.readFileSync(new URL('../policies/index.html',import.meta.url),'utf8'),/12–30 November 2026 selected-metro offer/);
+  assert.match(fs.readFileSync(new URL('../policies/index.html',import.meta.url),'utf8'),/12–30 November 2026 CoastGo selected-metro offer/);
 });
