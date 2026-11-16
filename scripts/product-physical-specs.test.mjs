@@ -54,3 +54,17 @@ test("the inflatable comparison shows weights and packed-bag dimensions for all 
     assert.ok(card.includes(`Packed bag dimensions</b><span>${display[2]}`));
   }
 });
+
+test("Yoga Cruiser width copy identifies the 36 inches as whole-board width",()=>{
+  const home=fs.readFileSync(path.join(root,"index.html"),"utf8");
+  const {html,product}=page("yoga-cruiser");
+  const generator=fs.readFileSync(path.join(root,"scripts","build-products.mjs"),"utf8");
+  const feed=fs.readFileSync(path.join(root,"merchant-feed.xml"),"utf8");
+  for(const text of [home,html,JSON.stringify(product),generator,feed]){
+    assert.doesNotMatch(text,/36-inch-wide deck|36-inch deck|wide 36in deck/);
+  }
+  assert.match(home,/Yoga Cruiser · 36-inch-wide board/);
+  assert.match(html,/Its 36-inch-wide board — about 91 cm/);
+  assert.equal(product.why,"The 36-inch-wide board and 285-litre volume create a steady, usable deck for movement, balance and easy-paced paddling.");
+  assert.match(feed,/Stable 36-inch-wide board/);
+});

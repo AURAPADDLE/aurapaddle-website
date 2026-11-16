@@ -124,7 +124,7 @@ for(const product of products){
 }
 
 const metaDescriptions={
-  "yoga-cruiser":"Compare the 11ft AURA PADDLE Yoga Cruiser yoga SUP board, with a wide 36in deck, 180kg maximum capacity and complete inflatable paddle board kit.",
+  "yoga-cruiser":"Compare the 11ft AURA PADDLE Yoga Cruiser yoga SUP board, with a 36in-wide board, 180kg maximum capacity and complete inflatable paddle board kit.",
   "angler-fishing":"A stable 12ft inflatable fishing SUP with 220kg capacity, rod and rack mounts, four colours and Australia-wide delivery.",
   "touring-performance":"A streamlined 14ft touring iSUP for tracking, distance and efficient glide, available in four colours across Australia.",
   "coast-go":"An approachable 10ft 6in all-round inflatable SUP package for beginners, weekends and easy transport across Australia.",
@@ -158,7 +158,7 @@ const productCopy={
     description:"A 36-inch-wide inflatable SUP created for yoga, gentle movement and relaxed cruising. Its broad padded deck provides generous usable room while the 11-foot, 285-litre format supports easy-paced paddling.",
     bestFor:"SUP yoga, paddlers who value generous deck space, relaxed family outings where people take turns, and easy-paced cruising.",
     notFor:"Choose another board if outright touring speed, a narrow race-style feel or dedicated fishing mounts matter more than deck space and stability.",
-    why:"The 36-inch platform and 285-litre volume create a steady, usable deck for movement, balance and easy-paced paddling."
+    why:"The 36-inch-wide board and 285-litre volume create a steady, usable deck for movement, balance and easy-paced paddling."
   },
   "angler-fishing":{
     description:"A purpose-built fishing iSUP with the stability, carrying capacity and mounting options to organise a more capable day on the water. The open working deck accommodates tackle and equipment, while dedicated rod, rack and action-camera mounts keep essential gear within reach.",
@@ -589,7 +589,7 @@ const feedItems=paymentCatalogue.filter(item=>item.kind!=="accessory").map(item=
   const availabilityDate=item.orderMode==="preorder"?merchantAvailabilityDate(item.campaign?.estimatedDelivery):"";
   const isGlacierHero=item.sku==="AP734955";
   const title=isGlacierHero?"AURA PADDLE Yoga Cruiser 11ft Inflatable SUP — Glacier Blue — In Stock":`${item.productName} — ${item.size} — ${item.colour}`;
-  const description=isGlacierHero?"Glacier Blue is in stock. Stable 36-inch deck for SUP yoga, beginners and family paddling. Complete kit. Dispatch within 1 business day after payment; delivery transit time varies by destination.":(product?.metaDescription||item.description);
+  const description=isGlacierHero?"Glacier Blue is in stock. Stable 36-inch-wide board for SUP yoga, beginners and family paddling. Complete kit. Dispatch within 1 business day after payment; delivery transit time varies by destination.":(product?.metaDescription||item.description);
   const labels=isGlacierHero?"<g:custom_label_0>Yoga Hero</g:custom_label_0><g:custom_label_1>In Stock</g:custom_label_1><g:shipping_label>yoga_glacier_in_stock</g:shipping_label>":"";
   const coastGoSale=item.slug==="coast-go"?"<g:sale_price_effective_date>2026-09-15T00:00:00+10:00/2026-10-08T23:59:59+10:00</g:sale_price_effective_date>":"";
   return `<item><g:id>${xml(item.sku)}</g:id><title>${xml(title)}</title><description>${xml(description)}</description><link>${xml(item.productUrl)}</link><g:image_link>${xml(image)}</g:image_link>${additionalImages}<g:availability>${item.available?"in_stock":"preorder"}</g:availability>${availabilityDate?`<g:availability_date>${availabilityDate}</g:availability_date>`:""}<g:price>${(item.retailAmount/100).toFixed(2)} AUD</g:price><g:sale_price>${(item.checkoutAmount/100).toFixed(2)} AUD</g:sale_price>${coastGoSale}<g:brand>AURA PADDLE</g:brand><g:condition>new</g:condition><g:color>${xml(item.colour)}</g:color><g:size>${xml(item.size)}</g:size>${labels}<g:identifier_exists>yes</g:identifier_exists></item>`;
