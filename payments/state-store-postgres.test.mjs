@@ -50,7 +50,7 @@ test('real PostgreSQL state integrity and explicit bootstrap', {skip:!testUrl}, 
       assert.deepEqual((await normal.read()).extension,legacy.extension);
     });
     await t.test('invalid core and optional container types fail without rewriting data',async()=>{
-      const optional=['reservations','checkoutRequests','checkoutBlocks','analyticsOutbox','abandonedCheckouts','recoveryEmailOutbox','recoverySuppressions','transactionalEmailOutbox','reviews','reviewNotificationOutbox','analyticsAmountIssues','metaPurchaseReceipts','newsletter','inventory','combinedCheckoutRequests','combinedOrders','combinedPaymentEvents','combinedProviderEvents','combinedPaymentReviews','combinedRefundEvents','combinedBalanceEvents'];
+      const optional=['reservations','checkoutRequests','checkoutBlocks','analyticsOutbox','abandonedCheckouts','recoveryEmailOutbox','recoverySuppressions','transactionalEmailOutbox','reviews','reviewNotificationOutbox','analyticsAmountIssues','metaPurchaseReceipts','newsletter','inventory','combinedCheckoutIdentities','combinedCheckoutRequests','combinedOrders','combinedPaymentEvents','combinedProviderEvents','combinedPaymentReviews','combinedRefundEvents','combinedBalanceEvents'];
       const invalid=[{}, {orders:{}}, {events:{}}];
       for(const key of ['orders','events',...optional])for(const value of [[],null,'invalid',0,true])invalid.push({orders:{},events:{},[key]:value});
       for(const key of ['contacts','events','drafts'])for(const value of [[],null,'invalid'])invalid.push({orders:{},events:{},newsletter:{contacts:{},events:{},drafts:{},[key]:value}});

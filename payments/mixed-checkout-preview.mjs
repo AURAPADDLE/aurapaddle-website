@@ -23,7 +23,7 @@ export function previewMixedCheckout(input={},dependencies={}){
   let stockShipping=null,shippingStatus="not_required",shippingEvidence=null;
   if(stock.length){
     if(!coverage)return {enabled:true,status:"manual_quote",reason:"coverage_unavailable",todayTotal:null,groups:rules,shippingStatus:"manual_quote"};
-    const resolution=resolveDeliveryLocation(input.deliveryLocation,coverage,rates);shippingEvidence={status:resolution.status,coverageVersion:resolution.coverageVersion};
+    const resolution=resolveDeliveryLocation(input.deliveryLocation,coverage,rates);shippingEvidence={status:resolution.status,coverageVersion:resolution.coverageVersion,location:resolution.location||null};
     if(resolution.status!=="verified")return {enabled:true,status:"manual_quote",reason:resolution.status,todayTotal:null,groups:rules,shippingStatus:"manual_quote",shippingEvidence};
     const regionId=shippingRegionForItems(resolution,stock,{deliveryService:String(input.deliveryService||"standard")});
     if(!regionId)return {enabled:true,status:"manual_quote",reason:"unsupported_stock_combination",todayTotal:null,groups:rules,shippingStatus:"manual_quote",shippingEvidence};

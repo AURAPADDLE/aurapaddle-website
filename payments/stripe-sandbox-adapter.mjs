@@ -8,8 +8,9 @@ export function createStripeSandboxAdapter({client,successUrl="http://127.0.0.1:
     async createCheckoutSession(request){
       if(String(request.currency||"").toLowerCase()!=="aud")throw Error("Sandbox fixture only permits AUD.");
       const groups=Array.isArray(request.groups)?request.groups:[];
-      if(groups.length<2||groups.some(group=>!Number.isSafeInteger(group.amount)||group.amount<=0))throw Error("A valid mixed-cart group breakdown is required.");
-      if(groups.reduce((sum,group)=>sum+group.amount,0)!==request.amountTotal)throw Error("Group amounts must equal the combined amount due today.");
+      const amount=group=>Number.isSafeInteger(group.amount)?group.amount:Number(group.productDueToday||0)+Number(group.shippingDueToday||0);
+      if(groups.length<2||groups.some(group=>!Number.isSafeInteger(amount(group))||amount(group)<=0))throw Error("A valid mixed-cart group breakdown is required.");
+      if(groups.reduce((sum,group)=>sum+amount(group),0)!==request.amountTotal)throw Error("Group amounts must equal the combined amount due today.");
       const params={
         mode:"payment",
         success_url:successUrl,
@@ -20,7 +21,7 @@ export function createStripeSandboxAdapter({client,successUrl="http://127.0.0.1:
           quantity:1,
           price_data:{
             currency:"aud",
-            unit_amount:group.amount,
+            unit_amount:amount(group),
             product_data:{name:`AURA synthetic mixed-cart group ${index+1}`,metadata:{aura_group:clean(group.id)}}
           }
         })),

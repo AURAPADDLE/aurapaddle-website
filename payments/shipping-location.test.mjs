@@ -83,6 +83,21 @@ test("generated geography covers reviewed metro areas and excludes rural or ambi
   assert.match(generated.boundaryPolicy,/statistical approximations/i);
 });
 
+test("shared postcodes and leading zeroes never substitute for the exact approved triplet",()=>{
+  const generated=JSON.parse(fs.readFileSync(new URL("./shipping-coverage.review.json",import.meta.url),"utf8"));
+  const hume=resolveDeliveryLocation({suburb:"Hume",state:"ACT",postcode:"2620"},generated,rates);
+  assert.equal(hume.status,"verified");assert.equal(hume.auraArea,"canberra");
+  for(const location of [
+    {suburb:"Hume",state:"NSW",postcode:"2620"},
+    {suburb:"Queanbeyan",state:"ACT",postcode:"2620"},
+    {suburb:"Williamsdale",state:"ACT",postcode:"2620"},
+    {suburb:"Williamsdale",state:"NSW",postcode:"2620"},
+    {suburb:"Alice Springs",state:"NT",postcode:"0870"}
+  ])assert.equal(resolveDeliveryLocation(location,generated,rates).status,"manual_quote",JSON.stringify(location));
+  const robina=resolveDeliveryLocation({suburb:"Robina",state:"QLD",postcode:"4226"},generated,rates);
+  assert.equal(robina.status,"verified");assert.equal(robina.freeShippingEligible,true);
+});
+
 test("production enforcement rejects a draft or empty carrier table",()=>{
   assert.deepEqual(assertShippingValidationConfiguration("off",{status:"draft",locations:[]}),{mode:"off",coverageStatus:"draft",reviewedLocations:0});
   assert.deepEqual(assertShippingValidationConfiguration("draft",{status:"draft",locations:[]}),{mode:"draft",coverageStatus:"draft",reviewedLocations:0});

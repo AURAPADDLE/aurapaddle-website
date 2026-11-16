@@ -1,0 +1,23 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import crypto from "node:crypto";
+import {reserveCombinedIdentity} from "./catalog-combined-ledger.mjs";
+import {createStripeCombinedAdapter} from "./stripe-combined-adapter.mjs";
+
+test("combined identity is server-generated, stable and email-bound",()=>{
+  const state={orders:{legacy:{orderNumber:"APO12345"}},reservations:{APO54321:1}},bytes=n=>Buffer.alloc(n,7),next=[12345,54321,67890];
+  const identity=reserveCombinedIdentity(state,{requestId:"combined-identity-1",customerEmail:" Test@Example.com ",now:10,randomInt:()=>next.shift(),randomBytes:bytes});
+  assert.equal(identity.orderNumber,"APO67890");assert.equal(identity.customerEmail,"test@example.com");assert.match(identity.trackingToken,/^[A-Za-z0-9_-]{16,}$/);assert.match(identity.integrationIdentifier,/^aura_mix_[a-z]{8}$/);
+  assert.deepEqual(reserveCombinedIdentity(state,{requestId:"combined-identity-1",customerEmail:"test@example.com",now:20,randomInt:()=>1,randomBytes:bytes}),identity);
+  assert.throws(()=>reserveCombinedIdentity(state,{requestId:"combined-identity-1",customerEmail:"other@example.com",randomInt:()=>1,randomBytes:bytes}),/different email/);
+});
+
+test("production adapter creates one exact mixed Session without automatic later charges",async()=>{
+  const calls=[],stripeRequest=async(path,options)=>{calls.push({path,options});return {id:"cs_test_combined1",url:"https://checkout.stripe.test/combined"}},adapter=createStripeCombinedAdapter({stripeRequest,siteUrl:"https://www.aurapaddle.com"});
+  const result=await adapter.createCheckoutSession({amountTotal:125250,currency:"aud",idempotencyKey:"aura-combined-fixture",customerEmail:"test@example.com",metadata:{aura_combined_request:"combined-fixture",aura_parent_order:"APO12345",aura_tracking_token:crypto.randomBytes(24).toString("base64url"),aura_integration_identifier:"aura_mix_abcdefgh"},groups:[{kind:"stock",items:[{sku:"AP734955",quantity:1,dueTodayUnitAmount:74900}],shippingDueToday:12900},{kind:"delayed",items:[{sku:"AP505002",quantity:1,dueTodayUnitAmount:37450}],shippingDueToday:0,remainingProductBalance:37450}]});
+  assert.equal(result.id,"cs_test_combined1");assert.equal(calls.length,1);const params=calls[0].options.body;assert.equal(calls[0].path,"/v1/checkout/sessions");assert.equal(calls[0].options.headers["Idempotency-Key"],"aura-combined-fixture");assert.deepEqual([...params.entries()].filter(([key])=>/unit_amount\]$/.test(key)).map(([,value])=>Number(value)),[74900,12900,37450]);assert.equal(params.get("after_expiration[recovery][enabled]"),"false");assert.equal(params.get("allow_promotion_codes"),"false");assert.equal(params.has("payment_method_types[0]"),false);assert.equal(params.has("invoice_creation[enabled]"),false);assert.match(params.get("success_url"),/checkout-combined-success\.html/);assert.match(params.get("custom_text[submit][message]"),/not charged automatically/);
+});
+
+test("production adapter rejects line tampering before Stripe",async()=>{
+  let called=false;const adapter=createStripeCombinedAdapter({siteUrl:"https://www.aurapaddle.com",stripeRequest:async()=>{called=true}}),request={amountTotal:10000,currency:"aud",customerEmail:"test@example.com",metadata:{aura_parent_order:"APO12345",aura_integration_identifier:"aura_mix_abcdefgh"},groups:[{kind:"stock",items:[{sku:"AP734955",quantity:1,dueTodayUnitAmount:9999}],shippingDueToday:0}]};await assert.rejects(()=>adapter.createCheckoutSession(request),/do not match/);assert.equal(called,false)
+});

@@ -36,7 +36,10 @@ test("default-off HTTP adapter persists one parent payment and groups across res
 
     store=createStateStore({statePath});await store.init();coordinator=createCombinedCheckoutCoordinator({store,stripe,previewDependencies:dependencies});server=await listen(createCombinedCheckoutHttpHandler({coordinator,enabled:true,webhookSecret:secret,now:()=>timestamp}));base=`http://127.0.0.1:${server.address().port}`;
     const retry=await (await post(base,"/api/combined-checkout",request)).json();assert.equal(retry.sessionId,created.sessionId);assert.equal(stripe.byKey.size,1);
-    const paid={id:"evt_persist_paid",type:"checkout.session.completed",created:100,data:{object:{id:created.sessionId,payment_status:"paid",amount_total:created.amountTotal,currency:"aud",metadata:{aura_combined_request:request.requestId}}}};
+    const paid={
+      id:"evt_persist_paid",type:"checkout.session.completed",created:100,
+      data:{object:{id:created.sessionId,payment_status:"paid",amount_total:created.amountTotal,currency:"aud",metadata:{aura_combined_request:request.requestId},shipping_details:{address:{city:"Adelaide",state:"SA",postal_code:"5000",country:"AU"}}}}
+    };
     assert.equal((await post(base,"/api/combined-checkout/webhook",paid)).status,400);
     assert.equal((await post(base,"/api/combined-checkout/webhook",paid,signature(paid,{key:"wrong_local_secret"}))).status,400);
     assert.equal((await post(base,"/api/combined-checkout/webhook",paid,signature(paid,{at:timestamp-301}))).status,400);
