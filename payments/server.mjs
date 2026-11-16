@@ -219,15 +219,15 @@ async function shippingQuote(req,res){
   const body=JSON.parse((await readBody(req,100_000)).toString("utf8")||"{}");
   if(shippingValidationMode==="off")return send(res,503,{error:"Address-based freight validation is not enabled."});
   const rawItems=Array.isArray(body.items)?body.items:[];
-  const items=normaliseCheckoutItems(rawItems,catalog);
+  const items=normaliseCheckoutItems(rawItems,catalog,Date.now(),{allowMixed:combinedCheckoutEnabled});
   if(!coastGoOffer.shippingLocationValidationRequired(items,Date.now()))return send(res,400,{error:"The selected-metro address check is not required for this cart or date."});
   const resolution=resolveDeliveryLocation(body.deliveryLocation,shippingCoverage,shippingRates);
   if(resolution.status==="invalid")return send(res,400,{error:resolution.error,status:resolution.status});
   if(resolution.status!=="verified")return send(res,200,{status:resolution.status,quoteRequired:true,location:resolution.location,coverageVersion:resolution.coverageVersion});
-  const deliveryService=String(body.deliveryService||"standard"),regionId=shippingRegionForItems(resolution,items,{deliveryService});
+  const deliveryService=String(body.deliveryService||"standard"),shippingItems=combinedCheckoutEnabled&&items.some(item=>item.variant.orderMode==="available")&&items.some(item=>item.variant.orderMode==="preorder")?items.filter(item=>item.variant.orderMode==="available"):items,regionId=shippingRegionForItems(resolution,shippingItems,{deliveryService});
   if(!regionId)return send(res,200,{status:"manual_quote",quoteRequired:true,location:resolution.location,coverageVersion:resolution.coverageVersion});
   const promotionAddressVerified=resolution.freeShippingEligible&&deliveryService==="standard";
-  const shipping=calculateShipping(items,regionId,shippingRates,Date.now(),String(body.promoCode||"").trim().toUpperCase(),promotionAddressVerified);
+  const shipping=calculateShipping(shippingItems,regionId,shippingRates,Date.now(),String(body.promoCode||"").trim().toUpperCase(),promotionAddressVerified);
   send(res,200,{status:"verified",quoteRequired:shipping.quoteRequired,location:resolution.location,coverageVersion:resolution.coverageVersion,auraArea:resolution.auraArea,auraAreaLabel:resolution.auraAreaLabel,freeShippingEligible:resolution.freeShippingEligible,coastGoExpressEligible:resolution.coastGoExpressEligible,shipping:{regionId:shipping.regionId,label:shipping.label,amount:shipping.amount,quoteRequired:shipping.quoteRequired,promotionApplied:shipping.promotionApplied===true,promotionCode:shipping.promotionCode||""}});
 }
 async function sessionSummary(req,res,url){

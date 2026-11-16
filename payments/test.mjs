@@ -242,6 +242,7 @@ test("pre-order checkout applies the AUD 50 incentive and collects exactly 50%",
 
 test("multi-SKU pre-order cart is merged; mixed stock and pre-order is rejected",()=>{
   assert.throws(()=>normaliseCheckoutItems([{sku:"AP734955",quantity:1},{sku:"AP233694",quantity:1}],catalog),/separate orders/);
+  assert.deepEqual(normaliseCheckoutItems([{sku:"AP734955",quantity:1},{sku:"AP233694",quantity:1}],catalog,Date.now(),{allowMixed:true}).map(item=>item.variant.orderMode),["available","preorder"]);
   const items=normaliseCheckoutItems([{sku:"AP505002",quantity:1},{sku:"AP233694",quantity:2},{sku:"AP233694",quantity:1}],catalog);
   assert.equal(items.length,2);assert.equal(items[1].quantity,3);
   const params=buildCheckoutParams({items,priceBySku:stripeMap.bySku,siteUrl:"http://localhost:4242",returnPath:"/cart-preview.html",shipping:shippingFor(items)});

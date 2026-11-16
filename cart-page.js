@@ -228,13 +228,15 @@
     }
     document.getElementById("itemCount").textContent=String(cart.count(items));
     document.getElementById("subtotal").textContent=money(subtotal+coastDiscount);
-    document.getElementById("orderTotal").textContent=!shipping.selected?`${money(subtotal)} + shipping`:shipping.quoteRequired?`${money(subtotal)} + freight quote`:money(subtotal+Number(shipping.total||0));
+    document.getElementById("orderTotal").textContent=combinedEnabled?(!stockShipping.selected?`${money(subtotal)} + shipping`:stockShipping.quoteRequired?`${money(subtotal)} + freight quote`:`${money(subtotal+Number(stockShipping.total||0))} + pre-order shipping`):!shipping.selected?`${money(subtotal)} + shipping`:shipping.quoteRequired?`${money(subtotal)} + freight quote`:money(subtotal+Number(shipping.total||0));
     document.getElementById("dueToday").textContent=availableOnly&&!shipping.selected?`${money(dueToday)} + shipping`:availableOnly&&shipping.quoteRequired?`${money(dueToday)} + quote`:money(dueToday);
     document.getElementById("remainingBalance").textContent=money(remaining);
     document.getElementById("mixedNotice").hidden=!(hasPreorder&&hasAvailable);
     const shippingAmount=document.getElementById("shippingAmount");
     const beforeDispatch=document.getElementById("beforeDispatch");
     const shippingHelp=document.getElementById("shippingHelp");
+    shippingAmount.previousElementSibling.textContent=combinedEnabled?"In-stock shipping due today":"Shipping fee";
+    beforeDispatch.previousElementSibling.textContent=combinedEnabled?"Pre-order amount before dispatch":"Total due before dispatch";
     if(!shipping.selected){
       shippingAmount.textContent="Select region";
       beforeDispatch.textContent="Select region";
@@ -263,6 +265,11 @@
         ?`${shipping.promotionApplied?"AURAFREESHIP applied to standard delivery for this verified selected-metro address. ":""}${coastGoDelivery}Rate per board. Unsure of coverage? Contact us before ordering.`
         :"Glacier Blue dispatches within 1 business day after payment. Delivery transit time is additional.";
       if(shipping.details)paymentNote.textContent+=` Delivery coverage: ${shipping.details}`;
+    }
+    if(combinedEnabled&&stockShipping.selected&&!stockShipping.quoteRequired){
+      shippingAmount.textContent=stockShipping.promotionApplied&&stockShipping.total===0?"Free — promo applied":money(stockShipping.total);
+      beforeDispatch.textContent=`${money(remaining)} + confirmed pre-order shipping`;
+      shippingHelp.textContent=`${stockShipping.total?`${money(stockShipping.total)} in-stock shipping is included in today's payment. `:"In-stock standard shipping is free for this verified address. "}Pre-order shipping is confirmed and paid with that group's remaining product balance before its later dispatch.`;
     }
     const promoValid=appliedPromoCode===yogaLaunchPromotion.code&&shipping.promotionApplied;
     promoHelp.className=promoValid?"success":autoPromoPending?"":appliedPromoCode?"error":"";

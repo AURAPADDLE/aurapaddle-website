@@ -220,7 +220,7 @@ export function reserveCheckoutIdentity(state,{requestId,attribution,customerEma
   return {orderNumber,trackingToken,integrationIdentifier:identity.integrationIdentifier};
 }
 
-export function normaliseCheckoutItems(rawItems,catalog,now=Date.now()){
+export function normaliseCheckoutItems(rawItems,catalog,now=Date.now(),options={}){
   if(!Array.isArray(rawItems)||rawItems.length<1||rawItems.length>20)throw new Error("A cart must contain between 1 and 20 distinct products.");
   const merged=new Map();
   for(const raw of rawItems){
@@ -235,7 +235,7 @@ export function normaliseCheckoutItems(rawItems,catalog,now=Date.now()){
     merged.set(sku,{variant,quantity:(merged.get(sku)?.quantity||0)+quantity});
   }
   let items=[...merged.values()];
-  if(items.some(item=>item.variant.orderMode==="available")&&items.some(item=>item.variant.orderMode==="preorder"))throw new Error("Place in-stock and pre-order products in separate orders.");
+  if(options.allowMixed!==true&&items.some(item=>item.variant.orderMode==="available")&&items.some(item=>item.variant.orderMode==="preorder"))throw new Error("Place in-stock and pre-order products in separate orders.");
   if(items.some(item=>item.quantity>20))throw new Error("A single SKU cannot exceed 20 boards per online order.");
   if(items.reduce((sum,item)=>sum+item.quantity,0)>50)throw new Error("An online cart cannot exceed 50 boards. Contact AURA PADDLE for a larger order.");
   const anglerQuantity=items.filter(item=>item.variant.slug==="angler-fishing").reduce((sum,item)=>sum+item.quantity,0);
