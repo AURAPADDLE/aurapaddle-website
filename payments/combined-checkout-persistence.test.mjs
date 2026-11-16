@@ -28,13 +28,13 @@ test("default-off HTTP adapter persists one parent payment and groups across res
   const dir=fs.mkdtempSync(path.join(os.tmpdir(),"aura-combined-persist-")),statePath=path.join(dir,"state.json"),stripe=new PersistentStripeStub();
   let store=createStateStore({statePath}),coordinator,server;
   try{
-    await store.init();await store.mutate(state=>{state.inventoryAvailable={AP734955:1}});coordinator=createCombinedCheckoutCoordinator({store,stripe,previewDependencies:dependencies});
+    await store.init();await store.mutate(state=>{state.inventoryAvailable={AP734955:1}});coordinator=createCombinedCheckoutCoordinator({store,stripe,previewDependencies:dependencies,clock:()=>request.now});
     server=await listen(createCombinedCheckoutHttpHandler({coordinator}));let base=`http://127.0.0.1:${server.address().port}`;
     assert.equal((await post(base,"/api/combined-checkout",request)).status,404);await close(server);
     server=await listen(createCombinedCheckoutHttpHandler({coordinator,enabled:true}));base=`http://127.0.0.1:${server.address().port}`;
     const created=await (await post(base,"/api/combined-checkout",request)).json();assert.equal(created.status,"session_created");assert.equal(created.amountTotal,125250);assert.equal(stripe.byKey.size,1);await close(server);await store.close();
 
-    store=createStateStore({statePath});await store.init();coordinator=createCombinedCheckoutCoordinator({store,stripe,previewDependencies:dependencies});server=await listen(createCombinedCheckoutHttpHandler({coordinator,enabled:true,webhookSecret:secret,now:()=>timestamp}));base=`http://127.0.0.1:${server.address().port}`;
+    store=createStateStore({statePath});await store.init();coordinator=createCombinedCheckoutCoordinator({store,stripe,previewDependencies:dependencies,clock:()=>request.now});server=await listen(createCombinedCheckoutHttpHandler({coordinator,enabled:true,webhookSecret:secret,now:()=>timestamp}));base=`http://127.0.0.1:${server.address().port}`;
     const retry=await (await post(base,"/api/combined-checkout",request)).json();assert.equal(retry.sessionId,created.sessionId);assert.equal(stripe.byKey.size,1);
     const paid={
       id:"evt_persist_paid",type:"checkout.session.completed",created:100,

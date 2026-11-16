@@ -15,11 +15,11 @@ function verify(raw,header,secret,now=Math.floor(Date.now()/1000)){
 
 // Deliberately not wired into production server.mjs. This adapter exists only for
 // non-production integration until the parent/group schema and Stripe test flow pass review.
-export function createCombinedCheckoutHttpHandler({coordinator,enabled=false,webhookSecret="",now}={}){
+export function createCombinedCheckoutHttpHandler({coordinator,enabled=false,webhookSecret="",allowedOrigin="",now}={}){
   if(!coordinator?.createSession||!coordinator?.applyWebhook)throw Error("Combined checkout coordinator is required.");
   return async(req,res)=>{
     try{
-      if(req.method==="POST"&&req.url==="/api/combined-checkout"){if(enabled!==true)return json(res,404,{error:"Not found."});return json(res,200,await coordinator.createSession(parse(await body(req))))}
+      if(req.method==="POST"&&req.url==="/api/combined-checkout"){if(enabled!==true)return json(res,404,{error:"Not found."});if(allowedOrigin&&req.headers.origin&&req.headers.origin!==allowedOrigin)return json(res,403,{error:"Checkout requests must come from the AURA PADDLE website."});if(!String(req.headers["content-type"]||"").startsWith("application/json"))return json(res,415,{error:"JSON required."});return json(res,200,await coordinator.createSession(parse(await body(req))))}
       if(req.method==="GET"&&req.url.startsWith("/api/combined-checkout-session?")){const url=new URL(req.url,"http://localhost");return json(res,200,await coordinator.sessionSummary(url.searchParams.get("id")))}
       if(req.method==="POST"&&req.url==="/api/combined-checkout/webhook"){const raw=await body(req);if(!verify(raw,req.headers["stripe-signature"],webhookSecret,now?.()))return json(res,400,{error:"Webhook signature verification failed."});return json(res,200,await coordinator.applyWebhook(parse(raw)))}
       return json(res,404,{error:"Not found."});

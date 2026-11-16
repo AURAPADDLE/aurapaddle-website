@@ -112,7 +112,7 @@ async function stripeRequest(apiPath,options={}){
 }
 const combinedStripe=createStripeCombinedAdapter({stripeRequest,siteUrl});
 const combinedCoordinator=createCombinedCheckoutCoordinator({store,stripe:combinedStripe,previewDependencies:{catalog,rates:shippingRates,coverage:shippingCoverage,availabilityForState:state=>new Map(publicAvailability(state).items.map(item=>[item.sku,item.available]))},identityFactory:(state,input)=>reserveCombinedIdentity(state,{requestId:input.requestId,customerEmail:input.customerEmail,now:input.now,randomInt:crypto.randomInt,randomBytes:crypto.randomBytes})});
-const combinedHttp=createCombinedCheckoutHttpHandler({coordinator:combinedCoordinator,enabled:combinedCheckoutEnabled});
+const combinedHttp=createCombinedCheckoutHttpHandler({coordinator:combinedCoordinator,enabled:combinedCheckoutEnabled,allowedOrigin:new URL(siteUrl).origin});
 function assertOrderInvoiceConfiguration(){
   if(!orderInvoicesEnabled)throw new Error("Stripe order invoices are not enabled.");
   if(!/^txr_[A-Za-z0-9]+$/.test(gstTaxRateId))throw new Error("STRIPE_GST_TAX_RATE_ID must identify the active 10% inclusive Australian GST tax rate.");
