@@ -25,8 +25,8 @@ export function createStripeCombinedAdapter({stripeRequest,siteUrl,taxRateId=""}
       for(const [kind,lineAmount,description] of [["product_balance",productBalance,`${orderNumber} — remaining pre-order product balance`],["shipping",shipping,`${orderNumber} — confirmed pre-order shipping`]]){if(!lineAmount)continue;const line=new URLSearchParams({customer:customerId,invoice:invoice.id,currency:"aud",amount:String(lineAmount),description});line.append("tax_rates[]",taxRateId);for(const [key,value] of Object.entries({aura_combined_request:requestId,aura_group_id:groupId,aura_parent_order:orderNumber,aura_line_kind:kind}))add(line,`metadata[${key}]`,value);await stripeRequest("/v1/invoiceitems",{method:"POST",headers:{"Content-Type":"application/x-www-form-urlencoded","Idempotency-Key":`${requestId}-${groupId}-balance-${kind}`},body:line})}
       const draft=await stripeRequest(`/v1/invoices/${encodeURIComponent(invoice.id)}`);
       if(Number(draft.amount_due)!==amount)throw Error("Combined balance invoice total does not match the approved amount.");
-      const sent=await stripeRequest(`/v1/invoices/${encodeURIComponent(invoice.id)}/send`,{method:"POST",headers:{"Content-Type":"application/x-www-form-urlencoded","Idempotency-Key":`${requestId}-${groupId}-balance-send`},body:new URLSearchParams()});
-      return {id:invoice.id,status:sent.status||invoice.status||"open",hostedInvoiceUrl:String(sent.hosted_invoice_url||draft.hosted_invoice_url||""),amountDue:amount};
+      const finalised=await stripeRequest(`/v1/invoices/${encodeURIComponent(invoice.id)}/finalize`,{method:"POST",headers:{"Content-Type":"application/x-www-form-urlencoded","Idempotency-Key":`${requestId}-${groupId}-balance-finalize`},body:new URLSearchParams({auto_advance:"false"})});
+      return {id:invoice.id,status:finalised.status||invoice.status||"open",hostedInvoiceUrl:String(finalised.hosted_invoice_url||draft.hosted_invoice_url||""),amountDue:amount};
     },
     retrieveCheckoutSession(id){return stripeRequest(`/v1/checkout/sessions/${encodeURIComponent(String(id||""))}`)}
   };

@@ -12,6 +12,9 @@ test("combined return page uses server verification and never treats redirect as
   assert.doesNotMatch(html,/AURACart\?\.clear/);
   assert.match(html,/AURACart\?\.consume/);
   assert.match(html,/aura-combined-cart-consumed-v1:/);
+  assert.match(html,/Current status: paid in full/);
+  assert.match(html,/current amount requested before dispatch/i);
+  assert.match(html,/paid in the original checkout/);
   assert.match(html,/noindex,nofollow/);
   assert.match(html,/name="referrer" content="no-referrer"/);
 });

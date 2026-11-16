@@ -19,11 +19,12 @@ import {issueMetaPurchaseReceipt,redeemMetaPurchaseReceipt} from "./meta-purchas
 import {createGeoResolver,renderClientIp} from "./geo-region.mjs";
 import {assertShippingValidationConfiguration,resolveDeliveryLocation,shippingRegionForItems,validateCoverageTable} from "./shipping-location.mjs";
 import {checkoutAttemptToken,checkoutBlockList,checkoutBlockReason,recordCheckoutBlock,resolveCheckoutBlocks} from "./checkout-attempt-log.mjs";
-import {allocateCatalogueRefund,combinedAdminOrderList,confirmCombinedAddress,confirmDelayedGroup,dispatchCatalogueGroup,payDelayedGroup,publicCombinedOrderView,reserveCombinedIdentity} from "./catalog-combined-ledger.mjs";
+import {allocateCatalogueRefund,combinedAdminOrderList,confirmCombinedAddress,dispatchCatalogueGroup,payDelayedGroup,publicCombinedOrderView,reserveCombinedIdentity} from "./catalog-combined-ledger.mjs";
 import {createCombinedCheckoutCoordinator} from "./combined-checkout-integration.mjs";
 import {createCombinedCheckoutHttpHandler} from "./combined-checkout-http.mjs";
 import {createStripeCombinedAdapter} from "./stripe-combined-adapter.mjs";
 import {queueCombinedGroupEmail,queueCombinedOrderEmails} from "./combined-notifications.mjs";
+import {requestCombinedBalance} from "./combined-balance-service.mjs";
 
 const here=path.dirname(fileURLToPath(import.meta.url));
 const siteDir=path.resolve(here,"..");
@@ -353,9 +354,7 @@ async function combinedOrders(req,res){
     if(order.shippingReviewRequired)return send(res,409,{error:"Review the changed delivery address before requesting the balance."});
     if(group.paymentStatus==="paid_in_full")return send(res,409,{error:"This group is already paid in full."});
     if(group.balanceInvoiceUrl)return send(res,200,{generatedAt:now,items:combinedAdminOrderList(snapshot),existing:true});
-    if(!order.customerId)return send(res,409,{error:"The original Stripe customer is unavailable for a secure balance invoice."});
-    const productBalanceAmount=Number(group.remainingProductBalance),amountTotal=productBalanceAmount+shippingAmount,invoice=await combinedStripe.createBalanceInvoice({requestId,groupId,orderNumber:order.parentOrderNumber,customerId:order.customerId,productBalanceAmount,shippingAmount,taxRateId:gstTaxRateId});
-    await store.mutate(state=>{const target=state.combinedOrders?.[requestId],next=target?.groups.find(item=>item.id===groupId);if(!next)throw Error("Combined pre-order group not found.");confirmDelayedGroup(state,{requestId,groupId,shippingAmount,operationId,now});next.balanceInvoiceId=invoice.id;next.balanceInvoiceUrl=invoice.hostedInvoiceUrl;next.balanceInvoiceStatus=invoice.status;next.balanceRequestedAmount=amountTotal;queueCombinedGroupEmail(state,{requestId,groupId,kind:"combined_balance_requested",eventId:operationId,now});});
+    await requestCombinedBalance({store,stripe:combinedStripe,requestId,groupId,shippingAmount,operationId,now,taxRateId:gstTaxRateId});
     void flushOrderEmailOutbox().catch(error=>console.error("Combined balance email flush failed",error));
   }else if(body.action==="dispatch_group"){
     const carrier=String(body.carrier||"").trim(),trackingNumber=String(body.trackingNumber||"").trim(),trackingUrl=String(body.trackingUrl||"").trim();
