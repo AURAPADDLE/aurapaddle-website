@@ -59,7 +59,8 @@ test("catalogue contains 77 board SKUs and the Fishing Rack accessory",()=>{
   assert.equal(catalog.bySku.size,78);
   assert.equal(catalog.variants.filter(item=>item.orderMode==="available").length,4);
   assert.equal(catalog.variants.filter(item=>item.orderMode==="preorder").length,74);
-  assert.equal(catalog.variants.filter(item=>item.campaign?.thresholdRequired===false).length,0);
+  assert.equal(catalog.variants.filter(item=>item.orderMode==="preorder"&&item.campaign?.thresholdRequired===false).length,73);
+  assert.equal(catalog.variants.filter(item=>item.orderMode==="preorder"&&item.campaign?.termsVersion==="preorder-no-minimum-v1").length,73);
   assert.equal(catalog.bySku.get("AP734955").stockQuantity,60);
   assert.equal(stripeMap.bySku.size,76);
   const rack=catalog.bySku.get("AP667703");assert.equal(rack.checkoutAmount,12900);assert.equal(rack.depositAmount,6450);assert.equal(rack.retailAmount-rack.checkoutAmount,0);assert.equal(rack.bundle.unitAmount,6900);
@@ -124,10 +125,10 @@ test("Hydrofoil Kit Set applies the AUD 50 incentive and a 50% initial payment",
   assert.equal(params.get("metadata[aura_shipping_amount]"),"quote_required");
 });
 
-test("conditional pre-orders close after 30 November 2026 Queensland time",()=>{
+test("new no-minimum pre-orders do not inherit the retired campaign deadline",()=>{
   const sku="AP233694";
-  assert.equal(normaliseCheckoutItems([{sku,quantity:1}],catalog,Date.parse("2026-11-30T23:59:59.999+10:00"))[0].variant.campaign.deadlineISO,"2026-11-30");
-  assert.throws(()=>normaliseCheckoutItems([{sku,quantity:1}],catalog,Date.parse("2026-12-01T00:00:00+10:00")),/campaign has closed/i);
+  assert.equal(normaliseCheckoutItems([{sku,quantity:1}],catalog,Date.parse("2026-11-30T23:59:59.999+10:00"))[0].variant.campaign.deadlineISO,"");
+  assert.doesNotThrow(()=>normaliseCheckoutItems([{sku,quantity:1}],catalog,Date.parse("2026-12-01T00:00:00+10:00")));
   assert.doesNotThrow(()=>normaliseCheckoutItems([{sku:"AP734955",quantity:1}],catalog,Date.parse("2026-12-01T00:00:00+10:00")));
 });
 

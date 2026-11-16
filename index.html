@@ -155,11 +155,10 @@
       </div>
     </section>
 
-    <section class="direct-model" id="preorder-value">        <div class="hero-batch-proof" data-hero-batch aria-label="Shared Paddle batch committed production progress">
-          <p class="hero-batch-proof__promise">Conditional production batches</p>
-          <div class="hero-batch-proof__head"><span>Live shared paddle batch</span><strong data-hero-batch-count>20 / 50</strong></div>
-          <div class="hero-batch-proof__track" role="progressbar" aria-label="Shared Paddle batch committed production progress" aria-valuemin="0" aria-valuemax="50" aria-valuenow="20"><span data-hero-batch-bar></span></div>
-          <div class="hero-batch-proof__foot"><strong>Conditional colours &amp; models only.</strong><span data-hero-batch-remaining>30 more to production.</span></div><p>Includes 20 units committed by AURA plus paid, non-refunded customer units; not a customer count. Glacier Blue is excluded.</p>
+    <section class="direct-model" id="preorder-value">        <div class="hero-batch-proof" aria-label="No-minimum pre-order terms">
+          <p class="hero-batch-proof__promise">No shared minimum quantity</p>
+          <div class="hero-batch-proof__head"><span>Your order starts its own production allocation</span><strong>50% today</strong></div>
+          <div class="hero-batch-proof__foot"><strong>Estimated dispatch</strong><span>Approximately 10 weeks after successful initial payment.</span></div><p>The remaining 50% and confirmed shipping are requested separately before dispatch and are not charged automatically.</p>
         </div>
       <div class="wrap">
         <p class="eyebrow">The AURA direct pre-order model</p>
@@ -174,7 +173,7 @@
           <article class="direct-pillar"><span class="num">03 / VALUE</span><h3>Savings shared</h3><p>You commit early. We reward that commitment with better pre-order pricing.</p></article>
         </div>
         <div class="direct-bottom">
-          <p>Pay 50% of the pre-order price when ordering, then the remaining 50% and confirmed shipping charge through a separate secure payment request before dispatch. Production targets and estimated dispatch dates are shown on each participating product page. Transit time begins after dispatch. If a conditional target is not reached, the initial payment is fully refunded to the original payment method.</p>
+          <p>Pay 50% of the pre-order price when ordering, then the remaining 50% and confirmed shipping charge through a separate secure payment request before dispatch. New pre-orders have no shared minimum quantity. Estimated dispatch is approximately 10 weeks after successful initial payment, and transit begins after dispatch.</p>
           <div class="direct-actions"><a class="btn btn-dark" href="shop/#products">Shop pre-order boards</a><a class="btn btn-outline" href="pre-order/">See how pre-order works</a></div>
         </div>
       </div>
@@ -253,7 +252,6 @@
     document.addEventListener("keydown",event=>{if(event.key!=="Escape")return;if(mobileMenu.classList.contains("open"))closeMobileMenu(true);else closeDesktopMenus(true)});
     window.addEventListener("scroll",()=>document.getElementById("siteHeader").classList.toggle("scrolled",scrollY>30),{passive:true});
     const heroVideo=document.getElementById("heroVideo"),reduceMotion=window.matchMedia("(prefers-reduced-motion: reduce)");if(reduceMotion.matches){heroVideo.removeAttribute("autoplay");heroVideo.pause()}else{heroVideo.play().catch(()=>{})}document.addEventListener("visibilitychange",()=>{if(document.hidden)heroVideo.pause();else if(!reduceMotion.matches)heroVideo.play().catch(()=>{})});
-    const heroBatch=document.querySelector("[data-hero-batch]"),heroBatchTarget=50,heroBatchAllocation=20;const updateHeroBatch=reserved=>{const committed=Math.min(heroBatchTarget,heroBatchAllocation+Math.max(0,Number(reserved)||0)),percent=Math.min(100,Math.round(committed/heroBatchTarget*100)),remaining=Math.max(0,heroBatchTarget-committed);heroBatch.querySelector("[data-hero-batch-count]").textContent=`${committed} / ${heroBatchTarget}`;heroBatch.querySelector("[data-hero-batch-bar]").style.width=`${percent}%`;heroBatch.querySelector("[role=progressbar]").setAttribute("aria-valuenow",String(committed));heroBatch.querySelector("[data-hero-batch-remaining]").textContent=remaining?`${remaining} more to production.`:"Production target reached."};const refreshHeroBatch=async()=>{if(location.protocol==="file:")return;try{const response=await fetch("/api/preorder-progress",{cache:"no-store",headers:{Accept:"application/json"}});if(!response.ok)return;const payload=await response.json(),campaign=(payload.campaigns||[]).find(item=>item.id==="paddle-launch-batch-01");updateHeroBatch(campaign?.reserved)}catch{}};updateHeroBatch(0);refreshHeroBatch();window.setInterval(refreshHeroBatch,60000);
   </script>
   <script src="home-offer.js?v=20261113-privacy-order"></script>
 <script src="/newsletter-signup.js" defer></script>

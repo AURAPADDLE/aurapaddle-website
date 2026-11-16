@@ -183,7 +183,7 @@ export function reserveCheckoutIdentity(state,{requestId,attribution,customerEma
   for(const [key,entry] of Object.entries(state.checkoutRequests))if(now-Number(entry?.reservedAt||0)>86400)delete state.checkoutRequests[key];
   const existing=state.checkoutRequests[requestId];
   if(existing){
-    if(existing.cartItems&&JSON.stringify(existing.cartItems)!==JSON.stringify(items.map(item=>({sku:item.variant.sku,quantity:item.quantity}))))throw Error('This checkout request was already used for a different cart.');
+    if(existing.cartItems&&JSON.stringify(existing.cartItems.map(item=>({sku:item.sku,quantity:item.quantity})))!==JSON.stringify(items.map(item=>({sku:item.variant.sku,quantity:item.quantity}))))throw Error('This checkout request was already used for a different cart.');
     if(items.length&&JSON.stringify(existing.stockItems||[])!==JSON.stringify(items.filter(item=>item.variant.stockQuantity).map(item=>({sku:item.variant.sku,quantity:item.quantity}))))throw new Error("This checkout request was already used for a different cart.");
     if(!existing.attribution&&attribution)existing.attribution=normaliseAttribution(attribution);
     const email=normaliseRecoveryEmail(customerEmail);
@@ -213,7 +213,23 @@ export function reserveCheckoutIdentity(state,{requestId,attribution,customerEma
   const suffix=randomBytes(8).toString("hex").slice(0,8).replace(/[0-9]/g,char=>"abcdefghij"[Number(char)]);
   const identity={orderNumber,trackingToken,integrationIdentifier:`aura_cart_${suffix}`,reservedAt:now,stockItems,attribution:normaliseAttribution(attribution),customerEmail:normaliseRecoveryEmail(customerEmail)};
   if(/^[a-f0-9]{64}$/.test(metaCheckoutBindingHash))identity.metaCheckoutBindingHash=metaCheckoutBindingHash;
-  identity.cartItems=items.map(item=>({sku:item.variant.sku,quantity:item.quantity}));
+  identity.cartItems=items.map(item=>({
+    sku:item.variant.sku,
+    quantity:item.quantity,
+    preorderTerms:item.variant.orderMode==="preorder"?{
+      version:String(item.variant.campaign?.termsVersion||"legacy-target-v1"),
+      campaignId:String(item.variant.campaign?.id||""),
+      campaignName:String(item.variant.campaign?.name||"Pre-order"),
+      thresholdRequired:item.variant.campaign?.thresholdRequired!==false,
+      target:Number(item.variant.campaign?.target||0),
+      deadlineISO:String(item.variant.campaign?.deadlineISO||""),
+      estimatedDispatch:String(item.variant.campaign?.estimatedDelivery||""),
+      leadTimeWeeks:Number(item.variant.campaign?.leadTimeWeeks||0),
+      estimatedDispatchBasis:String(item.variant.campaign?.estimatedDispatchBasis||""),
+      cancellationWindowHours:Number(item.variant.campaign?.cancellationWindowHours||48),
+      capturedAt:now
+    }:null
+  }));
   reserveInventory(state,identity,items,now);
   state.reservations[orderNumber]=now;
   state.checkoutRequests[requestId]=identity;
@@ -727,6 +743,8 @@ export function applyStripeEvent(state,event){
     const reservation=Object.values(state.checkoutRequests||{}).find(item=>item?.orderNumber===metadata.aura_order_number);
     const attribution=reservation?.attribution?normaliseAttribution(reservation.attribution):attributionFromMetadata(metadata);
     const lastAttribution=attribution.last||{};
+    const reservedTermsBySku=new Map((reservation?.cartItems||[]).map(item=>[item.sku,item.preorderTerms||null]));
+    for(const item of items)if(reservedTermsBySku.has(item.sku))item.preorderTerms=structuredClone(reservedTermsBySku.get(item.sku));
     state.orders[object.id]={
       sessionId:object.id,
       orderNumber:metadata.aura_order_number||"",
@@ -869,9 +887,21 @@ export function campaignProgress(state,catalog){
     if(!variant.campaign||variant.campaign.thresholdRequired===false||!variant.campaign.target)continue;
     if(!campaigns.has(variant.campaign.id))campaigns.set(variant.campaign.id,{...variant.campaign,reserved:0});
   }
+  const legacyForVariant=variant=>{
+    if(!variant||variant.orderMode!=="preorder")return null;
+    if(["yoga-cruiser","angler-fishing","touring-performance"].includes(variant.slug))return {id:"paddle-launch-batch-01",name:"Paddle Board Launch Batch 01",target:50,thresholdRequired:true,historical:true};
+    if(["inflatable-hydrofoil","hydrofoil-set","vela-wakeboard"].includes(variant.slug))return {id:`${variant.slug}-launch-batch`,name:`${variant.productName||variant.slug} Launch Batch`,target:5,thresholdRequired:true,historical:true};
+    if(["gannet","current","meridian","wayfinder"].includes(variant.slug))return {id:`${variant.slug}-launch-batch`,name:`${variant.productName||variant.slug} Launch Batch`,target:10,thresholdRequired:true,historical:true};
+    return null;
+  };
+  for(const order of Object.values(state.orders||{}))for(const item of order.items||[]){
+    const terms=item.preorderTerms;
+    if(terms?.thresholdRequired&&terms.campaignId&&terms.target&&!campaigns.has(terms.campaignId))campaigns.set(terms.campaignId,{id:terms.campaignId,name:terms.campaignName||terms.campaignId,target:Number(terms.target),thresholdRequired:true,historical:true,reserved:0});
+    else if(!terms){const legacy=legacyForVariant(catalog.bySku.get(item.sku));if(legacy&&!campaigns.has(legacy.id))campaigns.set(legacy.id,{...legacy,reserved:0})}
+  }
   for(const order of Object.values(state.orders||{})){
     if(noStockOrder(order))continue;
-    if(Array.isArray(order.items))for(const item of order.items){const variant=catalog.bySku.get(item.sku);if(variant?.campaign&&campaigns.has(variant.campaign.id))campaigns.get(variant.campaign.id).reserved+=Number(item.activeQuantity||0)}
+    if(Array.isArray(order.items))for(const item of order.items){const variant=catalog.bySku.get(item.sku),terms=item.preorderTerms,campaignId=terms?.thresholdRequired?terms.campaignId:!terms?legacyForVariant(variant)?.id:"";if(campaignId&&campaigns.has(campaignId))campaigns.get(campaignId).reserved+=Number(item.activeQuantity||0)}
     else if(order.campaignId&&campaigns.has(order.campaignId))campaigns.get(order.campaignId).reserved+=Number(order.activeQuantity||0);
   }
   return [...campaigns.values()].map(item=>({...item,percent:Math.min(100,Math.round(item.reserved/item.target*100))}));

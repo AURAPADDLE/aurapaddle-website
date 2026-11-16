@@ -36,9 +36,7 @@ const colours={
   mintwhite:{name:"Mint / White",catalogue:"Mint/White",swatch:"linear-gradient(135deg,#54c1b8 0 55%,#f7f7f3 55%)"}
 };
 const supColourKeys=["glacier","sandstone","eucalyptus","coral"];
-const preorderTerms={deadline:"30 November 2026",deadlineISO:"2026-11-30",estimatedDelivery:"30 January 2027",discountAUD:50,reserved:0,payment:"50% when ordered · 50% before dispatch",thresholdRequired:true};
-const sharedPaddleSlugs=new Set(["yoga-cruiser","angler-fishing","touring-performance"]);
-const fiveBoardSlugs=new Set(["inflatable-hydrofoil","hydrofoil-set","vela-wakeboard"]);
+const preorderTerms={termsVersion:"preorder-no-minimum-v1",activation:"successful_initial_payment",deadline:"Not applicable",deadlineISO:"",estimatedDelivery:"Approximately 10 weeks after successful initial payment",leadTimeWeeks:10,estimatedDispatchBasis:"initial_payment_received",cancellationWindowHours:48,offerValidFrom:"2026-10-01",discountAUD:50,reserved:0,payment:"50% when ordered · 50% before dispatch",thresholdRequired:false,target:0};
 const companyAllocationByCampaign={
   "paddle-launch-batch-01":20,
   "gannet-launch-batch":5,
@@ -64,10 +62,8 @@ const offerValidFromByCampaign=new Map([
 ]);
 
 function campaignFor(product){
-  if(sharedPaddleSlugs.has(product.slug))return {...preorderTerms,id:"paddle-launch-batch-01",name:"Paddle Board Launch Batch 01",target:50,scopeLabel:"Shared Paddle batch",title:"50 boards unlock the combined Paddle Board batch.",description:"Paid pre-orders for Yoga Cruiser pre-order colours, Angler Fishing and Touring Performance are combined. Production starts when this shared batch reaches 50 boards, regardless of the selected model or colour."};
-  if(product.slug==="hydrofoil-set")return {...preorderTerms,id:"hydrofoil-set-launch-batch",name:"Hydrofoil Kit Set Launch Batch",target:5,scopeLabel:"Hydrofoil Kit Set total",countLabel:"paid sets",itemLabel:"set",title:"5 Hydrofoil Kit Sets unlock production.",description:"All paid Hydrofoil Kit Set pre-orders are combined. Production starts when this product reaches 5 sets."};
-  if(fiveBoardSlugs.has(product.slug))return {...preorderTerms,id:`${product.slug}-launch-batch`,name:`${product.short} Launch Batch`,target:5,scopeLabel:`${product.short} total`,title:`5 ${product.short} boards unlock production.`,description:`All paid ${product.short} pre-orders are combined. Production starts when this product reaches 5 boards.`};
-  return {...preorderTerms,id:`${product.slug}-launch-batch`,name:`${product.short} Launch Batch`,target:10,scopeLabel:`${product.short} total`,title:`10 ${product.short} boards unlock production.`,description:`All paid ${product.short} pre-orders are combined across every size and colour. Production starts when this product reaches 10 boards.`};
+  const itemLabel=product.slug==="hydrofoil-set"?"set":"board";
+  return {...preorderTerms,id:`${product.slug}-no-minimum-v1`,name:`${product.short} Pre-order`,scopeLabel:"No minimum quantity",itemLabel,title:"No shared production target.",description:`A successful initial payment starts the production allocation for your selected ${itemLabel}. It does not depend on other customer orders.`};
 }
 
 function confirmedPreorderFor(product){
@@ -92,7 +88,7 @@ function confirmedPreorderFor(product){
 
 function sellingPrice(variant){return variant.retailAUD?Number(variant.saleAUD??(variant.orderMode==="preorder"?Number(variant.retailAUD)-variant.preorder.discountAUD:variant.retailAUD)):null}
 function preorderStatus(preorder){return preorder.thresholdRequired?`${preorder.scopeLabel} 0/${preorder.target}`:preorder.inventoryIncoming?preorder.scopeLabel:`Confirmed · ${preorder.scopeLabel}`}
-function preorderTermsCopy(preorder){const item=preorder.itemLabel||"board";return preorder.thresholdRequired?`${preorder.description} A 50% initial payment reserves the ${item} and counts it towards the target once successfully paid. The remaining 50%, together with the confirmed shipping charge, is requested through a separate secure payment link before dispatch. The campaign closes on ${preorder.deadline}, with estimated dispatch on ${preorder.estimatedDelivery}. Each eligible pre-ordered ${item} receives an AUD $${preorder.discountAUD} incentive. If the target is not reached, affected orders will be cancelled and the initial payment fully refunded. Australian Consumer Law rights are not excluded.`:`${preorder.description} A 50% initial payment reserves the ${item}. The remaining 50%, together with the confirmed shipping charge, is requested through a separate secure payment link before dispatch. Estimated dispatch is ${preorder.estimatedDelivery}. Each eligible pre-ordered ${item} receives an AUD $${preorder.discountAUD} incentive. This order does not depend on a production target. Australian Consumer Law rights are not excluded.`}
+function preorderTermsCopy(preorder){const item=preorder.itemLabel||"board";return preorder.thresholdRequired?`${preorder.description} A 50% initial payment reserves the ${item} and counts it towards the target once successfully paid. The remaining 50%, together with the confirmed shipping charge, is requested through a separate secure payment link before dispatch. The campaign closes on ${preorder.deadline}, with estimated dispatch on ${preorder.estimatedDelivery}. Each eligible pre-ordered ${item} receives an AUD $${preorder.discountAUD} incentive. If the target is not reached, affected orders will be cancelled and the initial payment fully refunded. Australian Consumer Law rights are not excluded.`:`${preorder.description} A 50% initial payment reserves the ${item}. Estimated dispatch is approximately ${preorder.leadTimeWeeks||10} weeks after successful initial payment. The remaining 50%, together with the confirmed shipping charge, is requested through a separate secure payment link before dispatch and is not charged automatically. Each eligible pre-ordered ${item} receives an AUD $${preorder.discountAUD} incentive. This order does not depend on a production target. Australian Consumer Law rights are not excluded.`}
 
 const products=[
   {slug:"yoga-cruiser",prefix:"Yoga Cruiser",name:"AURA PADDLE Yoga Cruiser",short:"Yoga Cruiser",series:"Yoga Cruiser Series",category:"Inflatable paddleboard",description:"An extra-wide inflatable stand-up paddleboard for SUP yoga, shared paddles and stable family use in Australian waters.",status:"1 colour available · 3 colours on pre-order",badge:"Yoga & family",price:"AUD $799",canBuy:true,stock:"In stock · Dispatch confirmed with order",sizes:["11'0\""],colourKeys:supColourKeys,images:{glacier:["../assets/products/yoga-cruiser/glacier-blue/AP734955_yoga-cruiser_11ft_glacier-blue_hero-01.webp","../assets/products/yoga-cruiser/glacier-blue/AP734955_yoga-cruiser_11ft_glacier-blue_deck-02.webp","../assets/products/yoga-cruiser/glacier-blue/AP734955_yoga-cruiser_11ft_glacier-blue_bottom-03.webp","../assets/products/yoga-cruiser/glacier-blue/AP734955_yoga-cruiser_11ft_glacier-blue_side-04.webp","../assets/products/yoga-cruiser/glacier-blue/AP734955_yoga-cruiser_11ft_glacier-blue_three-quarter-05.webp","../assets/products/yoga-cruiser/glacier-blue/AP734955_yoga-cruiser_11ft_glacier-blue_deck-detail-06.webp","../assets/products/yoga-cruiser/glacier-blue/AP734955_yoga-cruiser_11ft_glacier-blue_full-kit-07.jpg","../assets/products/yoga-cruiser/glacier-blue/AP734955_yoga-cruiser_11ft_glacier-blue_yoga-lifestyle-08.webp","../assets/products/yoga-cruiser/glacier-blue/AP734955_yoga-cruiser_11ft_glacier-blue_colour-lineup-09.webp"],sandstone:["../pic 3 matte sandstone.png"],eucalyptus:["../assets/products/yoga-cruiser/eucalyptus-green/AP233694_yoga-cruiser_11ft_eucalyptus-green_hero-01.webp","../assets/products/yoga-cruiser/eucalyptus-green/AP233694_yoga-cruiser_11ft_eucalyptus-green_deck-02.webp","../assets/products/yoga-cruiser/eucalyptus-green/AP233694_yoga-cruiser_11ft_eucalyptus-green_bottom-03.webp","../assets/products/yoga-cruiser/eucalyptus-green/AP233694_yoga-cruiser_11ft_eucalyptus-green_side-04.webp","../assets/products/yoga-cruiser/eucalyptus-green/AP233694_yoga-cruiser_11ft_eucalyptus-green_three-quarter-05.webp","../assets/products/yoga-cruiser/eucalyptus-green/AP233694_yoga-cruiser_11ft_eucalyptus-green_deck-detail-06.webp","../assets/products/yoga-cruiser/eucalyptus-green/AP233694_yoga-cruiser_11ft_eucalyptus-green_full-kit-07.jpg","../assets/products/yoga-cruiser/eucalyptus-green/AP233694_yoga-cruiser_11ft_eucalyptus-green_yoga-lifestyle-08.webp","../assets/products/yoga-cruiser/eucalyptus-green/AP233694_yoga-cruiser_11ft_eucalyptus-green_colour-lineup-09.webp"],coral:["../pic 5 coral white.png"]},specs:[["Length","11'0\""],["Width","36\""],["Thickness","6\""],["Volume","285 L"],["Maximum capacity","180 kg"],["Construction","Woven drop stitch"]],included:["Yoga Cruiser board","Wheeled carry bag","Adjustable 3-piece paddle","Electric pump","10ft coiled leash","2+1 removable fins","Waterproof phone pouch","Repair kit"],bestFor:"SUP yoga, beginners who prioritise stability, relaxed family paddles and carrying a seated passenger within the stated capacity.",notFor:"Riders whose main priority is maximum touring speed, narrow race-style tracking or specialised fishing mounts.",why:"The 36-inch platform and 285-litre volume prioritise stability and usable deck space."},
@@ -418,7 +414,7 @@ function schemaFor(product,variants){
     if(v.retailAUD){
       node.offers={"@type":"Offer","price":sellingPrice(v),"priceCurrency":"AUD","availability":v.available?"https://schema.org/InStock":"https://schema.org/PreOrder","url":node.url,"seller":{"@id":"https://www.aurapaddle.com/#organization"},hasMerchantReturnPolicy:merchantPolicy};
       if(!v.available){
-        const validFrom=offerValidFromByCampaign.get(v.preorder.id);
+        const validFrom=v.preorder.offerValidFrom||offerValidFromByCampaign.get(v.preorder.id);
         if(validFrom)node.offers.validFrom=validFrom;
         if(v.preorder.deadlineISO)node.offers.priceValidUntil=v.preorder.deadlineISO;
       }
@@ -486,6 +482,8 @@ const paymentCatalogue=products.flatMap(product=>getVariants(product).filter(var
   ...(variant.stockQuantity?{stockQuantity:variant.stockQuantity,dispatchLeadBusinessDays:variant.dispatchLeadBusinessDays}:{}),
   productUrl:`https://www.aurapaddle.com/products/${product.slug}.html?size=${encodeURIComponent(variant.size)}&colour=${variant.colourKey}`,
   campaign:variant.preorder?{
+    termsVersion:variant.preorder.termsVersion,
+    activation:variant.preorder.activation,
     id:variant.preorder.id,
     name:variant.preorder.name,
     target:variant.preorder.target,
@@ -493,6 +491,10 @@ const paymentCatalogue=products.flatMap(product=>getVariants(product).filter(var
     deadline:variant.preorder.deadline,
     deadlineISO:variant.preorder.deadlineISO,
     estimatedDelivery:variant.preorder.estimatedDelivery,
+    leadTimeWeeks:variant.preorder.leadTimeWeeks,
+    estimatedDispatchBasis:variant.preorder.estimatedDispatchBasis,
+    cancellationWindowHours:variant.preorder.cancellationWindowHours,
+    offerValidFrom:variant.preorder.offerValidFrom,
     discountAmount:variant.preorder.discountAUD*100
   }:null
 }))).concat(products.flatMap(product=>(product.accessories||[]).map(accessory=>({sku:accessory.sku,slug:"fishing-rack",productName:`AURA PADDLE ${accessory.name}`,shortName:accessory.name,description:accessory.description,size:"Accessory",colour:"White",colourKey:"white",currency:"aud",retailAmount:accessory.retailAUD*100,checkoutAmount:accessory.retailAUD*100,depositAmount:accessory.retailAUD*50,orderMode:"preorder",available:false,kind:"accessory",bundle:{withSlug:accessory.bundleWith,unitAmount:accessory.bundleAUD*100},productUrl:"https://www.aurapaddle.com/products/angler-fishing.html",campaign:null}))));
@@ -507,10 +509,29 @@ function productionHtml(product){
     .replace(/<article class="reviews-summary">[\s\S]*?<\/article>/,'<!-- AURA_REVIEW_LIST_START --><!-- AURA_REVIEW_LIST_END -->')
     .replace('action="https://formspree.io/f/xaqrowoy"','action="/api/reviews"');
   html=renderReviews(html,publicReviewData({},product.slug));
-  const readyHtml=product.slug==="yoga-cruiser"?html
+  let readyHtml=product.slug==="yoga-cruiser"?html
     .replace('Australia-wide shipping is confirmed and included with the remaining-balance request before dispatch. See the', 'For in-stock Glacier Blue, the confirmed shipping charge is paid with the board at checkout; quote-required destinations need a shipping quote before payment. Other colours remain pre-orders, with shipping and the remaining balance requested before dispatch. See the')
     .replace('Australia-only range · Shipping calculated separately · See policy terms', 'Glacier Blue in stock · Pay in full at checkout · Dispatch within 1 business day after payment')
     :html;
+  if(product.slug==="yoga-cruiser"){
+    const existingPath=path.join(siteDir,"products","yoga-cruiser.html");
+    if(fs.existsSync(existingPath)){
+      const existing=fs.readFileSync(existingPath,"utf8"),schema=readyHtml.match(/<script type="application\/ld\+json">[\s\S]*?<\/script>/)?.[0],data=readyHtml.match(/<script id="product-data" type="application\/json">[\s\S]*?<\/script>/)?.[0];
+      if(schema&&data)readyHtml=existing
+        .replace(/<script type="application\/ld\+json">[\s\S]*?<\/script>/,schema)
+        .replace(/<script id="product-data" type="application\/json">[\s\S]*?<\/script>/,data)
+        .replaceAll("Other colours: conditional shared production batch.","Other colours: no-minimum pre-order; approximately 10 weeks after successful initial payment.")
+        .replaceAll("Pre-order · Shared Paddle batch","Pre-order · No minimum quantity")
+        .replaceAll("Shared Paddle batch · 20/50","No-minimum pre-order")
+        .replaceAll("30 January 2027","Approximately 10 weeks after successful initial payment")
+        .replaceAll('class="colour-progress" role="progressbar"','class="colour-progress" hidden role="progressbar"')
+        .replace(/<strong id="preorderCount"(?: hidden)?>[^<]*<\/strong>/,'<strong id="preorderCount" hidden>0 / 0</strong>')
+        .replace('<div class="preorder-track" role="progressbar"','<div class="preorder-track" hidden role="progressbar"');
+    }
+  }
+  readyHtml=readyHtml
+    .replaceAll("Pre-order closes 30 November 2026 · Estimated dispatch 30 January 2027","Pre-order · No minimum quantity · Estimated dispatch approximately 10 weeks after successful initial payment")
+    .replaceAll("Pre-order · Shared Paddle batch","Pre-order · No minimum quantity");
   return readyHtml
     .replace('product-page.css?v=20260920-gallery-zoom','product-page.css?v=20261002-reviews')
     .replace('product-page.js?v=20260917-instock','product-page.js?v=20261002-reviews')
@@ -531,7 +552,7 @@ const xml=value=>esc(value).replaceAll("'","&apos;");
 const merchantAvailabilityDate=value=>{
   const months={January:"01",February:"02",March:"03",April:"04",May:"05",June:"06",July:"07",August:"08",September:"09",October:"10",November:"11",December:"12"};
   const match=String(value||"").match(/^(\d{1,2})\s+([A-Za-z]+)\s+(\d{4})$/);
-  if(!match||!months[match[2]])throw new Error(`Invalid Merchant Center availability date: ${value}`);
+  if(!match||!months[match[2]])return "";
   return `${match[3]}-${months[match[2]]}-${match[1].padStart(2,"0")}T00:00:00+10:00`;
 };
 const feedItems=paymentCatalogue.filter(item=>item.kind!=="accessory").map(item=>{
@@ -561,7 +582,8 @@ const feedItems=paymentCatalogue.filter(item=>item.kind!=="accessory").map(item=
   const title=isGlacierHero?"AURA PADDLE Yoga Cruiser 11ft Inflatable SUP — Glacier Blue — In Stock":`${item.productName} — ${item.size} — ${item.colour}`;
   const description=isGlacierHero?"Glacier Blue is in stock. Stable 36-inch deck for SUP yoga, beginners and family paddling. Complete kit. Dispatch within 1 business day after payment; delivery transit time varies by destination.":(product?.metaDescription||item.description);
   const labels=isGlacierHero?"<g:custom_label_0>Yoga Hero</g:custom_label_0><g:custom_label_1>In Stock</g:custom_label_1><g:shipping_label>yoga_glacier_in_stock</g:shipping_label>":"";
-  return `<item><g:id>${xml(item.sku)}</g:id><title>${xml(title)}</title><description>${xml(description)}</description><link>${xml(item.productUrl)}</link><g:image_link>${xml(image)}</g:image_link>${additionalImages}<g:availability>${item.available?"in_stock":"preorder"}</g:availability>${availabilityDate?`<g:availability_date>${availabilityDate}</g:availability_date>`:""}<g:price>${(item.retailAmount/100).toFixed(2)} AUD</g:price><g:sale_price>${(item.checkoutAmount/100).toFixed(2)} AUD</g:sale_price><g:sale_price_effective_date>2026-08-18T01:18:00+10:00/2026-11-30T23:59:59+10:00</g:sale_price_effective_date><g:brand>AURA PADDLE</g:brand><g:condition>new</g:condition><g:color>${xml(item.colour)}</g:color><g:size>${xml(item.size)}</g:size>${labels}<g:identifier_exists>yes</g:identifier_exists></item>`;
+  const coastGoSale=item.slug==="coast-go"?"<g:sale_price_effective_date>2026-09-15T00:00:00+10:00/2026-10-08T23:59:59+10:00</g:sale_price_effective_date>":"";
+  return `<item><g:id>${xml(item.sku)}</g:id><title>${xml(title)}</title><description>${xml(description)}</description><link>${xml(item.productUrl)}</link><g:image_link>${xml(image)}</g:image_link>${additionalImages}<g:availability>${item.available?"in_stock":"preorder"}</g:availability>${availabilityDate?`<g:availability_date>${availabilityDate}</g:availability_date>`:""}<g:price>${(item.retailAmount/100).toFixed(2)} AUD</g:price><g:sale_price>${(item.checkoutAmount/100).toFixed(2)} AUD</g:sale_price>${coastGoSale}<g:brand>AURA PADDLE</g:brand><g:condition>new</g:condition><g:color>${xml(item.colour)}</g:color><g:size>${xml(item.size)}</g:size>${labels}<g:identifier_exists>yes</g:identifier_exists></item>`;
 }).join("");
 let feedOutput=`<?xml version="1.0" encoding="UTF-8"?><rss xmlns:g="http://base.google.com/ns/1.0" version="2.0"><channel><title>AURA PADDLE Australia</title><link>https://www.aurapaddle.com/</link><description>AURA PADDLE product feed</description>${feedItems}</channel></rss>\n`;
 if(requestedProductSlugs.size){
@@ -569,5 +591,5 @@ if(requestedProductSlugs.size){
   const updates=new Map([...feedOutput.matchAll(/<item>[\s\S]*?<\/item>/g)].map(match=>[match[0].match(/<g:id>(.*?)<\/g:id>/)[1],match[0]]));
   feedOutput=fs.readFileSync(path.join(siteDir,"merchant-feed.xml"),"utf8").replace(/<item>[\s\S]*?<\/item>/g,item=>{const sku=item.match(/<g:id>(.*?)<\/g:id>/)[1];return selectedSkus.has(sku)?updates.get(sku)||item:item});
 }
-fs.writeFileSync(path.join(siteDir,"merchant-feed.xml"),renderCoastGoFeed(feedOutput));
+fs.writeFileSync(path.join(siteDir,"merchant-feed.xml"),renderCoastGoFeed(feedOutput,Date.parse("2026-10-07T00:00:00+10:00")));
 console.log(`Built ${products.length} product pages, ${paymentCatalogue.length} Stripe-ready SKU records and Merchant Center feed from ${rows.length} catalogue rows.`);
