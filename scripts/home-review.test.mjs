@@ -20,6 +20,13 @@ test("selected Hyams Beach photograph fills the brand hero without a side media 
   assert.deepEqual([...photo.subarray(0, 3)], [255, 216, 255]);
 });
 
+test("CoastGo promotion stays available without auto-covering the homepage", () => {
+  const offer = fs.readFileSync(new URL("../home-offer.js", import.meta.url), "utf8");
+  assert.match(html, />View CoastGo free shipping offer<\/button>/);
+  assert.match(offer, /data-preorder-offer-open/);
+  assert.doesNotMatch(offer, /open\('automatic'\)|after_privacy_notice|open\('return_visit'\)/);
+});
+
 test("Yoga buying information follows rather than occupies the hero", () => {
   const heroEnd = html.indexOf("</section>", html.indexOf('class="hero"'));
   const featured = html.indexOf('class="featured-yoga"');

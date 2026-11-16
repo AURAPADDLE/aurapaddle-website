@@ -56,17 +56,17 @@ test('Merchant feed and structured data use launch date and auto-expiring sale',
 
 test('homepage presents CoastGo-only code during the promotion',()=>{
   let now=promotionStart;
-  const nodes=new Map(),events={},timers=[],tracking=[],seen=new Map();
+  const nodes=new Map(),events={},tracking=[],openButton={addEventListener(event,fn){this[event]=fn}};
   const node=selector=>{if(!nodes.has(selector))nodes.set(selector,{textContent:'',innerHTML:'',style:{},setAttribute(){},addEventListener(){},after(){},append(){},querySelector(){return {textContent:''}}});return nodes.get(selector)};
   const modal={open:false,querySelector:node,querySelectorAll(){return[]},showModal(){this.open=true},close(){this.open=false},addEventListener(){}};
-  const context={Date:class extends Date{static now(){return now}},MutationObserver:class{observe(){}},document:{body:{},getElementById(){return modal},createElement:node,querySelectorAll(){return[]},querySelector(){return null},addEventListener(){}},sessionStorage:{getItem:k=>seen.get(k),setItem:(k,v)=>seen.set(k,v)},setTimeout:(fn,delay)=>timers.push({fn,delay}),addEventListener:(event,fn)=>events[event]=fn,AURATracking:{event:(name,params)=>tracking.push({name,...params})}};context.window=context;context.AURACoastGo={...offer,freeShippingActive:()=>offer.freeShippingActive(now)};
+  const context={Date:class extends Date{static now(){return now}},document:{body:{},getElementById(){return modal},createElement:node,querySelectorAll(selector){return selector==='[data-preorder-offer-open]'?[openButton]:[]},querySelector(){return null},addEventListener(){}},setTimeout,addEventListener:(event,fn)=>events[event]=fn,AURATracking:{event:(name,params)=>tracking.push({name,...params})}};context.window=context;context.AURACoastGo={...offer,freeShippingActive:()=>offer.freeShippingActive(now)};
   vm.createContext(context);vm.runInContext(fs.readFileSync(new URL('../home-offer.js',import.meta.url),'utf8'),context);
-  timers.find(t=>t.delay===850).fn();
+  assert.equal(modal.open,false);openButton.click();
   assert.equal(modal.open,true);assert.equal(tracking.at(-1).promotion_id,offer.shippingPromotionId);
   assert.match(node('[data-promo-code-copy]').innerHTML,/AURAFREESHIP/);
   assert.match(node('.preorder-offer__eyebrow').textContent,/COASTGO · 12–30 NOVEMBER/);
   assert.equal(node('[data-preorder-offer-shop]').href,'products/coast-go.html');
-  now=Date.parse(offer.shippingEndsAt);events.pageshow();assert.equal(modal.open,false);
+  now=Date.parse(offer.shippingEndsAt);events['aura:coastgo-change']();assert.equal(modal.open,false);
 });
 
 test('standard-only shipping promotion respects exact dates, quantity, remote and mixed-cart exclusions',()=>{

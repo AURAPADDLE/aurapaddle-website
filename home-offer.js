@@ -1,7 +1,6 @@
 (()=>{
   const offer=document.getElementById("preorderOffer"),policy=window.AURACoastGo;
   if(!offer||!policy)return;
-  const storageKey="aura-home-free-shipping-coastgo-yoga-20261112";
   const promotion={promotion_id:policy.shippingPromotionId,promotion_name:"CoastGo — free shipping",creative_slot:"homepage_modal",coupon:policy.shippingCode,currency:"AUD",items:policy.skus.map(item_id=>({item_id,item_name:"AURA PADDLE CoastGo",price:299,quantity:1}))};
   const track=(name,params={})=>window.AURATracking?.event(name,{...promotion,...params});
   offer.querySelector('.preorder-offer__eyebrow').textContent="COASTGO · 12–30 NOVEMBER";
@@ -15,19 +14,14 @@
   offer.querySelector('.preorder-offer__copy').textContent='Automatically applied after the cart address check for verified Gold Coast, Brisbane, Sydney, Canberra and Melbourne metro addresses. CoastGo standard delivery only; express extra. Other addresses retain their confirmed published rate or need manual confirmation. Ends 30 November 2026, Brisbane time.';
   const coastLink=offer.querySelector('[data-preorder-offer-shop]');
   coastLink.href='products/coast-go.html';coastLink.textContent='Shop CoastGo';
-  const seen=()=>{try{return sessionStorage.getItem(storageKey)==='seen'}catch{return false}};
   const privacyNoticeOpen=()=>Boolean(document.querySelector('.cookie-consent.is-visible'));
-  const open=(source,manual=false)=>{if(!policy.freeShippingActive()){if(offer.open)offer.close();return;}if(offer.open||document.querySelector('dialog[open]')||privacyNoticeOpen()||(!manual&&seen()))return;offer.showModal();try{sessionStorage.setItem(storageKey,'seen')}catch{}track('view_promotion',{promotion_source:source});};
-  document.querySelectorAll('[data-preorder-offer-open]').forEach(button=>button.addEventListener('click',()=>open('manual',true)));
+  const open=source=>{if(!policy.freeShippingActive()){if(offer.open)offer.close();return;}if(offer.open||document.querySelector('dialog[open]')||privacyNoticeOpen())return;offer.showModal();track('view_promotion',{promotion_source:source});};
+  document.querySelectorAll('[data-preorder-offer-open]').forEach(button=>button.addEventListener('click',()=>open('manual')));
   const dismiss=method=>{if(offer.open){offer.close();track('dismiss_promotion',{dismiss_method:method})}};
   offer.querySelectorAll('[data-preorder-offer-close]').forEach(button=>button.addEventListener('click',()=>dismiss('button')));
   coastLink.addEventListener('click',()=>track('select_promotion',{selected_product:'coast-go'}));
   copyButton.addEventListener('click',async()=>{try{await navigator.clipboard.writeText(policy.shippingCode);copyButton.querySelector('span').textContent='Copied';setTimeout(()=>copyButton.querySelector('span').textContent='Copy code',1800);track('copy_promotion_code')}catch{copyButton.querySelector('span').textContent='AURAFREESHIP'}});
   offer.addEventListener('click',event=>{if(event.target===offer)dismiss('backdrop')});
   offer.addEventListener('cancel',event=>{event.preventDefault();dismiss('escape')});
-  window.addEventListener('pageshow',()=>open('return_visit'));
-  window.addEventListener('aura:coastgo-change',()=>open('promotion_transition'));
-  document.addEventListener('visibilitychange',()=>{if(!document.hidden)open('return_visit')});
-  new MutationObserver(()=>{if(!privacyNoticeOpen())open('after_privacy_notice')}).observe(document.body,{subtree:true,attributes:true,attributeFilter:['class']});
-  if(policy.freeShippingActive())setTimeout(()=>open('automatic'),850);
+  window.addEventListener('aura:coastgo-change',()=>{if(!policy.freeShippingActive()&&offer.open)offer.close()});
 })();
