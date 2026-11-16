@@ -19,7 +19,7 @@ import {issueMetaPurchaseReceipt,redeemMetaPurchaseReceipt} from "./meta-purchas
 import {createGeoResolver,renderClientIp} from "./geo-region.mjs";
 import {assertShippingValidationConfiguration,resolveDeliveryLocation,shippingRegionForItems,validateCoverageTable} from "./shipping-location.mjs";
 import {checkoutAttemptToken,checkoutBlockList,checkoutBlockReason,recordCheckoutBlock,resolveCheckoutBlocks} from "./checkout-attempt-log.mjs";
-import {combinedAdminOrderList,confirmCombinedAddress,confirmDelayedGroup,dispatchCatalogueGroup,payDelayedGroup,reserveCombinedIdentity} from "./catalog-combined-ledger.mjs";
+import {allocateCatalogueRefund,combinedAdminOrderList,confirmCombinedAddress,confirmDelayedGroup,dispatchCatalogueGroup,payDelayedGroup,publicCombinedOrderView,reserveCombinedIdentity} from "./catalog-combined-ledger.mjs";
 import {createCombinedCheckoutCoordinator} from "./combined-checkout-integration.mjs";
 import {createCombinedCheckoutHttpHandler} from "./combined-checkout-http.mjs";
 import {createStripeCombinedAdapter} from "./stripe-combined-adapter.mjs";
@@ -111,13 +111,14 @@ async function stripeRequest(apiPath,options={}){
   if(!response.ok){const error=new Error(payload.error?.message||`Stripe returned HTTP ${response.status}.`);error.status=response.status;error.stripeType=String(payload.error?.type||"");error.stripeCode=String(payload.error?.code||"");throw error}
   return payload;
 }
-const combinedStripe=createStripeCombinedAdapter({stripeRequest,siteUrl});
+const combinedStripe=createStripeCombinedAdapter({stripeRequest,siteUrl,taxRateId:gstTaxRateId});
 const combinedCoordinator=createCombinedCheckoutCoordinator({store,stripe:combinedStripe,previewDependencies:{catalog,rates:shippingRates,coverage:shippingCoverage,availabilityForState:state=>new Map(publicAvailability(state).items.map(item=>[item.sku,item.available]))},identityFactory:(state,input)=>reserveCombinedIdentity(state,{requestId:input.requestId,customerEmail:input.customerEmail,attribution:normaliseAttribution(input.attribution),now:input.now,randomInt:crypto.randomInt,randomBytes:crypto.randomBytes})});
 const combinedHttp=createCombinedCheckoutHttpHandler({coordinator:combinedCoordinator,enabled:combinedCheckoutEnabled,allowedOrigin:new URL(siteUrl).origin});
 function assertOrderInvoiceConfiguration(){
   if(!orderInvoicesEnabled)throw new Error("Stripe order invoices are not enabled.");
   if(!/^txr_[A-Za-z0-9]+$/.test(gstTaxRateId))throw new Error("STRIPE_GST_TAX_RATE_ID must identify the active 10% inclusive Australian GST tax rate.");
 }
+if(combinedCheckoutEnabled)assertOrderInvoiceConfiguration();
 function catalogueOrderItems(order){
   return (order.items||[]).map(item=>{
     const variant=catalog.bySku.get(item.sku);
@@ -253,9 +254,10 @@ async function metaPurchase(req,res,action){
 }
 async function orderStatus(req,res,url){
   const orderNumber=url.searchParams.get("order")||"",token=url.searchParams.get("token")||"";
-  const order=Object.values((await store.read()).orders||{}).find(item=>item.orderNumber===orderNumber);
-  if(!order||!token||token!==order.trackingToken)return send(res,404,{error:"Order not found."});
-  send(res,200,publicOrderView(order));
+  const state=await store.read(),order=Object.values(state.orders||{}).find(item=>item.orderNumber===orderNumber),combined=Object.values(state.combinedOrders||{}).find(item=>item.parentOrderNumber===orderNumber);
+  if(order&&token&&token===order.trackingToken)return send(res,200,publicOrderView(order));
+  if(combined&&token&&token===combined.trackingToken)return send(res,200,publicCombinedOrderView(combined));
+  send(res,404,{error:"Order not found."});
 }
 async function requestBalance(req,res){
   if(!requireAdmin(req))return send(res,401,{error:"Admin authorisation required."});
@@ -352,7 +354,7 @@ async function combinedOrders(req,res){
     if(group.paymentStatus==="paid_in_full")return send(res,409,{error:"This group is already paid in full."});
     if(group.balanceInvoiceUrl)return send(res,200,{generatedAt:now,items:combinedAdminOrderList(snapshot),existing:true});
     if(!order.customerId)return send(res,409,{error:"The original Stripe customer is unavailable for a secure balance invoice."});
-    const amountTotal=Number(group.remainingProductBalance)+shippingAmount,invoice=await combinedStripe.createBalanceInvoice({requestId,groupId,orderNumber:order.parentOrderNumber,customerId:order.customerId,amountTotal});
+    const productBalanceAmount=Number(group.remainingProductBalance),amountTotal=productBalanceAmount+shippingAmount,invoice=await combinedStripe.createBalanceInvoice({requestId,groupId,orderNumber:order.parentOrderNumber,customerId:order.customerId,productBalanceAmount,shippingAmount,taxRateId:gstTaxRateId});
     await store.mutate(state=>{const target=state.combinedOrders?.[requestId],next=target?.groups.find(item=>item.id===groupId);if(!next)throw Error("Combined pre-order group not found.");confirmDelayedGroup(state,{requestId,groupId,shippingAmount,operationId,now});next.balanceInvoiceId=invoice.id;next.balanceInvoiceUrl=invoice.hostedInvoiceUrl;next.balanceInvoiceStatus=invoice.status;next.balanceRequestedAmount=amountTotal;queueCombinedGroupEmail(state,{requestId,groupId,kind:"combined_balance_requested",eventId:operationId,now});});
     void flushOrderEmailOutbox().catch(error=>console.error("Combined balance email flush failed",error));
   }else if(body.action==="dispatch_group"){
@@ -361,6 +363,11 @@ async function combinedOrders(req,res){
     if(trackingUrl&&!/^https:\/\//i.test(trackingUrl))return send(res,400,{error:"Tracking link must use HTTPS."});
     await store.mutate(state=>{const group=dispatchCatalogueGroup(state,{requestId,groupId,operationId,now});group.carrier=carrier.slice(0,80);group.trackingNumber=trackingNumber.slice(0,100);group.trackingUrl=trackingUrl.slice(0,500);queueCombinedGroupEmail(state,{requestId,groupId,kind:"combined_group_dispatched",eventId:operationId,now});});
     void flushOrderEmailOutbox().catch(error=>console.error("Combined dispatch email flush failed",error));
+  }else if(body.action==="allocate_refund"){
+    const refundEventId=String(body.refundEventId||""),lines=Array.isArray(body.lines)?body.lines.map(line=>({groupId:String(line.groupId||""),sku:String(line.sku||""),amount:Number(line.amount)})):[];
+    if(!/^evt_[A-Za-z0-9_-]{4,120}$/.test(refundEventId)||!lines.length)return send(res,400,{error:"A recorded Stripe refund event and line allocation are required."});
+    await store.mutate(state=>{const recorded=state.combinedRefundEvents?.[refundEventId],order=state.combinedOrders?.[requestId];if(!recorded||recorded.requestId!==requestId||!order)throw Error("The refund is not recorded for this order.");if(recorded.status==="allocated")return false;if(recorded.status!=="review")throw Error("The refund is not awaiting allocation for this order.");allocateCatalogueRefund(state,{requestId,eventId:refundEventId,amountRefunded:recorded.amount,lines});enqueueCombinedStripeAnalytics(state,{id:refundEventId,type:"charge.refunded",created:now,data:{object:{amount_refunded:recorded.amount,currency:order.currency||"aud",refunded:Number(recorded.amount)===Number(order.amountPaid),metadata:{aura_combined_request:requestId}}}},catalog);return true;});
+    void flushAnalyticsOutbox().catch(error=>console.error("Combined refund analytics flush failed",error));
   }else return send(res,400,{error:"Unknown combined-order action."});
   send(res,200,{generatedAt:now,items:combinedAdminOrderList(await store.read()),notificationsEnabled:Boolean(agentMailApiKey)});
 }
@@ -546,8 +553,8 @@ async function webhook(req,res){
     const result=await combinedCoordinator.applyWebhook(event),requestId=String(event.data.object.metadata.aura_combined_request||"");
     if(result.applied){
       let stripeLineItems=null,analyticsError=null;const measurementOrder=(await store.read()).combinedOrders?.[requestId],measurementConsent=measurementOrder?.attribution?.consent||{},shouldMeasure=Boolean(measurementOrder?.attribution?.analyticsClientId&&(measurementConsent.analytics===true||measurementConsent.marketing===true||measurementOrder.attribution?.analyticsMeasurement===true));
-      if(shouldMeasure&&["checkout.session.completed","checkout.session.async_payment_succeeded"].includes(event.type)&&event.data.object.payment_status==="paid")try{stripeLineItems=await stripeRequest(`/v1/checkout/sessions/${encodeURIComponent(event.data.object.id)}/line_items?limit=100&expand%5B%5D=data.price.product`)}catch(error){analyticsError=error}
-      await store.mutate(state=>{if(["checkout.session.completed","checkout.session.async_payment_succeeded"].includes(event.type)){queueCombinedOrderEmails(state,{requestId,eventId:event.id,adminEmail:orderNotificationEmail,now:Number(event.created||Math.floor(Date.now()/1000))});if(!analyticsError)try{enqueueCombinedStripeAnalytics(state,event,catalog,{enhancedConversionsEnabled,stripeLineItems})}catch(error){analyticsError=error}}else if(event.type==="invoice.paid")queueCombinedGroupEmail(state,{requestId,groupId:result.groupId,kind:"combined_balance_paid",eventId:event.id,now:Number(event.created||Math.floor(Date.now()/1000))});if(analyticsError){state.analyticsAmountIssues??={};state.analyticsAmountIssues[event.id]={stripeEventId:event.id,stripeObjectId:event.data.object.id||"",eventType:event.type,orderNumber:state.combinedOrders?.[requestId]?.parentOrderNumber||"",status:"retry_pending",reason:String(analyticsError.message||analyticsError).slice(0,160),attempts:1,createdAt:Number(event.created||Math.floor(Date.now()/1000)),updatedAt:Math.floor(Date.now()/1000)}}});
+      if(shouldMeasure)try{if(["checkout.session.completed","checkout.session.async_payment_succeeded"].includes(event.type)&&event.data.object.payment_status==="paid")stripeLineItems=await stripeRequest(`/v1/checkout/sessions/${encodeURIComponent(event.data.object.id)}/line_items?limit=100&expand%5B%5D=data.price.product`);else if(event.type==="invoice.paid")stripeLineItems=await stripeRequest(`/v1/invoices/${encodeURIComponent(event.data.object.id)}/lines?limit=100`)}catch(error){analyticsError=error}
+      await store.mutate(state=>{if(["checkout.session.completed","checkout.session.async_payment_succeeded"].includes(event.type))queueCombinedOrderEmails(state,{requestId,eventId:event.id,adminEmail:orderNotificationEmail,now:Number(event.created||Math.floor(Date.now()/1000))});else if(event.type==="invoice.paid")queueCombinedGroupEmail(state,{requestId,groupId:result.groupId,kind:"combined_balance_paid",eventId:event.id,now:Number(event.created||Math.floor(Date.now()/1000))});if(!analyticsError)try{enqueueCombinedStripeAnalytics(state,event,catalog,{enhancedConversionsEnabled,stripeLineItems})}catch(error){analyticsError=error}if(analyticsError){state.analyticsAmountIssues??={};state.analyticsAmountIssues[event.id]={stripeEventId:event.id,stripeObjectId:event.data.object.id||"",eventType:event.type,orderNumber:state.combinedOrders?.[requestId]?.parentOrderNumber||"",status:"retry_pending",reason:String(analyticsError.message||analyticsError).slice(0,160),attempts:1,createdAt:Number(event.created||Math.floor(Date.now()/1000)),updatedAt:Math.floor(Date.now()/1000)}}});
       void flushAnalyticsOutbox().catch(error=>console.error("GA4 outbox flush failed",error));void flushOrderEmailOutbox().catch(error=>console.error("Combined order email flush failed",error));
     }
     return send(res,200,{received:true,combined:true,applied:result.applied===true});
