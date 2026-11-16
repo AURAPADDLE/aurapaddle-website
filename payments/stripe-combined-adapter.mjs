@@ -15,6 +15,20 @@ export function createStripeCombinedAdapter({stripeRequest,siteUrl}={}){
       add(params,"payment_intent_data[description]",`AURA PADDLE ${safe(request.metadata.aura_parent_order)} combined payment`);add(params,"custom_text[submit][message]","One payment today covers in-stock items in full, their confirmed shipping, and each listed pre-order initial payment. Pre-order product balances and confirmed pre-order shipping remain payable before that group dispatches; they are not charged automatically.");
       return stripeRequest("/v1/checkout/sessions",{method:"POST",headers:{"Content-Type":"application/x-www-form-urlencoded","Idempotency-Key":request.idempotencyKey},body:params});
     },
+    async createBalanceInvoice(request){
+      const amount=Number(request.amountTotal),requestId=safe(request.requestId),groupId=safe(request.groupId),orderNumber=safe(request.orderNumber),customerId=safe(request.customerId);
+      if(!Number.isSafeInteger(amount)||amount<=0||!requestId||!groupId||!/^APO\d{5}$/.test(orderNumber)||!/^cus_[A-Za-z0-9]+$/.test(customerId))throw Error("A valid combined balance invoice request is required.");
+      const invoiceParams=new URLSearchParams({customer:customerId,collection_method:"send_invoice",days_until_due:"14",description:`AURA PADDLE ${orderNumber} pre-order balance and confirmed shipping`});
+      for(const [key,value] of Object.entries({aura_combined_request:requestId,aura_group_id:groupId,aura_parent_order:orderNumber,aura_payment_stage:"combined_balance"}))add(invoiceParams,`metadata[${key}]`,value);
+      const invoice=await stripeRequest("/v1/invoices",{method:"POST",headers:{"Content-Type":"application/x-www-form-urlencoded","Idempotency-Key":`${requestId}-${groupId}-balance-invoice`},body:invoiceParams});
+      const line=new URLSearchParams({customer:customerId,invoice:invoice.id,currency:"aud",amount:String(amount),description:`${orderNumber} — pre-order balance and confirmed shipping`});
+      for(const [key,value] of Object.entries({aura_combined_request:requestId,aura_group_id:groupId,aura_parent_order:orderNumber,aura_line_kind:"combined_balance"}))add(line,`metadata[${key}]`,value);
+      await stripeRequest("/v1/invoiceitems",{method:"POST",headers:{"Content-Type":"application/x-www-form-urlencoded","Idempotency-Key":`${requestId}-${groupId}-balance-line`},body:line});
+      const draft=await stripeRequest(`/v1/invoices/${encodeURIComponent(invoice.id)}`);
+      if(Number(draft.amount_due)!==amount)throw Error("Combined balance invoice total does not match the approved amount.");
+      const sent=await stripeRequest(`/v1/invoices/${encodeURIComponent(invoice.id)}/send`,{method:"POST",headers:{"Content-Type":"application/x-www-form-urlencoded","Idempotency-Key":`${requestId}-${groupId}-balance-send`},body:new URLSearchParams()});
+      return {id:invoice.id,status:sent.status||invoice.status||"open",hostedInvoiceUrl:String(sent.hosted_invoice_url||draft.hosted_invoice_url||""),amountDue:amount};
+    },
     retrieveCheckoutSession(id){return stripeRequest(`/v1/checkout/sessions/${encodeURIComponent(String(id||""))}`)}
   };
 }

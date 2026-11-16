@@ -198,6 +198,17 @@ export function enqueueStripeAnalytics(state,event,catalog,{enhancedConversionsE
   return queueEntry(state,key,entry);
 }
 
+export function enqueueCombinedStripeAnalytics(state,event,catalog,{enhancedConversionsEnabled=false,stripeLineItems}={}){
+  const object=event.data?.object||{},requestId=String(object.metadata?.aura_combined_request||""),order=state.combinedOrders?.[requestId],consent=order?.attribution?.consent||{};
+  if(!["checkout.session.completed","checkout.session.async_payment_succeeded"].includes(event.type)||object.payment_status!=="paid"||!order||isInternalTestOrder(order))return false;
+  if((consent.analytics!==true&&consent.marketing!==true&&order.attribution?.analyticsMeasurement!==true)||!order.attribution?.analyticsClientId)return false;
+  const amounts=checkoutCommerceAmounts(object,stripeLineItems),flat=order.groups.flatMap(group=>group.items),items=flat.map((item,index)=>{const variant=catalog.bySku.get(item.sku),line=amounts.itemLineValues[index],quantity=Number(item.quantity||1);return {item_id:item.sku,item_name:variant?.productName||variant?.shortName||item.sku,item_brand:"AURA PADDLE",item_category:variant?.kind==="accessory"?"Accessory":variant?.shortName||"Board",item_variant:[variant?.size,variant?.colour].filter(Boolean).join(" · "),price:line?Number((line.valueMinor/100/line.quantity).toFixed(6)):cents(item.dueTodayUnitAmount),quantity}});
+  const key=`purchase:${order.parentOrderNumber}`,entry={key,status:"pending",attempts:0,nextAttemptAt:0,stripeEventId:event.id,orderNumber:order.parentOrderNumber,clientId:order.attribution.analyticsClientId,sessionId:order.attribution.analyticsSessionId||"",consent:{analytics:consent.analytics===true,marketing:consent.marketing===true},timestampMicros:Number(event.created||Math.floor(Date.now()/1000))*1_000_000,createdAt:Math.floor(Date.now()/1000),eventName:"purchase",params:{transaction_id:order.parentOrderNumber,currency:amounts.currency.toUpperCase(),value:cents(amounts.itemValueMinor),shipping:cents(amounts.shippingMinor),tax:cents(amounts.taxMinor),payment_stage:"combined",items}};
+  if(order.shippingEvidence?.promotionIds?.length)entry.params.promotion_id=order.shippingEvidence.promotionIds.join(",");
+  if(enhancedConversionsEnabled&&consent.marketing===true&&order.customerId){const userData=hashUserData(object.customer_details||{});if(Object.keys(userData).length){entry.userData=userData;entry.userId=order.customerId}}
+  return queueEntry(state,key,entry);
+}
+
 export function measurementPayload(entry){
   const params={...entry.params,engagement_time_msec:1};
   if(entry.sessionId)params.session_id=Number(entry.sessionId);

@@ -98,8 +98,25 @@ export function milestoneOrderEmailContent(entry,{siteUrl}){
   return {subject,text,html:emailFrame(title,body)};
 }
 
-export async function sendOrderEmail(entry,{apiKey,catalog,siteUrl}){
-  const inbox=await ensureRecoveryInbox(apiKey);
-  const content=entry.kind==="admin_notification"?adminOrderEmailContent(entry,{catalog,siteUrl}):entry.kind==="customer_confirmation"?customerOrderEmailContent(entry,{catalog,siteUrl}):milestoneOrderEmailContent(entry,{catalog,siteUrl});
-  return sendAgentMailMessage(apiKey,inbox.inbox_id,{idempotencyKey:`aura-order-${entry.sessionId}-${entry.kind}`,body:{to:[entry.recipient],reply_to:["admin@aurapaddle.com"],subject:content.subject,text:content.text,html:content.html,labels:[entry.kind]}});
+export function combinedOrderEmailContent(entry,{siteUrl}){
+  const groups=entry.groups||[],lines=groups.flatMap(group=>group.items.map(item=>`${item.sku} × ${item.quantity} · ${group.kind==="stock"?"paid in full":"pre-order initial payment"}`)),admin=entry.kind==="combined_admin_notification",subject=admin?`New combined order ${entry.orderNumber} — ${money(entry.amountTotal,entry.currency)} received`:`Order confirmed — ${entry.orderNumber} | AURA PADDLE`;
+  const remaining=groups.reduce((sum,group)=>sum+Number(group.remainingProductBalance||0),0),shippingLater=groups.some(group=>group.shippingDueLater===true),intro=admin?"New paid AURA PADDLE combined order":"Your payment has been received and your combined order is confirmed";
+  const text=[intro,"",`Order: ${entry.orderNumber}`,`Paid today: ${money(entry.amountTotal,entry.currency)}`,...lines.map(line=>`• ${line}`),"",`Remaining pre-order product balance: ${money(remaining,entry.currency)}`,shippingLater?"Pre-order shipping will be confirmed and paid before that group dispatches.":"",admin?`Admin orders: ${new URL("/admin/orders/",siteUrl)}`:"In-stock and pre-order groups are fulfilled separately. No later payment is charged automatically."].filter(Boolean).join("\n");
+  const body=`<p>${escapeHtml(intro)}.</p><div style="background:#eef5f5;padding:18px 20px;border-radius:8px;margin:22px 0"><strong>${escapeHtml(entry.orderNumber)}</strong><p><strong>Paid today:</strong> ${escapeHtml(money(entry.amountTotal,entry.currency))}</p><ul>${lines.map(line=>`<li>${escapeHtml(line)}</li>`).join("")}</ul><p><strong>Remaining pre-order product balance:</strong> ${escapeHtml(money(remaining,entry.currency))}</p>${shippingLater?"<p>Pre-order shipping will be confirmed and paid before that group dispatches.</p>":""}</div><p>${admin?`<a href="${escapeHtml(new URL("/admin/orders/",siteUrl))}">Open order operations</a>`:"In-stock and pre-order groups are fulfilled separately. No later payment is charged automatically."}</p>`;
+  return {subject,text,html:emailFrame(`Order ${entry.orderNumber}`,body)};
+}
+
+export function combinedGroupEmailContent(entry){
+  const group=entry.group||{},amount=money(group.balanceRequestedAmount||group.confirmedShippingAmount||0,entry.currency),items=(group.items||[]).map(item=>`${item.sku} × ${item.quantity}`).join(", ");let subject,title,paragraph,link="";
+  if(entry.kind==="combined_balance_requested"){subject=`Pre-order balance ready — ${entry.orderNumber} | AURA PADDLE`;title="Your pre-order balance is ready";paragraph=`The remaining product balance and confirmed shipping for ${items} total ${amount}. This payment is not automatic.`;link=group.balanceInvoiceUrl||""}
+  else if(entry.kind==="combined_balance_paid"){subject=`Pre-order balance received — ${entry.orderNumber} | AURA PADDLE`;title="Pre-order balance received";paragraph=`We received ${amount} for ${items}. This group can proceed toward dispatch when ready.`}
+  else{subject=`Part of your order has been dispatched — ${entry.orderNumber} | AURA PADDLE`;title="Your shipment is on the way";paragraph=`${items} has been handed to ${group.carrier||"the carrier"}. Tracking number: ${group.trackingNumber||"see your AURA update"}.`;link=group.trackingUrl||""}
+  const text=[`Hi ${firstName(entry.customerName)},`,"",paragraph,link?`Secure link: ${link}`:"","",`Order: ${entry.orderNumber}`].filter(Boolean).join("\n"),body=`<p>Hi ${escapeHtml(firstName(entry.customerName))},</p><p>${escapeHtml(paragraph)}</p>${link?`<p><a href="${escapeHtml(link)}" style="display:inline-block;background:#f15b45;color:#fff;text-decoration:none;padding:14px 22px;border-radius:6px;font-weight:700">Open secure link</a></p>`:""}`;
+  return {subject,text,html:emailFrame(title,body)};
+}
+
+export async function sendOrderEmail(entry,{apiKey,catalog,siteUrl,inboxResolver=ensureRecoveryInbox,send=sendAgentMailMessage}){
+  const inbox=await inboxResolver(apiKey);
+  const content=entry.kind.startsWith("combined_")?(entry.kind.includes("confirmation")||entry.kind.includes("admin_notification")?combinedOrderEmailContent(entry,{siteUrl}):combinedGroupEmailContent(entry)):entry.kind==="admin_notification"?adminOrderEmailContent(entry,{catalog,siteUrl}):entry.kind==="customer_confirmation"?customerOrderEmailContent(entry,{catalog,siteUrl}):milestoneOrderEmailContent(entry,{catalog,siteUrl});
+  return send(apiKey,inbox.inbox_id,{idempotencyKey:`aura-order-${entry.sessionId||entry.requestId}-${entry.group?.id||"order"}-${entry.kind}`,body:{to:[entry.recipient],reply_to:["admin@aurapaddle.com"],subject:content.subject,text:content.text,html:content.html,labels:[entry.kind]}});
 }
