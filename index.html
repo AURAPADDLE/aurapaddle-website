@@ -112,13 +112,20 @@
     .hero::after{display:none}
     .hero-inner{width:100%;padding:clamp(8.5rem,14vh,10rem) 0 5.5rem;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center}
     .hero-inner>.hero-disciplines,.hero-inner>h1,.hero-inner>.hero-actions{max-width:min(1040px,90%)}
-    .hero h1{font-size:clamp(5rem,7.5vw,7.8rem);text-shadow:0 3px 24px rgba(4,21,31,.55)}
-    .hero-disciplines{display:flex;align-items:center;gap:.45rem;margin:0;color:var(--aqua);font:700 .72rem/1.2 "Manrope",sans-serif;letter-spacing:.12em;text-transform:uppercase}
+    .hero h1,.hero h1 .hero-lead,.hero h1 .hero-tagline{color:var(--deep)}
+    .hero h1{font-size:clamp(5rem,7.5vw,7.8rem);text-shadow:0 1px 0 rgba(255,255,255,.24)}
+    .hero-disciplines{display:flex;align-items:center;gap:.45rem;margin:0;color:var(--deep);font:700 .72rem/1.2 "Manrope",sans-serif;letter-spacing:.12em;text-transform:uppercase}
     .hero-disciplines a{color:inherit;text-decoration:none;border-bottom:1px solid transparent;outline-offset:.25rem;transition:color .18s,border-color .18s}
-    .hero-disciplines a:hover,.hero-disciplines a:focus-visible{color:#fff;border-color:currentColor}
-    .hero-disciplines span{color:rgba(255,255,255,.5)}
+    .hero-disciplines a:hover,.hero-disciplines a:focus-visible{color:#04151f;border-color:currentColor}
+    .hero-disciplines a:focus-visible{outline:2px solid #04151f}
+    .hero-disciplines span{color:rgba(7,31,45,.58)}
+    .hero .hero-actions .btn-primary{border-color:var(--deep)!important;background:var(--deep)!important;color:#fff!important}
+    .hero .hero-actions .btn-primary:hover,.hero .hero-actions .btn-primary:focus-visible{background:#04151f!important}
+    .hero .hero-actions .btn-ghost{border-color:var(--deep);background:rgba(255,255,255,.9);color:var(--deep)}
+    .hero .hero-actions .btn-ghost:hover,.hero .hero-actions .btn-ghost:focus-visible{background:#fff;color:#04151f}
+    .hero .hero-actions .btn:focus-visible{outline:3px solid #fff;outline-offset:3px}
     @media(max-width:1000px){.hero{min-height:700px;padding-top:0;display:flex;background-position:58% center}.hero-inner{padding:8.5rem 0 4.5rem}.hero-inner>.hero-disciplines,.hero-inner>h1,.hero-inner>.hero-actions{max-width:760px;width:auto}}
-    @media(max-width:650px){.hero{min-height:690px;background-position:62% center}.hero-inner{padding:7.2rem 0 3.4rem;justify-content:center}.hero h1{font-size:clamp(3.6rem,16.5vw,4.75rem);line-height:.9}.hero h1 .hero-lead{white-space:normal}.hero-disciplines{gap:.34rem;font-size:.65rem;letter-spacing:.08em;white-space:nowrap;text-shadow:0 2px 12px rgba(4,21,31,.85)}.hero-actions{display:grid;grid-template-columns:1fr}.hero-actions .btn{width:100%;text-align:center}}
+    @media(max-width:650px){.hero{min-height:690px;background-position:62% center}.hero-inner{padding:7.2rem 0 3.4rem;justify-content:center}.hero h1{font-size:clamp(3.6rem,16.5vw,4.75rem);line-height:.9}.hero h1 .hero-lead{white-space:normal}.hero-disciplines{gap:.34rem;font-size:.65rem;letter-spacing:.08em;white-space:nowrap}.hero-actions{display:grid;grid-template-columns:1fr}.hero-actions .btn{width:100%;text-align:center}}
   </style>
 <link rel="stylesheet" href="conversion-review.css?v=20260907"></head>
 <body>

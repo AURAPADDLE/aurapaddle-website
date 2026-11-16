@@ -82,6 +82,10 @@ test("Hyams Beach remains unfiltered and uncovered with text-only contrast", () 
   assert.match(selectedHero, /\.hero::before\{display:none\}/);
   assert.match(selectedHero, /\.hero::after\{display:none\}/);
   assert.match(selectedHero, /\.hero-inner\{[^}]*align-items:center[^}]*text-align:center/);
+  assert.match(selectedHero, /\.hero h1,\.hero h1 \.hero-lead,\.hero h1 \.hero-tagline\{color:var\(--deep\)\}/);
+  assert.match(selectedHero, /\.hero-disciplines\{[^}]*color:var\(--deep\)/);
+  assert.match(selectedHero, /\.hero \.hero-actions \.btn-primary\{[^}]*background:var\(--deep\)!important[^}]*color:#fff!important/);
+  assert.match(selectedHero, /\.hero \.hero-actions \.btn-ghost\{[^}]*background:rgba\(255,255,255,\.9\)[^}]*color:var\(--deep\)/);
 });
 
 test("finder and commercial journeys have focused accessible destinations", () => {
