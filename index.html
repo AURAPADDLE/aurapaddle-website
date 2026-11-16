@@ -106,6 +106,16 @@
     /* Primary navigation with grouped desktop and mobile links. */
     .nav-links--review{gap:1.1rem}.nav-links--review>a,.nav-trigger{font-size:.76rem;letter-spacing:.08em;text-transform:uppercase;text-decoration:none;color:rgba(255,255,255,.78)}.nav-links--review>a:hover,.nav-trigger:hover{color:#fff}.nav-group{position:relative}.nav-trigger{display:flex;align-items:center;gap:.35rem;padding:.5rem 0;border:0;background:transparent;cursor:pointer}.nav-trigger::after{content:"⌄";font-size:.8rem;transition:transform .2s}.nav-trigger[aria-expanded="true"]::after{transform:rotate(180deg)}.nav-dropdown{display:none;position:absolute;top:calc(100% + .65rem);left:0;width:240px;padding:.55rem;border:1px solid rgba(255,255,255,.14);border-radius:.8rem;background:rgba(7,31,45,.98);box-shadow:0 18px 48px rgba(0,0,0,.22)}.nav-group:last-of-type .nav-dropdown{right:0;left:auto}.nav-dropdown.open{display:grid}.nav-dropdown a{padding:.72rem .8rem;border-radius:.5rem;color:rgba(255,255,255,.78);font-size:.82rem;text-decoration:none}.nav-dropdown a:hover,.nav-dropdown a:focus-visible{color:#fff;background:rgba(255,255,255,.09)}.nav-cart{display:inline-flex;align-items:center;white-space:nowrap}
     @media(max-width:1000px){.nav>.btn{display:none}.mobile-menu--review{padding:6.2rem 1.5rem 2rem;overflow:auto}.mobile-menu--review.open{display:block}.mobile-nav-group{border-bottom:1px solid rgba(255,255,255,.12)}.mobile-nav-toggle,.mobile-menu--review>a{width:100%;display:flex;align-items:center;justify-content:space-between;padding:1rem 0;border:0;border-bottom:1px solid rgba(255,255,255,.12);background:transparent;color:#fff;font:600 1.35rem/1.25 "Manrope",sans-serif;text-align:left;text-decoration:none}.mobile-nav-group>.mobile-nav-toggle{border-bottom:0}.mobile-nav-toggle::after{content:"+"}.mobile-nav-toggle[aria-expanded="true"]::after{content:"−"}.mobile-nav-panel{display:none;padding:0 0 .75rem}.mobile-nav-panel.open{display:grid}.mobile-nav-panel a{padding:.72rem .85rem;color:rgba(255,255,255,.72);font-size:1rem;text-decoration:none}.mobile-nav-panel a:hover,.mobile-nav-panel a:focus-visible{color:#fff;background:rgba(255,255,255,.08)}.mobile-menu--review>.nav-cart{margin-top:1rem;padding:1rem;border:1px solid rgba(255,255,255,.18);border-radius:.75rem}}
+    /* Review candidate: the selected Hyams Beach photograph fills the brand hero. */
+    .hero{min-height:min(760px,100svh);display:flex;align-items:stretch;background:#0b4254 url("assets/hero/hyams-beach-hero-original.jpg") center 54%/cover no-repeat}
+    .hero::before{inset:0;background:linear-gradient(90deg,rgba(4,21,31,.88) 0%,rgba(4,21,31,.68) 39%,rgba(4,21,31,.2) 66%,rgba(4,21,31,.08) 100%)}
+    .hero::after{inset:0;z-index:1;height:auto;border:0;border-radius:0;transform:none;background:linear-gradient(180deg,rgba(4,21,31,.34) 0%,transparent 28%,transparent 70%,rgba(4,21,31,.35) 100%)}
+    .hero-inner{width:100%;padding:clamp(8.5rem,14vh,10rem) 0 5.5rem;display:flex;flex-direction:column;justify-content:center}
+    .hero-inner>.eyebrow,.hero-inner>h1,.hero-inner>.hero-copy,.hero-inner>.hero-actions{max-width:min(620px,52%)}
+    .hero h1{text-shadow:0 3px 24px rgba(4,21,31,.4)}
+    .hero-copy{color:rgba(255,255,255,.88);text-shadow:0 2px 14px rgba(4,21,31,.48)}
+    @media(max-width:1000px){.hero{min-height:700px;padding-top:0;display:flex;background-position:58% center}.hero::before{background:linear-gradient(90deg,rgba(4,21,31,.86),rgba(4,21,31,.58) 58%,rgba(4,21,31,.16))}.hero-inner{padding:8.5rem 0 4.5rem}.hero-inner>.eyebrow,.hero-inner>h1,.hero-inner>.hero-copy,.hero-inner>.hero-actions{max-width:650px;width:auto}}
+    @media(max-width:650px){.hero{min-height:690px;background-position:62% center}.hero::before{background:linear-gradient(180deg,rgba(4,21,31,.78) 0%,rgba(4,21,31,.48) 48%,rgba(4,21,31,.62) 100%)}.hero-inner{padding:7.4rem 0 3.4rem;justify-content:flex-end}.hero h1{font-size:clamp(3rem,14vw,4rem)}.hero h1 .hero-lead{white-space:normal}.hero-copy{max-width:34ch}.hero-actions{display:grid;grid-template-columns:1fr}.hero-actions .btn{width:100%;text-align:center}}
   </style>
 <link rel="stylesheet" href="conversion-review.css?v=20260907"></head>
 <body>
@@ -133,7 +143,6 @@
 
   <main id="top">
     <section class="hero">
-      <div class="hero-media" aria-hidden="true"><video id="heroVideo" autoplay muted loop playsinline preload="metadata" poster="WEBSITE_HERO_IMAGE_1600_900.png" disablepictureinpicture><source src="assets/hero/aura-homepage-hero-2026-08-27.mp4" type="video/mp4"><img src="WEBSITE_HERO_IMAGE_1600_900.png" alt=""></video></div>
       <div class="wrap hero-inner">
         <p class="eyebrow" style="color:var(--aqua)">Paddle · Surf · Foil · Wake</p>
         <h1><span class="hero-lead">Paddle out.</span><span class="hero-tagline">Find your way<br>on the water.</span></h1>
@@ -250,7 +259,6 @@
     mobileMenu.querySelectorAll("a").forEach(a=>a.addEventListener("click",()=>closeMobileMenu()));
     document.addEventListener("keydown",event=>{if(event.key!=="Escape")return;if(mobileMenu.classList.contains("open"))closeMobileMenu(true);else closeDesktopMenus(true)});
     window.addEventListener("scroll",()=>document.getElementById("siteHeader").classList.toggle("scrolled",scrollY>30),{passive:true});
-    const heroVideo=document.getElementById("heroVideo"),reduceMotion=window.matchMedia("(prefers-reduced-motion: reduce)");if(reduceMotion.matches){heroVideo.removeAttribute("autoplay");heroVideo.pause()}else{heroVideo.play().catch(()=>{})}document.addEventListener("visibilitychange",()=>{if(document.hidden)heroVideo.pause();else if(!reduceMotion.matches)heroVideo.play().catch(()=>{})});
   </script>
   <script src="home-offer.js?v=20261113-privacy-order"></script>
 <script src="/newsletter-signup.js" defer></script>

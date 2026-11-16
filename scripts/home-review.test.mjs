@@ -12,6 +12,14 @@ test("brand hero and established destinations remain intact", () => {
   }
 });
 
+test("selected Hyams Beach photograph fills the brand hero without a side media panel", () => {
+  assert.match(html, /\.hero\{[^}]*hyams-beach-hero-original\.jpg[^}]*cover no-repeat/);
+  assert.doesNotMatch(html, /<div class="hero-media"/);
+  assert.doesNotMatch(html, /id="heroVideo"/);
+  const photo = fs.readFileSync(new URL("../assets/hero/hyams-beach-hero-original.jpg", import.meta.url));
+  assert.deepEqual([...photo.subarray(0, 3)], [255, 216, 255]);
+});
+
 test("Yoga buying information follows rather than occupies the hero", () => {
   const heroEnd = html.indexOf("</section>", html.indexOf('class="hero"'));
   const featured = html.indexOf('class="featured-yoga"');
