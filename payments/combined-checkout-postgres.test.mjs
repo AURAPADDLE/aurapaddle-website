@@ -6,7 +6,7 @@ import pg from "pg";
 import {createCombinedCheckoutCoordinator} from "./combined-checkout-integration.mjs";
 import {dispatchCatalogueGroup} from "./catalog-combined-ledger.mjs";
 import {initializeInventory,publicAvailability} from "./inventory.mjs";
-import {loadCatalog,loadShippingRates} from "./lib.mjs";
+import {loadCatalog,loadShippingRates,reserveCheckoutIdentity} from "./lib.mjs";
 import {createStateStore} from "./state-store.mjs";
 
 const testUrl=process.env.AURA_TEST_POSTGRES_URL;
@@ -21,6 +21,7 @@ test("combined checkout is atomic across independent PostgreSQL instances",{skip
     const first=await make(true);await first.mutate(state=>{initializeInventory(state,{source:"isolated PostgreSQL fixture",sourceAsOf:"2026-11-15",products:[{sku:"AP734955",name:"Yoga Glacier",tracked:true,saleLocations:["gc"],balances:{gc:1}}]},{bySku:catalog.bySku},100);state.orders.legacy={id:"legacy",paymentStatus:"paid"}});const second=await make(false),a=createCombinedCheckoutCoordinator({store:first,stripe,previewDependencies}),b=createCombinedCheckoutCoordinator({store:second,stripe,previewDependencies});
     const results=await Promise.allSettled([a.createSession(input("pg-last-unit-a","APO12345")),b.createSession(input("pg-last-unit-b","APO12346"))]);assert.equal(results.filter(x=>x.status==="fulfilled").length,1);assert.equal(results.filter(x=>x.status==="rejected"&&/unavailable/.test(x.reason.message)).length,1);
     const winnerIndex=results.findIndex(x=>x.status==="fulfilled"),winner=results[winnerIndex].value,requestId=winnerIndex===0?"pg-last-unit-a":"pg-last-unit-b",event={id:"evt_pg_paid",type:"checkout.session.completed",created:100,data:{object:{id:winner.sessionId,payment_status:"paid",amount_total:winner.amountTotal,currency:"aud",metadata:{aura_combined_request:requestId}}}};
+    await assert.rejects(second.mutate(state=>reserveCheckoutIdentity(state,{requestId:"pg-single-after-combined",items:[{variant:catalog.bySku.get("AP734955"),quantity:1}],now:100,randomInt:()=>54321,randomBytes:n=>Buffer.alloc(n,4)})),/insufficient/);
     event.data.object.shipping_details={address:{city:"Adelaide",state:"SA",postal_code:"5000",country:"AU"}};
     assert.equal((await a.applyWebhook(event)).applied,true);assert.equal((await b.applyWebhook(event)).applied,false);
     await first.mutate(state=>{const group=state.combinedOrders[requestId].groups.find(item=>item.kind==="stock");dispatchCatalogueGroup(state,{requestId,groupId:group.id,operationId:"pg_dispatch",now:110});dispatchCatalogueGroup(state,{requestId,groupId:group.id,operationId:"pg_dispatch",now:111})});
