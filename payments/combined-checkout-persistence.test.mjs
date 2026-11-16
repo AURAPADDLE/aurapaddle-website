@@ -22,7 +22,7 @@ class PersistentStripeStub{
 const listen=handler=>new Promise(resolve=>{const server=http.createServer((req,res)=>handler(req,res));server.listen(0,"127.0.0.1",()=>resolve(server))});
 const close=server=>new Promise(resolve=>server.close(resolve));
 const post=(base,url,value,headers={})=>fetch(`${base}${url}`,{method:"POST",headers:{"Content-Type":"application/json",...headers},body:JSON.stringify(value)});
-const timestamp=1794787200,secret="whsec_local_combined_fixture",signature=value=>{const raw=JSON.stringify(value),v1=crypto.createHmac("sha256",secret).update(`${timestamp}.${raw}`).digest("hex");return {"Stripe-Signature":`t=${timestamp},v1=${v1}`}};
+const timestamp=1794787200,secret="whsec_local_combined_fixture",signature=(value,{at=timestamp,raw=JSON.stringify(value),key=secret}={})=>{const v1=crypto.createHmac("sha256",key).update(`${at}.${raw}`).digest("hex");return {"Stripe-Signature":`t=${at},v1=${v1}`}};
 
 test("default-off HTTP adapter persists one parent payment and groups across restart",async()=>{
   const dir=fs.mkdtempSync(path.join(os.tmpdir(),"aura-combined-persist-")),statePath=path.join(dir,"state.json"),stripe=new PersistentStripeStub();
@@ -38,6 +38,9 @@ test("default-off HTTP adapter persists one parent payment and groups across res
     const retry=await (await post(base,"/api/combined-checkout",request)).json();assert.equal(retry.sessionId,created.sessionId);assert.equal(stripe.byKey.size,1);
     const paid={id:"evt_persist_paid",type:"checkout.session.completed",created:100,data:{object:{id:created.sessionId,payment_status:"paid",amount_total:created.amountTotal,currency:"aud",metadata:{aura_combined_request:request.requestId}}}};
     assert.equal((await post(base,"/api/combined-checkout/mock-webhook",paid)).status,400);
+    assert.equal((await post(base,"/api/combined-checkout/mock-webhook",paid,signature(paid,{key:"wrong_local_secret"}))).status,400);
+    assert.equal((await post(base,"/api/combined-checkout/mock-webhook",paid,signature(paid,{at:timestamp-301}))).status,400);
+    const differentlyEncoded=JSON.stringify(paid,null,2);assert.equal((await fetch(`${base}/api/combined-checkout/mock-webhook`,{method:"POST",headers:{"Content-Type":"application/json",...signature(paid)},body:differentlyEncoded})).status,400);
     assert.equal((await (await post(base,"/api/combined-checkout/mock-webhook",paid,signature(paid))).json()).applied,true);
     assert.equal((await (await post(base,"/api/combined-checkout/mock-webhook",paid,signature(paid))).json()).applied,false);
     const refund={id:"evt_partial_refund",type:"charge.refunded",created:101,data:{object:{amount_refunded:1000,metadata:{aura_combined_request:request.requestId}}}};

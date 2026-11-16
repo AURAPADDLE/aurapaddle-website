@@ -9,7 +9,16 @@ export function previewMixedCheckout(input={},dependencies={}){
   if(!Array.isArray(input.items)||!input.items.length||input.items.length>20)throw Error("One to twenty cart lines are required.");
   const merged=new Map();for(const raw of input.items){const sku=String(raw?.sku||"").toUpperCase(),quantity=Number(raw?.quantity);if(!Number.isInteger(quantity)||quantity<1||quantity>20)throw Error("Quantity must be a whole number between 1 and 20.");merged.set(sku,(merged.get(sku)||0)+quantity)}
   if([...merged.values()].reduce((a,b)=>a+b,0)>50)throw Error("An online cart cannot exceed 50 items.");
-  const resolved=[];for(const [sku,quantity] of merged){const source=catalog.bySku.get(sku);if(!source)throw Error(`${sku||"Missing SKU"} is not enabled for online checkout.`);const variant={...coastGoOffer.variant(source,now)};if(variant.orderMode==="available"){if(!availability.has(sku))throw Error(`${sku} has no verified dynamic availability.`);variant.inventoryAvailable=Number(availability.get(sku))}cataloguePaymentRule(variant,quantity,{now});resolved.push({variant,quantity,now})}
+  let resolved=[];for(const [sku,quantity] of merged){const source=catalog.bySku.get(sku);if(!source)throw Error(`${sku||"Missing SKU"} is not enabled for online checkout.`);const variant={...coastGoOffer.variant(source,now)};if(variant.orderMode==="available"){if(!availability.has(sku))throw Error(`${sku} has no verified dynamic availability.`);variant.inventoryAvailable=Number(availability.get(sku))}cataloguePaymentRule(variant,quantity,{now});resolved.push({variant,quantity,now})}
+  const rackIndex=resolved.findIndex(item=>item.variant.sku==="AP667703");
+  if(rackIndex>=0){
+    const rack=resolved[rackIndex],anglers=resolved.filter(item=>item.variant.slug==="angler-fishing");
+    if(!anglers.length)return {enabled:true,status:"manual_quote",reason:"rack_requires_angler",todayTotal:null,groups:[],shippingStatus:"manual_quote"};
+    let pairedRemaining=Math.min(rack.quantity,anglers.reduce((sum,item)=>sum+item.quantity,0));const rackLines=[];
+    for(const angler of anglers){const quantity=Math.min(pairedRemaining,angler.quantity);if(!quantity)continue;pairedRemaining-=quantity;rackLines.push({variant:{...rack.variant,checkoutAmount:rack.variant.bundle.unitAmount,depositAmount:rack.variant.bundle.unitAmount/2,campaign:angler.variant.campaign},quantity,now,bundleApplied:true})}
+    const regular=rack.quantity-rackLines.reduce((sum,item)=>sum+item.quantity,0);if(regular)rackLines.push({...rack,quantity:regular});
+    resolved=[...resolved.slice(0,rackIndex),...resolved.slice(rackIndex+1),...rackLines];
+  }
   const stock=resolved.filter(item=>item.variant.orderMode==="available"),delayed=resolved.filter(item=>item.variant.orderMode==="preorder"),rules=resolved.map(item=>cataloguePaymentRule(item.variant,item.quantity,{now}));
   let stockShipping=null,shippingStatus="not_required",shippingEvidence=null;
   if(stock.length){
