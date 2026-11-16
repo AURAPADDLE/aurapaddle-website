@@ -37,15 +37,15 @@ test("default-off HTTP adapter persists one parent payment and groups across res
     store=createStateStore({statePath});await store.init();coordinator=createCombinedCheckoutCoordinator({store,stripe,previewDependencies:dependencies});server=await listen(createCombinedCheckoutHttpHandler({coordinator,enabled:true,webhookSecret:secret,now:()=>timestamp}));base=`http://127.0.0.1:${server.address().port}`;
     const retry=await (await post(base,"/api/combined-checkout",request)).json();assert.equal(retry.sessionId,created.sessionId);assert.equal(stripe.byKey.size,1);
     const paid={id:"evt_persist_paid",type:"checkout.session.completed",created:100,data:{object:{id:created.sessionId,payment_status:"paid",amount_total:created.amountTotal,currency:"aud",metadata:{aura_combined_request:request.requestId}}}};
-    assert.equal((await post(base,"/api/combined-checkout/mock-webhook",paid)).status,400);
-    assert.equal((await post(base,"/api/combined-checkout/mock-webhook",paid,signature(paid,{key:"wrong_local_secret"}))).status,400);
-    assert.equal((await post(base,"/api/combined-checkout/mock-webhook",paid,signature(paid,{at:timestamp-301}))).status,400);
-    const differentlyEncoded=JSON.stringify(paid,null,2);assert.equal((await fetch(`${base}/api/combined-checkout/mock-webhook`,{method:"POST",headers:{"Content-Type":"application/json",...signature(paid)},body:differentlyEncoded})).status,400);
-    assert.equal((await (await post(base,"/api/combined-checkout/mock-webhook",paid,signature(paid))).json()).applied,true);
-    assert.equal((await (await post(base,"/api/combined-checkout/mock-webhook",paid,signature(paid))).json()).applied,false);
+    assert.equal((await post(base,"/api/combined-checkout/webhook",paid)).status,400);
+    assert.equal((await post(base,"/api/combined-checkout/webhook",paid,signature(paid,{key:"wrong_local_secret"}))).status,400);
+    assert.equal((await post(base,"/api/combined-checkout/webhook",paid,signature(paid,{at:timestamp-301}))).status,400);
+    const differentlyEncoded=JSON.stringify(paid,null,2);assert.equal((await fetch(`${base}/api/combined-checkout/webhook`,{method:"POST",headers:{"Content-Type":"application/json",...signature(paid)},body:differentlyEncoded})).status,400);
+    assert.equal((await (await post(base,"/api/combined-checkout/webhook",paid,signature(paid))).json()).applied,true);
+    assert.equal((await (await post(base,"/api/combined-checkout/webhook",paid,signature(paid))).json()).applied,false);
     const refund={id:"evt_partial_refund",type:"charge.refunded",created:101,data:{object:{amount_refunded:1000,metadata:{aura_combined_request:request.requestId}}}};
-    assert.equal((await (await post(base,"/api/combined-checkout/mock-webhook",refund,signature(refund))).json()).reason,"refund_review_required");
-    assert.equal((await (await post(base,"/api/combined-checkout/mock-webhook",refund,signature(refund))).json()).reason,"duplicate_refund");
+    assert.equal((await (await post(base,"/api/combined-checkout/webhook",refund,signature(refund))).json()).reason,"refund_review_required");
+    assert.equal((await (await post(base,"/api/combined-checkout/webhook",refund,signature(refund))).json()).reason,"duplicate_refund");
     const state=await store.read(),order=state.combinedOrders[request.requestId];assert.equal(order.paymentStatus,"paid");assert.equal(order.groups.find(group=>group.kind==="stock").fulfilmentStatus,"preparing_for_dispatch");assert.equal(order.groups.find(group=>group.kind==="delayed").paymentStatus,"deposit_paid");assert.equal(order.refundReviewRequired,true);assert.equal(order.unallocatedRefundAmount,1000);
   }finally{if(server?.listening)await close(server);await store?.close();fs.rmSync(dir,{recursive:true,force:true})}
 });

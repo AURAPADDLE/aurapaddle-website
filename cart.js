@@ -26,10 +26,19 @@
   }
   function update(sku,quantity){const items=read(),item=items.find(entry=>entry.sku===sku);if(item)item.quantity=clamp(quantity);return write(items)}
   function remove(sku){return write(read().filter(item=>item.sku!==sku))}
+  function consume(lines){
+    const remaining=read();
+    for(const line of Array.isArray(lines)?lines:[]){
+      const sku=String(line?.sku||"").toUpperCase(),quantity=Math.max(0,Math.round(Number(line?.quantity)||0)),item=remaining.find(entry=>entry.sku===sku);
+      if(!item||!quantity)continue;
+      if(item.quantity>quantity)item.quantity-=quantity;else remaining.splice(remaining.indexOf(item),1);
+    }
+    return write(remaining);
+  }
   function clear(){return write([])}
   function count(items=read()){return items.reduce((sum,item)=>sum+item.quantity,0)}
   function subtotal(items=read()){return items.reduce((sum,item)=>sum+item.unitAmount*item.quantity,0)}
   function subscribe(listener){listeners.add(listener);return()=>listeners.delete(listener)}
-  window.AURACart={read,write,add,update,remove,clear,count,subtotal,subscribe,updateBadges};
+  window.AURACart={read,write,add,update,remove,consume,clear,count,subtotal,subscribe,updateBadges};
   document.readyState==="loading"?document.addEventListener("DOMContentLoaded",()=>updateBadges(),{once:true}):updateBadges();
 })();

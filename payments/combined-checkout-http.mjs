@@ -21,7 +21,8 @@ export function createCombinedCheckoutHttpHandler({coordinator,enabled=false,web
     if(enabled!==true)return json(res,404,{error:"Not found."});
     try{
       if(req.method==="POST"&&req.url==="/api/combined-checkout")return json(res,200,await coordinator.createSession(parse(await body(req))));
-      if(req.method==="POST"&&req.url==="/api/combined-checkout/mock-webhook"){const raw=await body(req);if(!verify(raw,req.headers["stripe-signature"],webhookSecret,now?.()))return json(res,400,{error:"Webhook signature verification failed."});return json(res,200,await coordinator.applyWebhook(parse(raw)))}
+      if(req.method==="GET"&&req.url.startsWith("/api/combined-checkout-session?")){const url=new URL(req.url,"http://localhost");return json(res,200,await coordinator.sessionSummary(url.searchParams.get("id")))}
+      if(req.method==="POST"&&req.url==="/api/combined-checkout/webhook"){const raw=await body(req);if(!verify(raw,req.headers["stripe-signature"],webhookSecret,now?.()))return json(res,400,{error:"Webhook signature verification failed."});return json(res,200,await coordinator.applyWebhook(parse(raw)))}
       return json(res,404,{error:"Not found."});
     }catch(error){return json(res,Number(error.status)||400,{error:String(error.message||"Combined checkout failed.")})}
   };

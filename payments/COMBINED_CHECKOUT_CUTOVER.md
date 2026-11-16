@@ -2,6 +2,14 @@
 
 This candidate remains local and default-off. The published storefront still tells shoppers to place in-stock and pre-order products in separate orders; do not enable the combined route until the approved policy and customer copy are updated in the same reviewed release.
 
+## 16 November return-path review
+
+- The isolated Stripe QA `404` was caused by its temporary success URL pointing to an API-only localhost harness. It was not a failure of the deployed single-mode success page.
+- The candidate now has a dedicated combined confirmation page and server summary. Possession of the unguessable Checkout Session ID is the capability; the server also requires the ID to match the reserved request, Stripe metadata, currency and exact amount.
+- A browser return never marks an order paid. `paid` requires both Stripe `payment_status=paid` and the durable signed-webhook order. Stripe-paid before webhook is shown as `confirming`; open, expired, missing and mismatched sessions remain non-paid.
+- A paid refresh removes only the purchased quantities from the browser cart and records a local per-order marker so later refreshes cannot consume newly added items.
+- This is still **no-go for production**: `server.mjs`, the production Stripe adapter and `cart-page.js` are not wired to the candidate; the public cart/policy still require separate orders; the real PostgreSQL test is skipped without the loopback test database; and the checked-in DB-IP manifest expired at `2026-11-16T00:00:00Z`, leaving the full suite red. Do not mask or waive those gates.
+
 ## Required before release
 
 - Keep one parent Checkout Session and one payment due today; never create a Session for an unselected or second payment path.

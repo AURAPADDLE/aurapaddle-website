@@ -30,6 +30,8 @@ test("one synthetic mixed-cart Session contains exact group cents and no custome
   assert.equal(options.idempotencyKey,request.idempotencyKey);
   assert.equal(params.metadata.aura_synthetic,"true");
   assert.equal(params.after_expiration.recovery.enabled,false);
+  assert.match(params.success_url,/checkout-combined-success\.html\?session_id=\{CHECKOUT_SESSION_ID\}$/);
+  assert.match(params.cancel_url,/checkout-combined-success\.html\?cancelled=1$/);
   assert.equal(params.allow_promotion_codes,false);
   assert.equal("customer" in params,false);
   assert.equal("customer_email" in params,false);

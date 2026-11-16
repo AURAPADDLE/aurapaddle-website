@@ -2,7 +2,7 @@ const clean=(value,limit=100)=>String(value||"").replace(/[^a-zA-Z0-9_.:-]/g,"-"
 
 // Intentionally dependency-injected and not wired into server.mjs. The caller must
 // provide a Stripe client already authenticated to the approved isolated sandbox.
-export function createStripeSandboxAdapter({client,successUrl="http://127.0.0.1:4242/success",cancelUrl="http://127.0.0.1:4242/cancel"}={}){
+export function createStripeSandboxAdapter({client,successUrl="http://127.0.0.1:4242/checkout-combined-success.html?session_id={CHECKOUT_SESSION_ID}",cancelUrl="http://127.0.0.1:4242/checkout-combined-success.html?cancelled=1"}={}){
   if(!client?.checkout?.sessions?.create||!client?.checkout?.sessions?.retrieve)throw Error("An authenticated sandbox Stripe client is required.");
   return {
     async createCheckoutSession(request){
