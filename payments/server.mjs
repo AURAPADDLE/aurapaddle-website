@@ -19,7 +19,7 @@ import {issueMetaPurchaseReceipt,redeemMetaPurchaseReceipt} from "./meta-purchas
 import {createGeoResolver,renderClientIp} from "./geo-region.mjs";
 import {assertShippingValidationConfiguration,resolveDeliveryLocation,shippingRegionForItems,validateCoverageTable} from "./shipping-location.mjs";
 import {checkoutAttemptToken,checkoutBlockList,checkoutBlockReason,recordCheckoutBlock,resolveCheckoutBlocks} from "./checkout-attempt-log.mjs";
-import {reserveCombinedIdentity} from "./catalog-combined-ledger.mjs";
+import {combinedAdminOrderList,reserveCombinedIdentity} from "./catalog-combined-ledger.mjs";
 import {createCombinedCheckoutCoordinator} from "./combined-checkout-integration.mjs";
 import {createCombinedCheckoutHttpHandler} from "./combined-checkout-http.mjs";
 import {createStripeCombinedAdapter} from "./stripe-combined-adapter.mjs";
@@ -334,6 +334,11 @@ async function orders(req,res){
   if(!requireAdmin(req))return send(res,401,{error:"Admin authorisation required."});
   send(res,200,{generatedAt:Math.floor(Date.now()/1000),items:adminOrderList(await store.read(),catalog,{configured:Boolean(ga4ApiSecret),serverEventsEnabled:analyticsDispatchEnabled,validationMode:analyticsValidationMode})});
 }
+async function combinedOrders(req,res){
+  if(!requireAdmin(req))return send(res,401,{error:"Admin authorisation required."});
+  if(req.method!=="GET")return send(res,405,{error:"Method not allowed."});
+  send(res,200,{generatedAt:Math.floor(Date.now()/1000),items:combinedAdminOrderList(await store.read()),notificationsEnabled:false});
+}
 
 async function inventoryAdmin(req,res){
   if(!requireAdmin(req))return send(res,401,{error:'Admin authorisation required.'});
@@ -592,6 +597,7 @@ const server=http.createServer(async(req,res)=>{
     if(req.method==="GET"&&url.pathname==="/api/admin/analytics-issues"){if(!requireAdmin(req))return send(res,401,{error:"Admin authorisation required."});const state=await store.read();return send(res,200,{items:Object.values(state.analyticsAmountIssues||{}).sort((a,b)=>Number(b.createdAt||0)-Number(a.createdAt||0))})}
     if(['GET','POST'].includes(req.method)&&url.pathname==='/api/admin/inventory')return await inventoryAdmin(req,res);
     if(req.method==='GET'&&url.pathname==='/api/availability')return send(res,200,publicAvailability(await store.read()));
+    if(url.pathname==="/api/admin/combined-orders")return await combinedOrders(req,res);
     if(req.method==="POST"&&url.pathname==="/api/shipping-quote")return await shippingQuote(req,res);
     if((req.method==="POST"&&url.pathname==="/api/combined-checkout")||(req.method==="GET"&&url.pathname==="/api/combined-checkout-session"))return await combinedHttp(req,res);
     if(req.method==="POST"&&url.pathname==="/api/checkout")return await checkout(req,res);

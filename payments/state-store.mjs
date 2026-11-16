@@ -31,7 +31,7 @@ function postgresState(row){
   if(!object(state))invalid();
   // Orders and Stripe event deduplication are core, not optional migrations.
   for(const key of ["orders","events"])if(!Object.hasOwn(state,key)||!object(state[key]))invalid();
-  const optional=["reservations","checkoutRequests","checkoutBlocks","analyticsOutbox","abandonedCheckouts","recoveryEmailOutbox","recoverySuppressions","transactionalEmailOutbox","reviews","reviewNotificationOutbox","analyticsAmountIssues","metaPurchaseReceipts","newsletter","inventory","combinedCheckoutIdentities","combinedCheckoutRequests","combinedOrders","combinedPaymentEvents","combinedProviderEvents","combinedPaymentReviews","combinedRefundEvents","combinedBalanceEvents"];
+  const optional=["reservations","checkoutRequests","checkoutBlocks","analyticsOutbox","abandonedCheckouts","recoveryEmailOutbox","recoverySuppressions","transactionalEmailOutbox","reviews","reviewNotificationOutbox","analyticsAmountIssues","metaPurchaseReceipts","newsletter","inventory","combinedCheckoutIdentities","combinedCheckoutRequests","combinedOrders","combinedPaymentEvents","combinedProviderEvents","combinedPaymentReviews","combinedRefundEvents","combinedBalanceEvents","combinedNotificationOutbox"];
   for(const key of optional)if(Object.hasOwn(state,key)&&!object(state[key]))invalid();
   if(Object.hasOwn(state,"newsletter"))for(const key of ["contacts","events","drafts"])if(!Object.hasOwn(state.newsletter,key)||!object(state.newsletter[key]))invalid();
   if(Object.hasOwn(state,"inventory")){
