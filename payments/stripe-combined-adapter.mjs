@@ -28,6 +28,11 @@ export function createStripeCombinedAdapter({stripeRequest,siteUrl,taxRateId=""}
       const finalised=await stripeRequest(`/v1/invoices/${encodeURIComponent(invoice.id)}/finalize`,{method:"POST",headers:{"Content-Type":"application/x-www-form-urlencoded","Idempotency-Key":`${requestId}-${groupId}-balance-finalize`},body:new URLSearchParams({auto_advance:"false"})});
       return {id:invoice.id,status:finalised.status||invoice.status||"open",hostedInvoiceUrl:String(finalised.hosted_invoice_url||draft.hosted_invoice_url||""),amountDue:amount};
     },
+    async retrieveBalanceInvoice(id){
+      const invoiceId=String(id||"");
+      if(!/^in_[A-Za-z0-9]+$/.test(invoiceId))throw Error("A valid bound Stripe invoice is required.");
+      return stripeRequest(`/v1/invoices/${encodeURIComponent(invoiceId)}`);
+    },
     retrieveCheckoutSession(id){return stripeRequest(`/v1/checkout/sessions/${encodeURIComponent(String(id||""))}`)}
   };
 }

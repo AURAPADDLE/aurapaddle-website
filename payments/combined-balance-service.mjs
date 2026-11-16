@@ -37,3 +37,25 @@ export async function requestCombinedBalance({store,stripe,requestId,groupId,shi
     return {complete:group.paymentStatus==="paid_in_full",requestId,groupId,invoiceId:group.balanceInvoiceId,status:group.balanceInvoiceStatus,amountTotal:prepared.amountTotal};
   });
 }
+
+export async function refreshCombinedBalanceLink({store,stripe,requestId,groupId,operationId,now=0}={}){
+  if(!store?.mutate||typeof stripe?.retrieveBalanceInvoice!=="function")throw Error("Balance storage and Stripe retrieval are required.");
+  if(!/^[A-Za-z0-9:_-]{8,160}$/.test(String(operationId||"")))throw Error("A stable refresh operation identifier is required.");
+  const snapshot=await store.read(),order=snapshot.combinedOrders?.[requestId],group=order?.groups.find(item=>item.id===groupId);
+  if(!order||!group||group.kind!=="delayed")throw Error("Combined pre-order group not found.");
+  if(group.paymentStatus==="paid_in_full")throw Error("This group is already paid in full.");
+  if(["voided","paid"].includes(group.balanceInvoiceStatus))throw Error("This balance invoice is no longer payable.");
+  if(!/^in_[A-Za-z0-9]+$/.test(String(group.balanceInvoiceId||""))||!Number.isSafeInteger(group.balanceRequestedAmount)||group.balanceRequestedAmount<=0)throw Error("No bound unpaid balance invoice is available.");
+  const invoice=await stripe.retrieveBalanceInvoice(group.balanceInvoiceId),metadata=invoice?.metadata||{};
+  if(String(invoice?.id||"")!==group.balanceInvoiceId||String(metadata.aura_combined_request||"")!==requestId||String(metadata.aura_group_id||"")!==groupId||String(metadata.aura_parent_order||"")!==order.parentOrderNumber||String(metadata.aura_payment_stage||"")!=="combined_balance")throw Error("Stripe invoice ownership does not match this order group.");
+  if(String(invoice.currency||"").toLowerCase()!==String(order.currency||"aud").toLowerCase()||Number(invoice.amount_due)!==group.balanceRequestedAmount)throw Error("Stripe invoice amount or currency does not match the approved balance.");
+  if(invoice.status!=="open"||Number(invoice.amount_remaining)!==group.balanceRequestedAmount)throw Error("The bound Stripe invoice is not an open unpaid invoice.");
+  const hostedInvoiceUrl=String(invoice.hosted_invoice_url||"");
+  if(!/^https:\/\/invoice\.stripe\.com\//i.test(hostedInvoiceUrl))throw Error("Stripe did not return a valid hosted invoice link.");
+  return store.mutate(state=>{
+    const current=state.combinedOrders?.[requestId]?.groups.find(item=>item.id===groupId);
+    if(!current||current.balanceInvoiceId!==invoice.id||current.paymentStatus==="paid_in_full"||current.balanceInvoiceStatus==="voided"||current.balanceRequestedAmount!==Number(invoice.amount_due))throw Error("The balance invoice changed while its link was being refreshed.");
+    current.balanceInvoiceUrl=hostedInvoiceUrl;current.balanceInvoiceStatus="open";current.balanceInvoiceLinkRefreshedAt=now;current.balanceInvoiceLinkRefreshOperationId=operationId;
+    return {requestId,groupId,invoiceId:current.balanceInvoiceId,status:current.balanceInvoiceStatus,hostedInvoiceUrl,refreshedAt:now};
+  });
+}

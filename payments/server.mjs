@@ -24,7 +24,7 @@ import {createCombinedCheckoutCoordinator} from "./combined-checkout-integration
 import {createCombinedCheckoutHttpHandler} from "./combined-checkout-http.mjs";
 import {createStripeCombinedAdapter} from "./stripe-combined-adapter.mjs";
 import {queueCombinedGroupEmail,queueCombinedOrderEmails} from "./combined-notifications.mjs";
-import {requestCombinedBalance} from "./combined-balance-service.mjs";
+import {refreshCombinedBalanceLink,requestCombinedBalance} from "./combined-balance-service.mjs";
 
 const here=path.dirname(fileURLToPath(import.meta.url));
 const siteDir=path.resolve(here,"..");
@@ -356,6 +356,8 @@ async function combinedOrders(req,res){
     if(group.balanceInvoiceUrl)return send(res,200,{generatedAt:now,items:combinedAdminOrderList(snapshot),existing:true});
     await requestCombinedBalance({store,stripe:combinedStripe,requestId,groupId,shippingAmount,operationId,now,taxRateId:gstTaxRateId});
     void flushOrderEmailOutbox().catch(error=>console.error("Combined balance email flush failed",error));
+  }else if(body.action==="refresh_balance_link"){
+    await refreshCombinedBalanceLink({store,stripe:combinedStripe,requestId,groupId,operationId,now});
   }else if(body.action==="dispatch_group"){
     const carrier=String(body.carrier||"").trim(),trackingNumber=String(body.trackingNumber||"").trim(),trackingUrl=String(body.trackingUrl||"").trim();
     if(!carrier||!trackingNumber)return send(res,400,{error:"Carrier and tracking number are required for dispatch."});
