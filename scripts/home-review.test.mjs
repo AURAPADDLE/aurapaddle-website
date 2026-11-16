@@ -12,6 +12,23 @@ test("brand hero and established destinations remain intact", () => {
   }
 });
 
+test("homepage ends after the range with legacy journeys handed to focused pages", () => {
+  for (const removed of [
+    'class="direct-model"',
+    'class="section finder"',
+    'class="section commercial"',
+    'class="newsletter"',
+    'id="finderForm"',
+  ]) assert.doesNotMatch(html, new RegExp(removed));
+  assert.match(html, /href="pre-order\/">Pre-order guidance/);
+  assert.match(html, /href="shop\/">Find your board/);
+  assert.match(html, /href="products\/wayfinder\.html">Commercial/);
+  assert.match(html, /class="legacy-anchor" id="finder"/);
+  assert.match(html, /class="legacy-anchor" id="commercial"/);
+  assert.match(html, /<footer>[\s\S]*class="newsletter-form" id="newsletterForm"/);
+  assert.match(html, /name="marketing_consent"[^>]*required/);
+});
+
 test("selected Hyams Beach photograph fills the brand hero without a side media panel", () => {
   assert.match(html, /\.hero\{[^}]*hyams-beach-hero-original\.jpg[^}]*cover no-repeat/);
   assert.doesNotMatch(html, /<div class="hero-media"/);
@@ -28,10 +45,35 @@ test("CoastGo promotion stays available without auto-covering the homepage", () 
 });
 
 test("Yoga buying information follows rather than occupies the hero", () => {
-  const heroEnd = html.indexOf("</section>", html.indexOf('class="hero"'));
+  const heroStart = html.indexOf('class="hero"');
+  const heroEnd = html.indexOf("</section>", heroStart);
   const featured = html.indexOf('class="featured-yoga"');
   assert.ok(heroEnd > 0 && featured > heroEnd);
-  assert.equal(html.slice(html.indexOf('class="hero"'), heroEnd).includes("incoming-offer"), false);
+  const hero = html.slice(heroStart, heroEnd);
+  assert.equal(hero.includes("incoming-offer"), false);
+  assert.equal(hero.includes("An extra-wide"), false);
+  assert.equal((html.match(/An extra-wide/g) || []).length, 1);
+  assert.ok(html.indexOf("An extra-wide") > featured);
+});
+
+test("hero discipline labels are accessible links to distinct reviewed destinations", () => {
+  const links = {
+    Paddle: "inflatable-paddle-boards/",
+    Surf: "shop/?category=surf#products",
+    Foil: "products/inflatable-hydrofoil.html",
+    Wake: "products/vela-wakeboard.html",
+  };
+  for (const [label, href] of Object.entries(links)) {
+    assert.match(html, new RegExp(`<a href=["']${href.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}["']>${label}</a>`));
+  }
+  assert.match(html, /\.hero-disciplines a:hover,\.hero-disciplines a:focus-visible/);
+});
+
+test("Hyams Beach remains unfiltered with only a local neutral text scrim", () => {
+  const selectedHero = html.slice(html.indexOf("/* Review candidate: the selected Hyams"), html.indexOf("</style>"));
+  assert.doesNotMatch(selectedHero, /filter\s*:|saturate\(|sepia\(|hue-rotate\(/);
+  assert.match(selectedHero, /\.hero::before\{inset:0 42% 0 0;/);
+  assert.match(selectedHero, /\.hero::after\{display:none\}/);
 });
 
 test("Support and social destinations use the reviewed URLs", () => {
@@ -47,6 +89,8 @@ test("Support and social destinations use the reviewed URLs", () => {
     const qr = new URL(`../assets/social/${name}-qr.png`, import.meta.url);
     const data = fs.readFileSync(qr);
     assert.deepEqual([...data.subarray(0, 8)], [137, 80, 78, 71, 13, 10, 26, 10]);
+    const card = html.slice(html.lastIndexOf('<div class="social-card"', html.indexOf(`assets/social/${name}-qr.png`)), html.indexOf("</div>", html.indexOf(`assets/social/${name}-qr.png`)) + 6);
+    assert.ok(card.indexOf("<a ") < card.indexOf("<img "), `${name} text link precedes QR`);
   }
 });
 
