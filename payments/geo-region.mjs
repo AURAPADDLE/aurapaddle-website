@@ -23,10 +23,12 @@ export function renderClientIp(req,{render=process.env.RENDER,trustRender=proces
 }
 
 export async function createGeoResolver({databasePath=process.env.DBIP_COUNTRY_DB_PATH||defaultDatabase,manifestPath=process.env.DBIP_COUNTRY_MANIFEST_PATH||defaultManifest,now=()=>Date.now(),lookup}={}){
-  let manifest=null,reader=null,status="unavailable";
+  let manifest=null,reader=null,status="unavailable",expiry=NaN;
   try{
     manifest=JSON.parse(fs.readFileSync(manifestPath,"utf8"));
-    if(!manifest.validUntil||now()>=Date.parse(manifest.validUntil))status="expired";
+    expiry=Date.parse(manifest.validUntil);
+    if(!manifest.validUntil||!Number.isFinite(expiry))status="manifest_invalid";
+    else if(now()>=expiry)status="expired";
     else if(lookup){reader={get:lookup};status="ready"}
     else{
       const bytes=fs.readFileSync(databasePath),digest=crypto.createHash("sha256").update(bytes).digest("hex");
@@ -34,10 +36,12 @@ export async function createGeoResolver({databasePath=process.env.DBIP_COUNTRY_D
       else{reader=await maxmind.open(databasePath);status="ready"}
     }
   }catch{status="unavailable"}
+  const currentStatus=()=>status==="ready"&&now()>=expiry?"expired":status;
   return {
-    status:()=>status,
+    status:currentStatus,
+    details:()=>({status:currentStatus(),release:String(manifest?.release||""),validUntil:String(manifest?.validUntil||"")}),
     resolve(ip){
-      if(status!=="ready"||now()>=Date.parse(manifest.validUntil)||!isPublicIp(ip))return "UNKNOWN";
+      if(currentStatus()!=="ready"||!isPublicIp(ip))return "UNKNOWN";
       try{const code=String(reader.get(ip)?.country?.iso_code||"").toUpperCase();return code==="AU"?"AU":/^[A-Z]{2}$/.test(code)?"OTHER":"UNKNOWN"}catch{return "UNKNOWN"}
     }
   };

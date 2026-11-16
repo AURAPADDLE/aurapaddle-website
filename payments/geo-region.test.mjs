@@ -17,15 +17,20 @@ test("public-address validation rejects private, reserved and documentation rang
 });
 
 test("current verified DB-IP database classifies only AU, OTHER or UNKNOWN",async()=>{
-  const resolver=await createGeoResolver();assert.equal(resolver.status(),"ready");assert.equal(resolver.resolve("1.1.1.1"),"AU");assert.equal(resolver.resolve("8.8.8.8"),"OTHER");assert.equal(resolver.resolve("203.0.113.1"),"UNKNOWN");
+  const resolver=await createGeoResolver({now:()=>Date.parse("2026-12-15T23:59:59.000Z")});assert.equal(resolver.status(),"ready");assert.equal(resolver.resolve("1.1.1.1"),"AU");assert.equal(resolver.resolve("8.8.8.8"),"OTHER");assert.equal(resolver.resolve("203.0.113.1"),"UNKNOWN");
 });
 
 test("missing, expired and malformed database results fail closed",async()=>{
-  const missing=await createGeoResolver({databasePath:"/definitely/missing.mmdb"});assert.equal(missing.status(),"unavailable");assert.equal(missing.resolve("1.1.1.1"),"UNKNOWN");
-  const expired=await createGeoResolver({now:()=>Date.parse("2026-11-16T00:00:00.000Z"),lookup:()=>({country:{iso_code:"AU"}})});assert.equal(expired.status(),"expired");assert.equal(expired.resolve("1.1.1.1"),"UNKNOWN");
+  const missing=await createGeoResolver({databasePath:"/definitely/missing.mmdb",now:()=>Date.parse("2026-12-15T23:59:59.000Z")});assert.equal(missing.status(),"unavailable");assert.equal(missing.resolve("1.1.1.1"),"UNKNOWN");
+  const expired=await createGeoResolver({now:()=>Date.parse("2026-12-16T00:00:00.000Z"),lookup:()=>({country:{iso_code:"AU"}})});assert.equal(expired.status(),"expired");assert.equal(expired.resolve("1.1.1.1"),"UNKNOWN");
   const malformed=await createGeoResolver({lookup:()=>({country:{iso_code:"Australia"}})});assert.equal(malformed.resolve("1.1.1.1"),"UNKNOWN");
 });
 
-test("region endpoint is same-origin, minimised and explicitly uncacheable",()=>{
+test("a resolver loaded before expiry reports the live freshness transition",async()=>{
+  let clock=Date.parse("2026-12-15T23:59:59.000Z");const resolver=await createGeoResolver({now:()=>clock,lookup:()=>({country:{iso_code:"AU"}})});assert.equal(resolver.details().status,"ready");assert.equal(resolver.resolve("1.1.1.1"),"AU");clock=Date.parse("2026-12-16T00:00:00.000Z");assert.equal(resolver.details().status,"expired");assert.equal(resolver.resolve("1.1.1.1"),"UNKNOWN");
+});
+
+test("region endpoint is same-origin and uncacheable; health exposes live database freshness",()=>{
   const server=fs.readFileSync(new URL("./server.mjs",import.meta.url),"utf8");assert.match(server,/url\.pathname==="\/api\/region"/);assert.match(server,/"Cache-Control":"no-store","CDN-Cache-Control":"no-store"/);assert.doesNotMatch(server,/\/api\/region[^\n]+x-forwarded-for/);
+  assert.match(server,/geoResolver\.details\(\)/);
 });
