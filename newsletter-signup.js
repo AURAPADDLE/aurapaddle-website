@@ -11,7 +11,7 @@
       if(!response.ok)throw new Error('Signup not saved');
       // Do not fall back to Formspree after an uncertain first-party submission.
       status.textContent=ownCapture?'Thank you. Your signup request has been recorded for review.':'Thank you. Your signup request has been received.';
-      window.AURATracking?.event('sign_up',{method:'newsletter',form_location:'homepage'});form.reset();
+      window.AURATracking?.event('sign_up',{method:'newsletter',form_location:'updates_page'});form.reset();
       if(ownCapture)form.elements.request_id.value=crypto.randomUUID();
     }catch{
       status.textContent=response?.status===400?'Please reload this page and check your signup details before trying again. You can also email admin@aurapaddle.com.':'We could not confirm your subscription was saved. Please try again or email admin@aurapaddle.com.';

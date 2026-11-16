@@ -3,6 +3,7 @@ import fs from "node:fs";
 import test from "node:test";
 
 const html = fs.readFileSync(new URL("../index.html", import.meta.url), "utf8");
+const updates = fs.readFileSync(new URL("../updates/index.html", import.meta.url), "utf8");
 
 test("brand hero and established destinations remain intact", () => {
   assert.match(html, /Paddle out\. Find your way on the water\./);
@@ -25,8 +26,12 @@ test("homepage ends after the range with legacy journeys handed to focused pages
   assert.match(html, /href="products\/wayfinder\.html">Commercial/);
   assert.match(html, /class="legacy-anchor" id="finder"/);
   assert.match(html, /class="legacy-anchor" id="commercial"/);
-  assert.match(html, /<footer>[\s\S]*class="newsletter-form" id="newsletterForm"/);
-  assert.match(html, /name="marketing_consent"[^>]*required/);
+  assert.match(html, /<footer>[\s\S]*href="updates\/">AURA email updates/);
+  assert.doesNotMatch(html, /id="newsletterForm"|name="marketing_consent"|newsletter-signup\.js/);
+  assert.match(updates, /class="newsletter-form" id="newsletterForm"/);
+  assert.match(updates, /name="marketing_consent"[^>]*required/);
+  assert.match(updates, /unsubscribe at any time/);
+  assert.match(updates, /href="\/policies\/#privacy"/);
 });
 
 test("selected Hyams Beach photograph fills the brand hero without a side media panel", () => {

@@ -580,7 +580,7 @@ async function staticFile(req,res,url){
   if(!target.startsWith(`${siteDir}${path.sep}`))return send(res,403,"Forbidden");
   let stat;try{stat=fs.statSync(target);if(stat.isDirectory()){target=path.join(target,"index.html");stat=fs.statSync(target)}}catch{return send(res,404,"Not found")}
   if(!stat.isFile())return send(res,404,"Not found");
-  if(newsletterCaptureEnabled&&['/index.html','/redesign-preview.html'].includes(pathname)){
+  if(newsletterCaptureEnabled&&['/updates/','/updates/index.html','/redesign-preview.html'].includes(pathname)){
     const body=Buffer.from(renderNewsletterCapture(fs.readFileSync(target,'utf8'),crypto.randomUUID()));
     res.writeHead(200,{'Content-Type':'text/html; charset=utf-8','Content-Length':body.length,'Cache-Control':'no-store'});return res.end(req.method==='HEAD'?undefined:body);
   }
