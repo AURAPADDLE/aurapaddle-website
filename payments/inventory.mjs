@@ -21,6 +21,15 @@ function allocate(state,items,orderNumber,{now=nowSeconds(),pickup=false}={}){
     if(remaining)throw Error(`${item.sku}: insufficient available stock${pickup?' in Gold Coast for collection':''}.`);
   }return lines;
 }
+export function reserveOrderInventory(state,{orderNumber,items,now=nowSeconds()}={}){
+  if(!state.inventory?.initializedAt)return [];
+  const inv=inventory(state),number=text(orderNumber,80);if(!/^APO\d{5}$/.test(number))throw Error('A valid order number is required for inventory reservation.');
+  const requested=(items||[]).map(item=>({sku:text(item.sku,30),quantity:qty(item.quantity)})).filter(item=>item.quantity>0),existing=inv.allocations[number];
+  if(existing){const expected=new Map(),actual=new Map();for(const item of requested)expected.set(item.sku,(expected.get(item.sku)||0)+item.quantity);for(const line of existing)actual.set(line.sku,(actual.get(line.sku)||0)+line.quantity);if(JSON.stringify([...actual].sort())!==JSON.stringify([...expected].sort()))throw Error('Order inventory reservation already exists for different items.');return structuredClone(existing)}
+  const lines=allocate(state,requested,number,{now});inv.allocations[number]=lines;return structuredClone(lines);
+}
+export function releaseOrderInventory(state,{orderNumber}={}){if(!state.inventory?.initializedAt)return false;const number=text(orderNumber,80);if(!state.inventory.allocations?.[number])return false;delete state.inventory.allocations[number];return true}
+export function fulfilReservedOrderInventory(state,{orderNumber,items,now=nowSeconds()}={}){if(!state.inventory?.initializedAt)return [];const number=text(orderNumber,80),inv=inventory(state),lines=inv.allocations[number]||allocate(state,items||[],number,{now});for(const line of lines)if(Number(inv.balances[line.sku]?.[line.location]||0)<line.quantity)throw Error('Insufficient physical stock. Review the order allocation.');for(const line of lines){inv.balances[line.sku][line.location]-=line.quantity;inv.movements.push({id:crypto.randomUUID(),type:'dispatched',...line,from:line.location,to:null,reference:number,note:'Combined order stock-group fulfilment',createdAt:now})}delete inv.allocations[number];return structuredClone(lines)}
 export function reserveInventory(state,identity,items,now=nowSeconds()){
   if(!state.inventory?.initializedAt)return;
   if(now-Number(identity.reservedAt)>=7200)throw Error('This checkout reservation has expired. Please start a new checkout.');
