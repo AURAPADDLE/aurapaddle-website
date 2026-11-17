@@ -26,6 +26,7 @@ import {createStripeCombinedAdapter} from "./stripe-combined-adapter.mjs";
 import {queueCombinedGroupEmail,queueCombinedOrderEmails} from "./combined-notifications.mjs";
 import {refreshCombinedBalanceLink,requestCombinedBalance} from "./combined-balance-service.mjs";
 import {createStripeTaxReadiness} from "./stripe-tax-readiness.mjs";
+import {renderRollingPreorderAvailability} from "./preorder-estimate.mjs";
 
 const here=path.dirname(fileURLToPath(import.meta.url));
 const siteDir=path.resolve(here,"..");
@@ -590,7 +591,7 @@ async function staticFile(req,res,url){
   }
   if(pathname==="/merchant-feed.xml"||/^\/products\/[a-z0-9-]+\.html$/.test(pathname)){
     const raw=fs.readFileSync(target,"utf8"),slug=path.basename(pathname,".html");
-    const state=await store.read(),html=renderInventoryContent(pathname.endsWith(".xml")?renderCoastGoFeed(raw):renderReviews(slug==="coast-go"?renderCoastGoPage(raw):raw,publicReviewData(state,slug)),state,{feed:pathname.endsWith('.xml')});
+    const state=await store.read(),feed=pathname.endsWith(".xml"),html=renderRollingPreorderAvailability(renderInventoryContent(feed?renderCoastGoFeed(raw):renderReviews(slug==="coast-go"?renderCoastGoPage(raw):raw,publicReviewData(state,slug)),state,{feed}),{feed});
     const body=Buffer.from(html);
     res.writeHead(200,{"Content-Type":mime[path.extname(target).toLowerCase()],"Content-Length":body.length,"Cache-Control":"no-store"});return res.end(req.method==="HEAD"?undefined:body);
   }

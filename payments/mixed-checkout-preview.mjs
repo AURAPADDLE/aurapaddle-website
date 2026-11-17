@@ -2,6 +2,7 @@ import coastGoOffer from "../coastgo-offer.js";
 import {calculateShipping,loadCatalog,loadShippingRates} from "./lib.mjs";
 import {resolveDeliveryLocation,shippingRegionForItems,validateCoverageTable} from "./shipping-location.mjs";
 import {buildCatalogueCombinedPlan,cataloguePaymentRule} from "./catalog-combined-ledger.mjs";
+import {withRollingPreorderEstimate} from "./preorder-estimate.mjs";
 
 export function previewMixedCheckout(input={},dependencies={}){
   if(input.enabled!==true)return {enabled:false,status:"disabled"};
@@ -9,7 +10,7 @@ export function previewMixedCheckout(input={},dependencies={}){
   if(!Array.isArray(input.items)||!input.items.length||input.items.length>20)throw Error("One to twenty cart lines are required.");
   const merged=new Map();for(const raw of input.items){const sku=String(raw?.sku||"").toUpperCase(),quantity=Number(raw?.quantity);if(!Number.isInteger(quantity)||quantity<1||quantity>20)throw Error("Quantity must be a whole number between 1 and 20.");merged.set(sku,(merged.get(sku)||0)+quantity)}
   if([...merged.values()].reduce((a,b)=>a+b,0)>50)throw Error("An online cart cannot exceed 50 items.");
-  let resolved=[];for(const [sku,quantity] of merged){const source=catalog.bySku.get(sku);if(!source)throw Error(`${sku||"Missing SKU"} is not enabled for online checkout.`);const variant={...coastGoOffer.variant(source,now)};if(variant.orderMode==="available"){if(!availability.has(sku))throw Error(`${sku} has no verified dynamic availability.`);variant.inventoryAvailable=Number(availability.get(sku))}cataloguePaymentRule(variant,quantity,{now});resolved.push({variant,quantity,now})}
+  let resolved=[];for(const [sku,quantity] of merged){const source=catalog.bySku.get(sku);if(!source)throw Error(`${sku||"Missing SKU"} is not enabled for online checkout.`);const variant={...withRollingPreorderEstimate(coastGoOffer.variant(source,now),now)};if(variant.orderMode==="available"){if(!availability.has(sku))throw Error(`${sku} has no verified dynamic availability.`);variant.inventoryAvailable=Number(availability.get(sku))}cataloguePaymentRule(variant,quantity,{now});resolved.push({variant,quantity,now})}
   const rackIndex=resolved.findIndex(item=>item.variant.sku==="AP667703");
   if(rackIndex>=0){
     const rack=resolved[rackIndex],anglers=resolved.filter(item=>item.variant.slug==="angler-fishing");

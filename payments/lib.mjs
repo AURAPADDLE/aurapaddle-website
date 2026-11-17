@@ -6,6 +6,7 @@ import {orderAttributionAudit} from "./attribution-audit.mjs";
 import {reserveInventory,noStockOrder} from './inventory.mjs';
 import coastGoOffer from "../coastgo-offer.js";
 import {compareDeliveryLocation,normaliseDeliveryLocation} from "./shipping-location.mjs";
+import {withRollingPreorderEstimate} from "./preorder-estimate.mjs";
 
 const here=path.dirname(fileURLToPath(import.meta.url));
 const catalogPath=path.join(here,"catalog.json");
@@ -237,7 +238,7 @@ export function normaliseCheckoutItems(rawItems,catalog,now=Date.now(),options={
   for(const raw of rawItems){
     const sku=String(raw?.sku||"").toUpperCase(),catalogVariant=catalog.bySku.get(sku);
     if(!catalogVariant)throw new Error(`SKU ${sku||"(missing)"} is not enabled for Stripe Checkout.`);
-    const variant=coastGoOffer.variant(catalogVariant,now);
+    const variant=withRollingPreorderEstimate(coastGoOffer.variant(catalogVariant,now),now);
     if(variant.orderMode==="preorder"&&variant.campaign?.thresholdRequired&&variant.campaign.deadlineISO){
       const closesAt=Date.parse(`${variant.campaign.deadlineISO}T23:59:59.999+10:00`);
       if(Number.isFinite(closesAt)&&now>closesAt)throw new Error(`The ${variant.campaign.name||"pre-order"} campaign has closed.`);
