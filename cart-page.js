@@ -167,7 +167,7 @@
     const coastPromo=window.AURACoastGo.codeFor(items);
     if(coastPromo){appliedPromoCode=coastPromo;promoInput.value=coastPromo;}
     else if(appliedPromoCode===window.AURACoastGo.code){appliedPromoCode="";promoInput.value="";}
-    const sharedPromo=window.AURACoastGo.freeShippingActive()&&items.some(item=>window.AURACoastGo.isCoastGo(item.sku));
+    const sharedPromo=window.AURACoastGo.freeShippingActive()&&items.some(item=>window.AURACoastGo.isCoastGo(item.sku)||window.AURACoastGo.isYoga(item.sku));
     if(sharedPromo&&(!appliedPromoCode||appliedPromoCode===yogaLaunchPromotion.code)){appliedPromoCode=window.AURACoastGo.shippingCode;promoInput.value=appliedPromoCode;}
     if(!sharedPromo&&appliedPromoCode===window.AURACoastGo.shippingCode){appliedPromoCode="";promoInput.value="";}
     promoBlock.hidden=!launchPromotionInCart(items)&&!coastPromo&&!sharedPromo;
@@ -245,7 +245,7 @@
     }else{
       shippingAmount.textContent=shipping.promotionApplied&&shipping.total===0?"Free — promo applied":shipping.promotionApplied?`${money(shipping.total)} · promo applied`:money(shipping.total);
       beforeDispatch.textContent=availableOnly?"Paid today":money(remaining+shipping.total);
-      shippingHelp.textContent=shipping.promotionId===window.AURACoastGo.shippingPromotionId?window.AURACoastGo.shippingTerms:shipping.promotionApplied?"YOGAFREESHIP applied. Free shipping ends 29 September 2026 for eligible regions.":availableOnly?"This shipping amount is included in today's secure payment.":"This shipping amount is fixed in this checkout and paid with the remaining product balance before dispatch.";
+      shippingHelp.textContent=shipping.promotionId===window.AURACoastGo.shippingPromotionId?(hasCoastGo?window.AURACoastGo.shippingTerms:window.AURACoastGo.yogaShippingTerms):shipping.promotionApplied?"YOGAFREESHIP applied. Free shipping ends 29 September 2026 for eligible regions.":availableOnly?"This shipping amount is included in today's secure payment.":"This shipping amount is fixed in this checkout and paid with the remaining product balance before dispatch.";
     }
     const autoPromoPending=appliedPromoCode===yogaLaunchPromotion.code&&launchPromotionInCart(items)&&!shipping.selected;
     if(shipping.details&&!shipping.quoteRequired)shippingHelp.textContent+=` ${shipping.service} transit: ${shipping.transitDays} days after dispatch, excluding handling / preparation time. ${window.AURACoastGo.dispatch()} ${shipping.details} Rate is per board. Contact us before ordering if your region is unclear.`;
@@ -268,7 +268,7 @@
     promoHelp.className=promoValid?"success":autoPromoPending?"":appliedPromoCode?"error":"";
     promoHelp.textContent=promoValid?"YOGAFREESHIP automatically applied — this order qualifies for free shipping.":autoPromoPending?"YOGAFREESHIP is ready — select an eligible delivery region to apply free shipping.":appliedPromoCode?"YOGAFREESHIP is not available for the current product, region or date.":"Yoga Cruiser Glacier Blue: use YOGAFREESHIP for eligible free shipping through 29 September.";
     if(coastPromo){promoHelp.className="success";promoHelp.textContent="COASTGO10 applied automatically — $10 off each CoastGo. Ends 8 October (inclusive).";}
-    if(sharedPromo){promoHelp.className=shipping.promotionApplied?"success":"";promoHelp.textContent=shipping.promotionApplied?"AURAFREESHIP applied to eligible CoastGo standard delivery through 30 November (Brisbane time).":shipping.selected?"This CoastGo address or delivery service is not eligible for the published promotion. The displayed shipping rate applies.":"Enter the delivery suburb, state and postcode. Eligible CoastGo standard deliveries receive free shipping automatically.";}
+    if(sharedPromo){promoHelp.className=shipping.promotionApplied?"success":"";promoHelp.textContent=shipping.promotionApplied?"AURAFREESHIP applied — standard shipping is free for this verified selected-metro address through 30 November (Brisbane time).":shipping.selected?"This verified address is not in the five automatic free-shipping metro areas, or CoastGo Express is selected. The displayed shipping rate applies.":"Enter the delivery suburb, state and postcode. Eligible Yoga Cruiser and CoastGo standard deliveries to the five selected metro areas receive free shipping automatically.";}
     promoInput.readOnly=Boolean(coastPromo);
     applyPromoButton.textContent=coastPromo?"Applied ✓":"Apply";
     checkout.textContent=combinedEnabled?"PAY TODAY'S TOTAL SECURELY":availableOnly?"PAY IN FULL SECURELY":"PAY 50% SECURELY";

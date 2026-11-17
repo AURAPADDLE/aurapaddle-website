@@ -22,7 +22,7 @@ test("CoastGo retains its own tariffs, express and promotion without reducing ot
   assert.equal(calculateShipping(coast,"qld-nsw-main",rates,now,"",true).amount,0);
   assert.equal(calculateShipping(coast,"coastgo-express",rates,now).amount,12000);
   const quote=calculateShipping(mixed,"qld-nsw-main",rates,now,"",true);
-  assert.equal(quote.amount,5000);assert.deepEqual(quote.promotionIds,[coastGoOffer.shippingPromotionId]);
+  assert.equal(quote.amount,0);assert.deepEqual(quote.promotionIds,[coastGoOffer.shippingPromotionId]);
   assert.equal(calculateShipping(coast,"qld-nsw-main",rates,Date.parse(coastGoOffer.shippingEndsAt)).amount,4500);
 });
 

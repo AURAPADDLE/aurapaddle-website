@@ -289,7 +289,7 @@ test('pageshow does not unlock a checkout request that has not redirected',async
   await pending;
 });
 
-test('in-stock Yoga hides zero balances and charges full price with the new flat freight',async()=>{
+test('in-stock Yoga hides zero balances and applies the verified metro offer',async()=>{
   const h=harness(true,undefined,{items:[{...yoga,orderMode:'available'}],now:'2026-11-15T00:00:00Z',shippingValidation:'enforced'});h.startCart();
   const address=h.created.find(e=>e.className==='delivery-location');
   address.querySelector('#shippingSuburb').value='Melbourne';address.querySelector('#shippingState').value='VIC';address.querySelector('#shippingPostcode').value='3000';
@@ -297,10 +297,10 @@ test('in-stock Yoga hides zero balances and charges full price with the new flat
   await new Promise(resolve=>setTimeout(resolve,400));
   assert.equal(h.element('remainingBalance').parentElement.hidden,true);
   assert.equal(h.element('beforeDispatch').parentElement.hidden,true);
-  assert.equal(h.element('dueToday').textContent,'$799');
+  assert.equal(h.element('dueToday').textContent,'$749');
   assert.equal(h.element('checkoutCart').textContent,'PAY IN FULL SECURELY');
   await h.element('checkoutCart').listeners.click();
-  assert.equal(h.requests[1].body.promoCode,'');
+  assert.equal(h.requests[1].body.promoCode,'AURAFREESHIP');
   assert.deepEqual(h.requests[1].body.deliveryLocation,{suburb:'Melbourne',state:'VIC',postcode:'3000'});
 });
 
@@ -342,8 +342,7 @@ test('Yoga buying information surfaces only existing verified purchase terms',()
   assert.match(sourceText,/Glacier Blue: in stock · pay in full · dispatch within 1 business day after payment/);
   assert.match(sourceText,/Free standard shipping to verified Gold Coast, Brisbane, Sydney, Canberra and Melbourne metro addresses through 30 November/);
   assert.match(sourceText,/2-year recreational warranty/);
-  assert.match(sourceText,/mobileYoga=yoga&&window\.matchMedia\?\.\("\(max-width: 650px\)"\)\.matches===true/);
-  assert.match(sourceText,/if\(!seen&&!mobileYoga\)setTimeout\(show,650\)/);
+  assert.doesNotMatch(sourceText,/setTimeout\(show,650\)/);
   assert.match(sourceText,/trigger\.addEventListener\("click",show\)/);
 });
 test('offer expiry restores actual standard shipping, without extending promotion',async()=>{

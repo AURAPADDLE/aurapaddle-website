@@ -18,11 +18,11 @@
   const remoteRegionIds=["remote"];
   const freeShippingActive=(now=Date.now())=>now>=Date.parse(shippingStartsAt)&&now<Date.parse(shippingEndsAt);
   const freeShippingFor=(regionId,now=Date.now(),addressVerified=false)=>freeShippingActive(now)&&addressVerified&&freeShippingRegionIds.includes(regionId);
-  const yogaFreeShippingFor=()=>false;
+  const yogaFreeShippingFor=(sku,regionId,now=Date.now(),addressVerified=false)=>freeShippingActive(now)&&addressVerified&&isYoga(sku)&&yogaRegionIds.includes(regionId);
   const shippingLocationValidationRequired=items=>(items||[]).some(item=>String(item.variant?.slug||item.slug||"")!=="fishing-rack");
   const remoteQuoteFor=(regionId,now=Date.now())=>freeShippingActive(now)&&remoteRegionIds.includes(regionId);
   const shippingTerms="AURAFREESHIP: free standard shipping for verified Gold Coast, Brisbane, Sydney, Canberra and Melbourne metro addresses from 12 to 30 November 2026 inclusive (Brisbane time), automatically applied after the delivery address check. Express shipping is charged separately. Other addresses retain their published rate where confirmed or require manual confirmation. Standard transit: 21–40 days after dispatch.";
-  const yogaShippingTerms="New standard per-board freight applies to verified published areas. Remote, island and unmatched addresses require manual confirmation.";
+  const yogaShippingTerms="AURAFREESHIP: free standard shipping for all four Yoga Cruiser colours delivered to verified Gold Coast, Brisbane, Sydney, Canberra or Melbourne metro addresses from 12 to 30 November 2026 inclusive (Brisbane time), automatically applied after the delivery address check. Other verified published areas retain the AUD $50 per-board standard rate; remote, island, unmatched and boundary addresses require manual confirmation.";
   const priceNote=(now=Date.now())=>freeShippingActive(now)?"AUD $299 · FREE standard shipping to selected verified metro areas · Express extra · Other addresses checked":"New-product price · Pay in full · Shipping additional";
   const codeFor=(items,now=Date.now())=>discounted(now)&&items.some(item=>isCoastGo(item.variant?.sku||item.sku))?code:"";
   const beforeLaunch=(now=Date.now())=>now<Date.parse(launchAt);

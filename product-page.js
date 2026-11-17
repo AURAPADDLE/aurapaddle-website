@@ -569,9 +569,6 @@
     dialog.querySelector('.shop').addEventListener("click",()=>{track('select_promotion',promotion());dialog.close();$("purchaseActions").scrollIntoView({behavior:"smooth",block:"center"});});
     dialog.addEventListener("click",event=>{if(event.target===dialog)dialog.close()});
     window.addEventListener("aura:coastgo-change",()=>{dialog.close();refreshOffer();});
-    let seen=false;try{seen=sessionStorage.getItem(coastGo.freeShippingActive()?"aura-coastgo-product-free-shipping-v1":"aura-coastgo-product-offer-v1")==="seen"}catch{}
-    const mobileYoga=yoga&&window.matchMedia?.("(max-width: 650px)").matches===true;
-    if(!seen&&!mobileYoga)setTimeout(show,650);
   }
   renderShippingSupport();setupSurfSizeFinder();setupPurchaseClarity();setupMobilePurchaseBar();setupConversionLayout();renderSelection();renderMobilePurchaseBar();refreshPreorderProgress();setupCoastGoPromotion();
   const viewedItem=cartItem();

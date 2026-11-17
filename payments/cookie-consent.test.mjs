@@ -188,10 +188,10 @@ test("footer privacy entry can reopen detailed settings after the notice is dism
 
 test("homepage promotion cannot cover the visible privacy opt-out",()=>{
   const homeOffer=fs.readFileSync(new URL("../home-offer.js",import.meta.url),"utf8");
-  assert.match(homeOffer,/privacyNoticeOpen=\(\)=>Boolean\(document\.querySelector\('\.cookie-consent\.is-visible'\)\)/);
-  assert.match(homeOffer,/document\.querySelector\('dialog\[open\]'\)\|\|privacyNoticeOpen\(\)/);
-  assert.doesNotMatch(homeOffer,/after_privacy_notice|open\('automatic'\)|open\('return_visit'\)/);
-  assert.match(homeOffer,/data-preorder-offer-open[^]*open\('manual'\)/);
+  assert.match(homeOffer,/privacyNoticeOpen=\(\)=>Boolean\(document\.querySelector\("\.cookie-consent\.is-visible"\)\)/);
+  assert.match(homeOffer,/document\.querySelector\("dialog\[open\]"\)\|\|privacyNoticeOpen\(\)/);
+  assert.match(homeOffer,/setTimeout\(\(\)=>\{autoReady=true;open\("automatic"\)\},3000\)/);
+  assert.match(homeOffer,/data-preorder-offer-open[^]*open\("manual",true\)/);
 });
 
 test("dismissal follows the same browser tab across pages but not persistent storage",()=>{
