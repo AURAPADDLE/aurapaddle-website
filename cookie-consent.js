@@ -180,22 +180,22 @@
   const banner=document.createElement("section");
   banner.className="cookie-consent";
   banner.setAttribute("aria-label","Cookie preferences");
-  banner.innerHTML=`<button class="cookie-consent__dismiss" type="button" data-cookie-dismiss aria-label="Dismiss privacy notice">×</button><div class="cookie-consent__inner"><div><h2>Your privacy choices</h2><p>We use necessary browser storage for features such as your cart. Optional analytics and marketing cookies and storage remain denied unless your saved choice allows them. Google Analytics may still receive limited cookieless measurement requests while consent is denied. <a href="/policies/#privacy">Privacy Policy</a></p></div><div class="cookie-consent__actions"><button class="cookie-consent__secondary" data-cookie-settings>Settings</button><button class="cookie-consent__secondary" data-cookie-reject>Necessary only</button><button class="cookie-consent__primary" data-cookie-accept>Accept optional</button></div></div>`;
+  banner.innerHTML=`<button class="cookie-consent__dismiss" type="button" data-cookie-dismiss aria-label="Hide this notice; this does not change your choices">×</button><div class="cookie-consent__inner"><div><h2>Privacy &amp; measurement</h2><p data-privacy-notice-copy></p></div><div class="cookie-consent__actions"><button class="cookie-consent__secondary" data-cookie-reject>Turn off optional</button><a href="/#privacy-settings">Review choices</a><a href="/policies/#privacy">Privacy policy</a></div></div>`;
 
   const dialog=document.createElement("dialog");
   dialog.className="cookie-settings";
   dialog.innerHTML=`<div class="cookie-settings__body"><div class="cookie-settings__top"><h2>Privacy settings</h2><button class="cookie-settings__close" type="button" data-cookie-dialog-cancel aria-label="Close">×</button></div><p>Choose separate permissions for analytics and advertising technologies.</p><label class="cookie-option"><span><strong>Necessary</strong><span>Required for core features and to remember your privacy choice.</span></span><input type="checkbox" checked disabled></label><label class="cookie-option"><span><strong>Analytics</strong><span>Allows analytics cookies and identifiers to measure visits, purchases, referral sources and site performance. Limited cookieless Google measurement may occur while denied.</span></span><input id="cookieAnalytics" type="checkbox"></label><label class="cookie-option"><span><strong>Marketing</strong><span>Allows advertising measurement, including Meta Pixel. Meta may receive IP address, browser, cookie and selected shopping-event data. We do not send payment-card details, contact fields or sensitive checkout URLs.</span></span><input id="cookieMarketing" type="checkbox"></label><div class="cookie-settings__actions"><button class="cookie-consent__secondary" type="button" data-cookie-dialog-cancel>Cancel</button><button class="save" type="button" data-cookie-dialog-save>Save choices</button></div></div>`;
-  document.body.append(banner,dialog);
+  const main=document.querySelector("main");
+  if(main)main.before(banner);else document.body.append(banner);
+  document.body.append(dialog);
 
   let settingsOpener=null;
   const openSettings=opener=>{const p=read(),defaultAU=trustedAustralianDefault();settingsOpener=opener instanceof HTMLElement?opener:null;dialog.returnValue="";dialog.querySelector("#cookieAnalytics").checked=Boolean(p.analytics)||defaultAU;dialog.querySelector("#cookieMarketing").checked=Boolean(p.marketing)||defaultAU;dialog.showModal()};
-  banner.querySelector("[data-cookie-settings]").addEventListener("click",event=>openSettings(event.currentTarget));
-  banner.querySelector("[data-cookie-dismiss]").addEventListener("click",()=>{dismissNotice();banner.classList.remove("is-visible")});
-  banner.querySelector("[data-cookie-reject]").addEventListener("click",()=>{save(defaults);banner.classList.remove("is-visible")});
-  banner.querySelector("[data-cookie-accept]").addEventListener("click",()=>{save({necessary:true,analytics:true,marketing:true});banner.classList.remove("is-visible")});
+  banner.querySelector("[data-cookie-dismiss]").addEventListener("click",()=>{dismissNotice();banner.classList.remove("is-inline-visible")});
+  banner.querySelector("[data-cookie-reject]").addEventListener("click",()=>{save(defaults);banner.classList.remove("is-inline-visible")});
   dialog.querySelectorAll("[data-cookie-dialog-cancel]").forEach(button=>button.addEventListener("click",()=>dialog.close("cancel")));
   dialog.querySelector("[data-cookie-dialog-save]").addEventListener("click",()=>dialog.close("save"));
-  dialog.addEventListener("close",()=>{if(dialog.returnValue==="save"){save({necessary:true,analytics:dialog.querySelector("#cookieAnalytics").checked,marketing:dialog.querySelector("#cookieMarketing").checked});banner.classList.remove("is-visible")}const opener=settingsOpener;settingsOpener=null;if(opener?.isConnected)opener.focus()});
+  dialog.addEventListener("close",()=>{if(dialog.returnValue==="save"){save({necessary:true,analytics:dialog.querySelector("#cookieAnalytics").checked,marketing:dialog.querySelector("#cookieMarketing").checked});banner.classList.remove("is-visible","is-inline-visible")}const opener=settingsOpener;settingsOpener=null;if(opener?.isConnected)opener.focus()});
   const isHomepage=()=>/^\/?(?:index\.html)?$/.test(location.pathname);
   const homepageSettingsOpener=isHomepage()?document.querySelector("[data-open-cookie-settings]"):null;
   if(homepageSettingsOpener)homepageSettingsOpener.id="privacy-settings";
@@ -205,10 +205,17 @@
     const note=document.createElement("span");note.dataset.dbipAttribution="";note.className="dbip-attribution";note.innerHTML='Location data: <a href="https://db-ip.com" rel="license noopener">IP Geolocation by DB-IP</a> · <a href="https://creativecommons.org/licenses/by/4.0/" rel="license noopener">CC BY 4.0</a>';
     (document.querySelector("footer .footer-bottom")||document.querySelector("footer")||document.body).append(note);
   };
-  // The detailed settings panel is user-invoked from the homepage footer.
-  // Keep the existing consent and measurement state machine unchanged; this
-  // function intentionally performs no automatic UI disclosure.
-  const showNotice=()=>false;
+  // This notice stays in normal document flow. It never opens the detailed
+  // settings dialog and hiding it does not save a privacy choice.
+  const showNotice=()=>{
+    if(!shouldShowNotice())return false;
+    const copy=banner.querySelector("[data-privacy-notice-copy]");
+    copy.textContent=trustedAustralianDefault()
+      ?"For visitors identified as Australian, AURA may use Google Analytics and Meta advertising measurement by default. Your saved choice always applies."
+      :"Optional Google Analytics and Meta advertising measurement remain off for this location unless you choose them. Your saved choice always applies.";
+    banner.classList.add("is-inline-visible");
+    return true;
+  };
   const resolveRegion=async()=>{
     if(!shouldShowNotice()||trustedAustralianDefault()||offlineReview){showNotice();return}
     try{

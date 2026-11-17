@@ -138,11 +138,13 @@ test("ordinary browser events do not receive an internal traffic label",async()=
   assert.equal(Object.hasOwn(event[2],"traffic_type"),false);
 });
 
-test("unoperated privacy state stays unsaved without automatically displaying privacy UI",()=>{
+test("unoperated privacy state stays unsaved while the non-blocking notice remains available",()=>{
   const fixture=privacyFixture();assert.equal(fixture.window.AURAPrivacyNoticeState.shouldShow(),true);assert.equal(fixture.window.AURAPrivacyNoticeState.dismissed(),false);
   assert.doesNotMatch(fullSource,/setTimeout\([^)]*(?:banner|cookie-consent|dismiss)/);
-  assert.match(fullSource,/const showNotice=\(\)=>false/);
+  assert.match(fullSource,/banner\.classList\.add\("is-inline-visible"\)/);
   assert.doesNotMatch(fullSource,/banner\.classList\.add\("is-visible"\)/);
+  assert.match(fullSource,/Turn off optional/);
+  assert.match(fullSource,/href="\/#privacy-settings">Review choices/);
 });
 
 test("trusted Australian default grants analytics measurement without recording affirmative consent",async()=>{
@@ -178,7 +180,7 @@ test("dismiss action records only a tab-session UI state and changes no privacy 
   fixture.window.AURAPrivacyNoticeState.dismiss();
   assert.equal(fixture.window.AURAPrivacyNoticeState.shouldShow(),false);assert.deepEqual([...fixture.storage],[...before]);assert.deepEqual(fixture.window.auraConsent,{necessary:true,analytics:false,marketing:false});
   assert.equal(JSON.parse(fixture.storage.get("aura-attribution-v1")).metaChoice,"default_au");
-  assert.match(fullSource,/data-cookie-dismiss aria-label="Dismiss privacy notice">×<\/button>/);assert.match(fullSource,/data-cookie-dismiss[^]*dismissNotice\(\);banner\.classList\.remove\("is-visible"\)/);
+  assert.match(fullSource,/data-cookie-dismiss aria-label="Hide this notice; this does not change your choices">×<\/button>/);assert.match(fullSource,/data-cookie-dismiss[^]*dismissNotice\(\);banner\.classList\.remove\("is-inline-visible"\)/);
 });
 
 test("footer privacy entry can reopen detailed settings after the notice is dismissed",()=>{
@@ -195,10 +197,11 @@ test("only the homepage footer opens privacy settings and policy links back to i
   assert.equal((policy.match(/data-open-cookie-settings/g)||[]).length,0);
   assert.equal((preview.match(/data-open-cookie-settings/g)||[]).length,0);
   assert.match(policy,/href="\.\.\/#privacy-settings"/);
-  assert.doesNotMatch(policy,/short notice/i);
+  assert.match(policy,/short privacy notice appears in normal page flow without covering page content/);
+  assert.match(policy,/Hiding that notice does not record acceptance or rejection/);
   assert.match(policy,/does not automatically open the privacy settings dialog/);
   assert.match(fullSource,/homepageSettingsOpener\.id="privacy-settings"/);
-  assert.match(fullSource,/const showNotice=\(\)=>false/);
+  assert.match(fullSource,/const showNotice=\(\)=>\{/);
 });
 
 test("homepage promotion still defers to an explicitly opened privacy dialog",()=>{
