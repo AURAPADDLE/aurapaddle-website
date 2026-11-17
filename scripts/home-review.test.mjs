@@ -37,18 +37,31 @@ test("homepage ends after the range with legacy journeys handed to focused pages
 });
 
 test("selected Hyams Beach photograph fills the brand hero without a side media panel", () => {
-  assert.match(html, /\.hero\{[^}]*hyams-beach-hero-original\.jpg[^}]*cover no-repeat/);
+  assert.match(html, /\.hero\{[^}]*hyams-beach-hero-original\.jpg[^}]*background-size:cover[^}]*background-repeat:no-repeat/);
   assert.doesNotMatch(html, /<div class="hero-media"/);
   assert.doesNotMatch(html, /id="heroVideo"/);
   const photo = fs.readFileSync(new URL("../assets/hero/hyams-beach-hero-original.jpg", import.meta.url));
   assert.deepEqual([...photo.subarray(0, 3)], [255, 216, 255]);
 });
 
-test("CoastGo promotion stays available without auto-covering the homepage", () => {
+test("the selected hero has responsive AVIF delivery and matching social artwork", () => {
+  assert.doesNotMatch(html, /<link rel="preload"[^>]*WEBSITE_HERO_IMAGE_1600_900\.png/);
+  assert.match(html, /<link rel="preload"[^>]*type="image\/avif"[^>]*hyams-beach-1440\.avif/);
+  for (const width of [768, 1440, 2200]) {
+    assert.match(html, new RegExp(`hyams-beach-${width}\\.avif`));
+    const asset = fs.statSync(new URL(`../assets/hero/responsive/hyams-beach-${width}.avif`, import.meta.url));
+    assert.ok(asset.size < 300_000, `${width}px AVIF should stay below 300 KB`);
+  }
+  assert.match(html, /og:image" content="https:\/\/www\.aurapaddle\.com\/assets\/hero\/hyams-beach-og-1200x630\.jpg/);
+  const social = fs.statSync(new URL("../assets/hero/hyams-beach-og-1200x630.jpg", import.meta.url));
+  assert.ok(social.size < 200_000, "social image should stay below 200 KB");
+});
+
+test("the reviewed Yoga and CoastGo promotion entry and timing remain intact", () => {
   const offer = fs.readFileSync(new URL("../home-offer.js", import.meta.url), "utf8");
-  assert.match(html, />View CoastGo free shipping offer<\/button>/);
+  assert.match(html, />View Yoga \+ CoastGo free shipping offer<\/button>/);
   assert.match(offer, /data-preorder-offer-open/);
-  assert.doesNotMatch(offer, /open\('automatic'\)|after_privacy_notice|open\('return_visit'\)/);
+  assert.match(offer, /freeShippingActive\(\)\)setTimeout\(\(\)=>\{autoReady=true;open\("automatic"\)\},3000\)/);
 });
 
 test("Yoga buying information follows rather than occupies the hero", () => {
