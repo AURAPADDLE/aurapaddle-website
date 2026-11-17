@@ -28,3 +28,10 @@ test("near-hero choices link the four verified use cases to their product pages"
 test("shop copy links directly to the inflatable comparison",()=>{
   assert.match(shop,/href="\.\.\/inflatable-paddle-boards\/#compare">compare AURA inflatable paddle boards by intended use and specifications<\/a>/);
 });
+
+test("new-order copy does not revive retired shared-batch claims",()=>{
+  assert.doesNotMatch(shop,/committed production allocation|relevant production batch|count successfully paid board quantities/i);
+  assert.match(shop,/without a shared production minimum/i);
+  assert.match(collection,/<h3>Pre-order payments<\/h3>/);
+  assert.doesNotMatch(collection,/<h3>Conditional pre-orders<\/h3>/);
+});
