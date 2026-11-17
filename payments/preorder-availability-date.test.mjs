@@ -3,8 +3,9 @@ import fs from "node:fs";
 import path from "node:path";
 import test from "node:test";
 import {fileURLToPath} from "node:url";
-import {estimatedDispatchFromPayment,renderRollingPreorderAvailability,withRollingPreorderEstimate} from "./preorder-estimate.mjs";
+import {estimatedDispatchFromPayment,renderRollingPreorderAvailability} from "./preorder-estimate.mjs";
 import {renderCoastGoFeed} from "./coastgo-content.mjs";
+import {loadCatalog,normaliseCheckoutItems,reserveCheckoutIdentity} from "./lib.mjs";
 
 const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),"..");
 const candidateNow=Date.parse("2026-11-17T14:00:00Z");
@@ -24,12 +25,16 @@ test("request-time feed rendering crosses Brisbane midnight without a deployment
   assert.doesNotMatch(after,/<g:id>AP734955<\/g:id>[\s\S]*?<g:availability_date>/);
 });
 
-test("checkout snapshots the estimate from the successful-payment calendar day",()=>{
-  const source={sku:"AP505002",orderMode:"preorder",campaign:{leadTimeWeeks:10,estimatedDispatchBasis:"initial_payment_received",estimatedDelivery:"stale"}};
-  const before=withRollingPreorderEstimate(source,"2026-11-17T13:59:59Z"),after=withRollingPreorderEstimate(source,"2026-11-17T14:00:00Z");
-  assert.equal(before.campaign.estimatedDispatchDate,"2027-01-26");
-  assert.equal(after.campaign.estimatedDispatchDate,"2027-01-27");
-  assert.match(after.campaign.estimatedDelivery,/If the initial payment is completed today, estimated dispatch is 27 January 2027/);
+test("checkout and order snapshots retain the existing lead-time terms without a rolling calendar date",()=>{
+  const catalog=loadCatalog(),items=normaliseCheckoutItems([{sku:"AP505002",quantity:1}],catalog,candidateNow);
+  assert.equal(items[0].variant.campaign.estimatedDelivery,"Approximately 10 weeks after successful initial payment");
+  assert.equal(items[0].variant.campaign.estimatedDispatchDate,undefined);
+  const state={orders:{},reservations:{},checkoutRequests:{},inventory:{}};
+  reserveCheckoutIdentity(state,{requestId:"rolling-date-scope-test",items,now:Math.floor(candidateNow/1000),randomInt:()=>12345,randomBytes:size=>Buffer.alloc(size,1)});
+  const terms=state.checkoutRequests["rolling-date-scope-test"].cartItems[0].preorderTerms;
+  assert.equal(terms.estimatedDispatch,"Approximately 10 weeks after successful initial payment");
+  assert.equal(terms.estimatedDispatchDate,undefined);
+  assert.doesNotMatch(JSON.stringify(terms),/27 January 2027|2027-01-27/);
 });
 
 test("feed and landing-page structured offers publish one estimate for every preorder",()=>{

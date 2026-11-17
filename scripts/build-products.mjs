@@ -504,9 +504,7 @@ const paymentCatalogue=products.flatMap(product=>getVariants(product).filter(var
     thresholdRequired:variant.preorder.thresholdRequired,
     deadline:variant.preorder.deadline,
     deadlineISO:variant.preorder.deadlineISO,
-    estimatedDelivery:variant.preorder.estimatedDelivery,
-    estimatedDispatchDate:variant.preorder.estimatedDispatchDate,
-    availabilityDate:variant.preorder.availabilityDate,
+    estimatedDelivery:`Approximately ${variant.preorder.leadTimeWeeks||10} weeks after successful initial payment`,
     leadTimeWeeks:variant.preorder.leadTimeWeeks,
     estimatedDispatchBasis:variant.preorder.estimatedDispatchBasis,
     cancellationWindowHours:variant.preorder.cancellationWindowHours,
@@ -598,7 +596,7 @@ const feedItems=paymentCatalogue.filter(item=>item.kind!=="accessory").map(item=
   const image=`${encodeURI(imageBase)}?gmc=${feedVersion}`;
   const additionalImageSources=productImages.filter((_,index)=>index!==primaryImageIndex);
   const additionalImages=additionalImageSources.slice(0,10).map(src=>`<g:additional_image_link>${xml(`${encodeURI(src.replace("../","https://www.aurapaddle.com/"))}?gmc=${feedVersion}`)}</g:additional_image_link>`).join("");
-  const availabilityDate=item.orderMode==="preorder"?item.campaign?.availabilityDate||"":"";
+  const availabilityDate=item.orderMode==="preorder"?rollingDispatch.merchantTimestamp:"";
   const isGlacierHero=item.sku==="AP734955";
   const title=isGlacierHero?"AURA PADDLE Yoga Cruiser 11ft Inflatable SUP — Glacier Blue — In Stock":`${item.productName} — ${item.size} — ${item.colour}`;
   const description=isGlacierHero?"Glacier Blue is in stock. Stable 36-inch-wide board for SUP yoga, beginners and family paddling. Complete kit. Dispatch within 1 business day after payment; delivery transit time varies by destination.":(product?.metaDescription||item.description);
