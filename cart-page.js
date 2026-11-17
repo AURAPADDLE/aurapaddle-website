@@ -59,6 +59,7 @@
     recoveryEmailConsent.checked=true;
   }
   const regionStorageKey="aura-shipping-region-v1";
+  const deliveryLocationStorageKey="aura-delivery-location-v1";
   const totalRow=document.createElement("div");totalRow.className="summary-row order-total";totalRow.innerHTML='<span>Total including shipping</span><strong id="orderTotal">Select region</strong>';
   document.getElementById("beforeDispatch").parentElement.after(totalRow);
   const coastDiscountRow=document.createElement("div");
@@ -332,7 +333,10 @@
   };
   if(shippingValidationAvailable)for(const field of [shippingSuburb,shippingState,shippingPostcode])field.addEventListener(field.tagName==="SELECT"?"change":"input",requestShippingQuote);
   deliveryService.addEventListener("change",()=>requestShippingQuote({preserveVerified:true}));
-  try{const saved=sessionStorage.getItem(regionStorageKey),normalisedSaved=saved==="canberra-melbourne"?"qld-nsw-main":saved;regionSelect.value=regions[normalisedSaved]?normalisedSaved:"";if(saved!==normalisedSaved&&normalisedSaved)sessionStorage.setItem(regionStorageKey,normalisedSaved)}catch{regionSelect.value=""}
+  try{
+    const saved=sessionStorage.getItem(regionStorageKey),normalisedSaved=saved==="canberra-melbourne"?"qld-nsw-main":saved;regionSelect.value=regions[normalisedSaved]?normalisedSaved:"";if(saved!==normalisedSaved&&normalisedSaved)sessionStorage.setItem(regionStorageKey,normalisedSaved);
+    const savedLocation=JSON.parse(sessionStorage.getItem(deliveryLocationStorageKey)||"null");if(savedLocation){shippingSuburb.value=String(savedLocation.suburb||"");shippingState.value=String(savedLocation.state||"");shippingPostcode.value=String(savedLocation.postcode||"");requestShippingQuote()}
+  }catch{regionSelect.value=""}
   regionSelect.addEventListener("change",()=>{
     if(locationValidationRequired(cart.read()))return;
     try{if(regionSelect.value)sessionStorage.setItem(regionStorageKey,regionSelect.value);else sessionStorage.removeItem(regionStorageKey)}catch{}

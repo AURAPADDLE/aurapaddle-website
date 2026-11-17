@@ -86,6 +86,8 @@
   let checkoutInFlight=false;
   let shippingRates=null;
   const shippingRegionKey="aura-shipping-region-v1";
+  const deliveryLocationKey="aura-delivery-location-v1";
+  let verifiedProductShipping=null,productShippingPending=false,productShippingError="";
   const stripeConfig=window.AURA_STRIPE||{};
   const cart=window.AURACart;
   const companyAllocationByCampaign={
@@ -226,6 +228,18 @@
     const select=$("shippingRegion"),result=$("shippingEstimate"),quote=$("shippingQuote");
     quote.href=shippingQuoteUrl();
     if(!shippingRates){result.textContent="Loading current delivery rates…";quote.hidden=true;return}
+    if(data.slug==="yoga-cruiser"&&document.getElementById("productShippingSuburb")){
+      const current=verifiedProductShipping,valid=current&&current.sku===v.sku&&current.quantity===quantity;
+      factsLabel.textContent="Board due today (delivery checked below)";
+      $("clarityDueToday").textContent=`AUD $${(price*quantity).toFixed(2)}`;
+      if(productShippingPending){result.innerHTML="<strong>Checking this address…</strong><span>We are using the same delivery rules as the cart.</span>";quote.hidden=true;return}
+      if(productShippingError){result.innerHTML=`<strong>Delivery could not be checked</strong><span>${productShippingError}</span>`;quote.hidden=false;return}
+      if(!valid){result.innerHTML="<strong>Enter suburb, state and postcode</strong><span>We confirm the published rate and any eligible free-shipping offer before you add this board to the cart.</span>";quote.hidden=true;return}
+      if(current.quoteRequired){result.innerHTML='<strong>Manual delivery confirmation required</strong><span>This address is outside the automatically confirmed areas or crosses a published boundary. No payment has been taken.</span>';quote.hidden=false;return}
+      const amount=Number(current.shipping.amount||0),total=price*quantity*100+amount,promo=current.shipping.promotionApplied===true;
+      result.innerHTML=`<strong>${promo?"Standard delivery: FREE — AURAFREESHIP":`Standard delivery: ${moneyFromCents(amount)} incl. GST`}</strong><span>Verified for ${current.location.suburb}, ${current.location.state} ${current.location.postcode}. Total due today: ${moneyFromCents(total)}.</span><span>${promo?"Free shipping applies only after this exact address is verified. The cart rechecks it before payment.":"The cart rechecks this address and amount before payment."}</span>`;
+      quote.hidden=true;return;
+    }
     if(!select.options.length){
       const visibleRegions=shippingRates.regions.filter(region=>!region.hidden&&(data.slug==="coast-go"?(Number.isInteger(region.coastGo)||region.quoteRequired):!region.coastGoOnly));
       select.innerHTML=`<option value="">Choose delivery region</option>${visibleRegions.map(region=>`<option value="${region.id}">${region.label}</option>`).join("")}`;
@@ -269,7 +283,24 @@
       deliveryNote.textContent="Standard: 21–40 days. Express: AUD $120 per board, 7–11 days, eligible metro regions only. Transit starts after dispatch and excludes handling / preparation time.";
       panel.querySelector(".shipping-estimator label").before(deliveryNote);
     }
-    $("shippingRegion").addEventListener("change",()=>{try{if($("shippingRegion").value)sessionStorage.setItem(shippingRegionKey,$("shippingRegion").value);else sessionStorage.removeItem(shippingRegionKey)}catch{}renderPurchaseClarity();track("view_shipping_rate",{item_id:variant().sku,item_name:data.name,shipping_region:$("shippingRegion").value,quantity})});
+    if(data.slug==="yoga-cruiser"){
+      const estimator=panel.querySelector(".shipping-estimator");
+      estimator.innerHTML='<form class="product-delivery-check"><fieldset><legend>Check delivery for this address</legend><label>Suburb<input id="productShippingSuburb" autocomplete="address-level2" maxlength="80" required></label><label>State or territory<select id="productShippingState" autocomplete="address-level1" required><option value="">Select state</option><option>ACT</option><option>NSW</option><option>NT</option><option>QLD</option><option>SA</option><option>TAS</option><option>VIC</option><option>WA</option></select></label><label>Postcode<input id="productShippingPostcode" autocomplete="postal-code" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" required></label></fieldset><button class="btn btn-outline" type="submit">Check delivery</button></form><div id="shippingEstimate" class="shipping-estimate" aria-live="polite">Enter suburb, state and postcode to confirm delivery before checkout.</div><a id="shippingQuote" class="btn btn-outline" href="mailto:admin@aurapaddle.com" hidden>Request a shipping quote</a><p>Australia only · Rates include GST · The cart confirms the same address again before payment.</p>';
+      const form=estimator.querySelector("form");
+      try{const saved=JSON.parse(sessionStorage.getItem(deliveryLocationKey)||"null");if(saved){$("productShippingSuburb").value=String(saved.suburb||"");$("productShippingState").value=String(saved.state||"");$("productShippingPostcode").value=String(saved.postcode||"")}}catch{}
+      form.addEventListener("input",()=>{verifiedProductShipping=null;productShippingError="";renderPurchaseClarity()});
+      form.addEventListener("submit",async event=>{
+        event.preventDefault();if(!form.reportValidity()||productShippingPending)return;
+        const deliveryLocation={suburb:$("productShippingSuburb").value.trim(),state:$("productShippingState").value,postcode:$("productShippingPostcode").value.trim()},v=variant(),requestedQuantity=quantity;
+        productShippingPending=true;productShippingError="";verifiedProductShipping=null;renderPurchaseClarity();
+        try{
+          const response=await fetch(stripeConfig.shippingQuoteEndpoint||"/api/shipping-quote",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({items:[{sku:v.sku,quantity:requestedQuantity}],deliveryLocation,deliveryService:"standard",promoCode:coastGo.shippingCode})});
+          const payload=await response.json().catch(()=>({}));if(!response.ok)throw new Error(payload.error||"Delivery address could not be checked.");
+          verifiedProductShipping={...payload,sku:v.sku,quantity:requestedQuantity};
+          if(payload.status==="verified"){try{sessionStorage.setItem(deliveryLocationKey,JSON.stringify(payload.location));sessionStorage.setItem(shippingRegionKey,payload.shipping.regionId)}catch{}track("view_shipping_rate",{item_id:v.sku,item_name:data.name,shipping_region:payload.shipping.regionId,quantity:requestedQuantity,verification:"address"})}
+        }catch(error){productShippingError=String(error.message||error)}finally{productShippingPending=false;renderPurchaseClarity()}
+      });
+    }else $("shippingRegion").addEventListener("change",()=>{try{if($("shippingRegion").value)sessionStorage.setItem(shippingRegionKey,$("shippingRegion").value);else sessionStorage.removeItem(shippingRegionKey)}catch{}renderPurchaseClarity();track("view_shipping_rate",{item_id:variant().sku,item_name:data.name,shipping_region:$("shippingRegion").value,quantity})});
     fetch("../shipping-rates.json",{headers:{Accept:"application/json"}}).then(response=>response.ok?response.json():Promise.reject()).then(payload=>{shippingRates=payload;renderPreorder();renderPurchaseClarity()}).catch(()=>{$("shippingEstimate").textContent="Current rates could not be loaded. Please request a shipping quote.";$("shippingQuote").hidden=false});
   }
 
@@ -324,7 +355,7 @@
       $("purchaseActions").innerHTML=`<button class="btn btn-dark" type="button" data-add-cart>${campaign.inventoryIncoming?"Reserve in cart":"Add pre-order to cart"}</button><button class="btn btn-coral" type="button" data-buy-now>${campaign.inventoryIncoming?"Reserve incoming stock":"Pre-order"} — pay AUD $${(numericPrice(v)/2).toFixed(2)} today</button><a class="btn btn-outline" href="${enquiryUrl()}">Ask about this ${campaign.inventoryIncoming?"incoming stock":"pre-order"}</a>`;
     }else $("purchaseActions").innerHTML=`<a class="btn btn-dark" href="${enquiryUrl()}">Join the pre-order waitlist</a><a class="btn btn-outline" href="${enquiryUrl()}">Request confirmed price</a>`;
     if(data.slug==="yoga-cruiser"&&v.retailAUD){
-      $("purchaseActions").innerHTML=`<button class="btn btn-coral" type="button" data-buy-now>${v.available?`Buy Glacier Blue — ${displayPrice(v)}`:campaign.inventoryIncoming?"Reserve Glacier Blue":"Pre-order "+colour().name}</button><a class="purchase-question" href="${enquiryUrl()}">Ask about this board →</a>`;
+      $("purchaseActions").innerHTML=`<button class="btn btn-coral" type="button" data-buy-now>${v.available?`Buy Glacier Blue — ${displayPrice(v)}`:campaign.inventoryIncoming?"Reserve Glacier Blue":"Pre-order "+colour().name}</button><button class="btn btn-outline" type="button" data-add-cart>${v.available?"Add to cart":"Add pre-order to cart"}</button><a class="purchase-question" href="${enquiryUrl()}">Ask about this board →</a>`;
     }
     $("purchaseActions").querySelector("[data-add-cart]")?.addEventListener("click",addToCart);
     $("purchaseActions").querySelector("[data-buy-now]")?.addEventListener("click",buyNow);
@@ -526,7 +557,7 @@
 
   document.querySelectorAll("[data-size]").forEach(btn=>btn.addEventListener("click",()=>{selectedSize=btn.dataset.size;renderSelection();track("select_product_option",{item_id:variant().sku,item_name:data.name,option_type:"size",option_value:selectedSize})}));
   document.querySelectorAll("[data-colour]").forEach(btn=>btn.addEventListener("click",()=>{selectedColour=btn.dataset.colour;renderSelection();track("select_product_option",{item_id:variant().sku,item_name:data.name,option_type:"colour",option_value:colour().name})}));
-  $("qtyDown").addEventListener("click",()=>{const previous=quantity;$("quantity").textContent=quantity=Math.max(1,quantity-1);if(quantity!==previous){renderPurchaseClarity();renderMobilePurchaseBar();track("change_item_quantity",{item_id:variant().sku,item_name:data.name,direction:"decrease",quantity})}});$("qtyUp").addEventListener("click",()=>{const previous=quantity;$("quantity").textContent=quantity=Math.min(20,quantity+1);if(quantity!==previous){renderPurchaseClarity();renderMobilePurchaseBar();track("change_item_quantity",{item_id:variant().sku,item_name:data.name,direction:"increase",quantity})}});
+  $("qtyDown").addEventListener("click",()=>{const previous=quantity;$("quantity").textContent=quantity=Math.max(1,quantity-1);if(quantity!==previous){verifiedProductShipping=null;renderPurchaseClarity();renderMobilePurchaseBar();track("change_item_quantity",{item_id:variant().sku,item_name:data.name,direction:"decrease",quantity})}});$("qtyUp").addEventListener("click",()=>{const previous=quantity;$("quantity").textContent=quantity=Math.min(20,quantity+1);if(quantity!==previous){verifiedProductShipping=null;renderPurchaseClarity();renderMobilePurchaseBar();track("change_item_quantity",{item_id:variant().sku,item_name:data.name,direction:"increase",quantity})}});
   document.querySelectorAll(".detail-head").forEach(btn=>btn.addEventListener("click",()=>{const item=btn.parentElement,open=item.classList.toggle("open");btn.setAttribute("aria-expanded",String(open))}));
   document.querySelector(".modal-close").addEventListener("click",()=>$("stripeDialog").close());
   // All purchase paths must use the cart so the delivery address and freight

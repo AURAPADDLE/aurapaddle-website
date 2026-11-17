@@ -44,6 +44,7 @@
 .yoga-conversion .clarity-heading .section-label{display:none}.purchase-assurance{font-size:.875rem;line-height:1.55;color:#465f6b}.yoga-conversion .shipping-estimator{margin-top:.8rem}
 .yoga-conversion .clarity-facts dt{font-size:.8rem}.yoga-conversion .clarity-facts dd{font-size:.95rem}
 .yoga-conversion .shipping-estimator label,.yoga-conversion .shipping-estimator select{font-size:1rem}
+.product-delivery-check fieldset{border:0;padding:0;margin:.75rem 0;display:grid;grid-template-columns:minmax(0,1fr) 110px;gap:.55rem .7rem}.product-delivery-check legend{grid-column:1/-1;font-weight:700;margin-bottom:.15rem}.product-delivery-check label{display:grid;gap:.3rem;font-size:.8rem!important;font-weight:600}.product-delivery-check label:last-of-type{grid-column:1/-1}.product-delivery-check input,.product-delivery-check select{box-sizing:border-box;width:100%;min-width:0;padding:.75rem;border:1px solid #9eb4ba;border-radius:.55rem;background:#fff;color:#102631;font:inherit}.product-delivery-check .btn{width:100%;margin:.15rem 0 .75rem}
 .yoga-conversion .preorder-panel{margin:1rem 0}.yoga-conversion .preorder-panel p,.yoga-conversion .detail-body{font-size:.95rem;line-height:1.65}
 .yoga-conversion .cta-stack .btn{min-height:52px;font-size:1rem;text-transform:none;letter-spacing:0}
 .yoga-conversion .trust-strip{margin:1.25rem 0}.yoga-conversion .trust-item{font-size:.8rem}
@@ -63,5 +64,6 @@
  .yoga-conversion .price{font-size:1.8rem}.yoga-conversion .availability{font-size:.85rem}.yoga-conversion .original-price{font-size:.875rem}.yoga-conversion .product-layout{gap:1rem}.yoga-conversion .thumb{min-width:54px;width:54px}
  .yoga-conversion .clarity-facts{grid-template-columns:1fr 1fr}.yoga-conversion .clarity-heading>a{display:inline-block;margin-top:.5rem}.yoga-conversion .trust-item{font-size:.8rem}.yoga-conversion .mobile-purchase-bar{gap:.5rem}
  body:has(.cookie-consent.is-visible) .mobile-purchase-bar{visibility:hidden}
+ .product-delivery-check fieldset{grid-template-columns:1fr}.product-delivery-check fieldset>*{grid-column:1!important}
 }
 button:focus-visible,a:focus-visible,summary:focus-visible,select:focus-visible{outline:3px solid #087f92;outline-offset:3px}
