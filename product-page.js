@@ -368,7 +368,7 @@
     const dispatch=document.createElement("p");dispatch.id="introDispatch";dispatch.className="dispatch-summary";intro.append(dispatch);
     layout.prepend(intro);
     const size=$("selectedSize").closest(".selector");if(data.sizes.length===1){size.querySelector(".option-row").hidden=true;size.classList.add("single-size");}
-    const colours=$("selectedColour").closest(".selector"),choice=document.createElement("details");choice.className="colour-choice";choice.innerHTML='<summary id="colourSummary">Choose colour</summary><p>Glacier Blue: in stock, dispatch within 1 business day after payment. Other colours: conditional shared production batch.</p>';colours.before(choice);choice.append(colours);
+    const colours=$("selectedColour").closest(".selector"),choice=document.createElement("details");choice.className="colour-choice";choice.innerHTML='<summary id="colourSummary">Choose colour</summary><p>Glacier Blue: in stock, dispatch within 1 business day after payment. Other colours: no-minimum pre-order, with estimated dispatch approximately 10 weeks after successful initial payment.</p>';colours.before(choice);choice.append(colours);
     const terms=document.createElement("details");terms.className="reservation-details";terms.innerHTML='<summary>Reservation conditions &amp; production details</summary>';
     $("purchaseActions").after(terms);terms.append($("preorderPanel"));terms.append(document.querySelector(".sku-box"));
     terms.append($("purchaseClarity").querySelector(".clarity-facts"));terms.append(size);
