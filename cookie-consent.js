@@ -196,7 +196,10 @@
   dialog.querySelectorAll("[data-cookie-dialog-cancel]").forEach(button=>button.addEventListener("click",()=>dialog.close("cancel")));
   dialog.querySelector("[data-cookie-dialog-save]").addEventListener("click",()=>dialog.close("save"));
   dialog.addEventListener("close",()=>{if(dialog.returnValue==="save"){save({necessary:true,analytics:dialog.querySelector("#cookieAnalytics").checked,marketing:dialog.querySelector("#cookieMarketing").checked});banner.classList.remove("is-visible")}const opener=settingsOpener;settingsOpener=null;if(opener?.isConnected)opener.focus()});
-  document.addEventListener("click",event=>{const opener=event.target.closest("[data-open-cookie-settings]");if(opener)openSettings(opener)});
+  const isHomepage=()=>/^\/?(?:index\.html)?$/.test(location.pathname);
+  const homepageSettingsOpener=isHomepage()?document.querySelector("[data-open-cookie-settings]"):null;
+  if(homepageSettingsOpener)homepageSettingsOpener.id="privacy-settings";
+  document.addEventListener("click",event=>{const opener=event.target.closest("[data-open-cookie-settings]");if(opener&&isHomepage())openSettings(opener)});
   const ensureDbIpAttribution=()=>{
     if(document.querySelector("[data-dbip-attribution]"))return;
     const note=document.createElement("span");note.dataset.dbipAttribution="";note.className="dbip-attribution";note.innerHTML='Location data: <a href="https://db-ip.com" rel="license noopener">IP Geolocation by DB-IP</a> · <a href="https://creativecommons.org/licenses/by/4.0/" rel="license noopener">CC BY 4.0</a>';

@@ -184,7 +184,21 @@ test("dismiss action records only a tab-session UI state and changes no privacy 
 test("footer privacy entry can reopen detailed settings after the notice is dismissed",()=>{
   const fixture=privacyFixture();fixture.window.AURAPrivacyNoticeState.dismiss();
   const home=fs.readFileSync(new URL("../index.html",import.meta.url),"utf8");
-  assert.match(home,/data-open-cookie-settings>Cookie settings<\/button>/);assert.match(fullSource,/data-open-cookie-settings[^]*openSettings\(opener\)/);assert.match(fullSource,/if\(opener\?\.isConnected\)opener\.focus\(\)/);assert.equal(fixture.window.AURAPrivacyNoticeState.dismissed(),true);assert.equal(fixture.storage.has("aura-cookie-consent-v1"),false);
+  assert.match(home,/data-open-cookie-settings>Cookie settings<\/button>/);assert.match(fullSource,/opener&&isHomepage\(\)\)openSettings\(opener\)/);assert.match(fullSource,/if\(opener\?\.isConnected\)opener\.focus\(\)/);assert.equal(fixture.window.AURAPrivacyNoticeState.dismissed(),true);assert.equal(fixture.storage.has("aura-cookie-consent-v1"),false);
+});
+
+test("only the homepage footer opens privacy settings and policy links back to it",()=>{
+  const home=fs.readFileSync(new URL("../index.html",import.meta.url),"utf8");
+  const policy=fs.readFileSync(new URL("../policies/index.html",import.meta.url),"utf8");
+  const preview=fs.readFileSync(new URL("../redesign-preview.html",import.meta.url),"utf8");
+  assert.equal((home.match(/data-open-cookie-settings/g)||[]).length,1);
+  assert.equal((policy.match(/data-open-cookie-settings/g)||[]).length,0);
+  assert.equal((preview.match(/data-open-cookie-settings/g)||[]).length,0);
+  assert.match(policy,/href="\.\.\/#privacy-settings"/);
+  assert.doesNotMatch(policy,/short notice/i);
+  assert.match(policy,/does not automatically open the privacy settings dialog/);
+  assert.match(fullSource,/homepageSettingsOpener\.id="privacy-settings"/);
+  assert.match(fullSource,/const showNotice=\(\)=>false/);
 });
 
 test("homepage promotion still defers to an explicitly opened privacy dialog",()=>{
