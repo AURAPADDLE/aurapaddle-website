@@ -187,30 +187,25 @@
   dialog.innerHTML=`<div class="cookie-settings__body"><div class="cookie-settings__top"><h2>Privacy settings</h2><button class="cookie-settings__close" type="button" data-cookie-dialog-cancel aria-label="Close">×</button></div><p>Choose separate permissions for analytics and advertising technologies.</p><label class="cookie-option"><span><strong>Necessary</strong><span>Required for core features and to remember your privacy choice.</span></span><input type="checkbox" checked disabled></label><label class="cookie-option"><span><strong>Analytics</strong><span>Allows analytics cookies and identifiers to measure visits, purchases, referral sources and site performance. Limited cookieless Google measurement may occur while denied.</span></span><input id="cookieAnalytics" type="checkbox"></label><label class="cookie-option"><span><strong>Marketing</strong><span>Allows advertising measurement, including Meta Pixel. Meta may receive IP address, browser, cookie and selected shopping-event data. We do not send payment-card details, contact fields or sensitive checkout URLs.</span></span><input id="cookieMarketing" type="checkbox"></label><div class="cookie-settings__actions"><button class="cookie-consent__secondary" type="button" data-cookie-dialog-cancel>Cancel</button><button class="save" type="button" data-cookie-dialog-save>Save choices</button></div></div>`;
   document.body.append(banner,dialog);
 
-  const openSettings=()=>{const p=read(),defaultAU=trustedAustralianDefault();dialog.returnValue="";dialog.querySelector("#cookieAnalytics").checked=Boolean(p.analytics)||defaultAU;dialog.querySelector("#cookieMarketing").checked=Boolean(p.marketing)||defaultAU;dialog.showModal()};
-  banner.querySelector("[data-cookie-settings]").addEventListener("click",openSettings);
+  let settingsOpener=null;
+  const openSettings=opener=>{const p=read(),defaultAU=trustedAustralianDefault();settingsOpener=opener instanceof HTMLElement?opener:null;dialog.returnValue="";dialog.querySelector("#cookieAnalytics").checked=Boolean(p.analytics)||defaultAU;dialog.querySelector("#cookieMarketing").checked=Boolean(p.marketing)||defaultAU;dialog.showModal()};
+  banner.querySelector("[data-cookie-settings]").addEventListener("click",event=>openSettings(event.currentTarget));
   banner.querySelector("[data-cookie-dismiss]").addEventListener("click",()=>{dismissNotice();banner.classList.remove("is-visible")});
   banner.querySelector("[data-cookie-reject]").addEventListener("click",()=>{save(defaults);banner.classList.remove("is-visible")});
   banner.querySelector("[data-cookie-accept]").addEventListener("click",()=>{save({necessary:true,analytics:true,marketing:true});banner.classList.remove("is-visible")});
   dialog.querySelectorAll("[data-cookie-dialog-cancel]").forEach(button=>button.addEventListener("click",()=>dialog.close("cancel")));
   dialog.querySelector("[data-cookie-dialog-save]").addEventListener("click",()=>dialog.close("save"));
-  dialog.addEventListener("close",()=>{if(dialog.returnValue!=="save")return;save({necessary:true,analytics:dialog.querySelector("#cookieAnalytics").checked,marketing:dialog.querySelector("#cookieMarketing").checked});banner.classList.remove("is-visible")});
-  document.addEventListener("click",event=>{if(event.target.closest("[data-open-cookie-settings]"))openSettings()});
+  dialog.addEventListener("close",()=>{if(dialog.returnValue==="save"){save({necessary:true,analytics:dialog.querySelector("#cookieAnalytics").checked,marketing:dialog.querySelector("#cookieMarketing").checked});banner.classList.remove("is-visible")}const opener=settingsOpener;settingsOpener=null;if(opener?.isConnected)opener.focus()});
+  document.addEventListener("click",event=>{const opener=event.target.closest("[data-open-cookie-settings]");if(opener)openSettings(opener)});
   const ensureDbIpAttribution=()=>{
     if(document.querySelector("[data-dbip-attribution]"))return;
     const note=document.createElement("span");note.dataset.dbipAttribution="";note.className="dbip-attribution";note.innerHTML='Location data: <a href="https://db-ip.com" rel="license noopener">IP Geolocation by DB-IP</a> · <a href="https://creativecommons.org/licenses/by/4.0/" rel="license noopener">CC BY 4.0</a>';
     (document.querySelector("footer .footer-bottom")||document.querySelector("footer")||document.body).append(note);
   };
-  const showNotice=()=>{
-    if(!shouldShowNotice())return;
-    if(trustedAustralianDefault()){
-      banner.querySelector("h2").textContent="Analytics and advertising measurement";
-      banner.querySelector("[data-cookie-settings]").textContent="Privacy settings";
-      banner.querySelector("p").innerHTML='For new visitors reliably identified in Australia, Google Analytics and Meta Pixel are running by default to measure visits and selected shopping actions. They may receive IP address, browser, device, cookie, page and limited shopping-event data, but not payment-card or form details. This is not recorded as your active consent. Choose Privacy settings for separate controls or turn both off now. Closing this notice only hides it for this tab. <a href="/policies/#privacy">Learn more</a>';
-      banner.querySelector("[data-cookie-accept]")?.remove();banner.querySelector("[data-cookie-reject]").textContent="Turn off optional";
-    }
-    banner.classList.add("is-visible");
-  };
+  // The detailed settings panel is user-invoked from the homepage footer.
+  // Keep the existing consent and measurement state machine unchanged; this
+  // function intentionally performs no automatic UI disclosure.
+  const showNotice=()=>false;
   const resolveRegion=async()=>{
     if(!shouldShowNotice()||trustedAustralianDefault()||offlineReview){showNotice();return}
     try{

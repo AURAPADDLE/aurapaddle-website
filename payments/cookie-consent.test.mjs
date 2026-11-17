@@ -138,10 +138,11 @@ test("ordinary browser events do not receive an internal traffic label",async()=
   assert.equal(Object.hasOwn(event[2],"traffic_type"),false);
 });
 
-test("unoperated privacy state stays unsaved and presents a visible choice notice",()=>{
+test("unoperated privacy state stays unsaved without automatically displaying privacy UI",()=>{
   const fixture=privacyFixture();assert.equal(fixture.window.AURAPrivacyNoticeState.shouldShow(),true);assert.equal(fixture.window.AURAPrivacyNoticeState.dismissed(),false);
   assert.doesNotMatch(fullSource,/setTimeout\([^)]*(?:banner|cookie-consent|dismiss)/);
-  assert.match(fullSource,/banner\.classList\.add\("is-visible"\)/);
+  assert.match(fullSource,/const showNotice=\(\)=>false/);
+  assert.doesNotMatch(fullSource,/banner\.classList\.add\("is-visible"\)/);
 });
 
 test("trusted Australian default grants analytics measurement without recording affirmative consent",async()=>{
@@ -183,10 +184,10 @@ test("dismiss action records only a tab-session UI state and changes no privacy 
 test("footer privacy entry can reopen detailed settings after the notice is dismissed",()=>{
   const fixture=privacyFixture();fixture.window.AURAPrivacyNoticeState.dismiss();
   const home=fs.readFileSync(new URL("../index.html",import.meta.url),"utf8");
-  assert.match(home,/data-open-cookie-settings>Cookie settings<\/button>/);assert.match(fullSource,/data-open-cookie-settings[^]*openSettings\(\)/);assert.equal(fixture.window.AURAPrivacyNoticeState.dismissed(),true);assert.equal(fixture.storage.has("aura-cookie-consent-v1"),false);
+  assert.match(home,/data-open-cookie-settings>Cookie settings<\/button>/);assert.match(fullSource,/data-open-cookie-settings[^]*openSettings\(opener\)/);assert.match(fullSource,/if\(opener\?\.isConnected\)opener\.focus\(\)/);assert.equal(fixture.window.AURAPrivacyNoticeState.dismissed(),true);assert.equal(fixture.storage.has("aura-cookie-consent-v1"),false);
 });
 
-test("homepage promotion cannot cover the visible privacy opt-out",()=>{
+test("homepage promotion still defers to an explicitly opened privacy dialog",()=>{
   const homeOffer=fs.readFileSync(new URL("../home-offer.js",import.meta.url),"utf8");
   assert.match(homeOffer,/privacyNoticeOpen=\(\)=>Boolean\(document\.querySelector\("\.cookie-consent\.is-visible"\)\)/);
   assert.match(homeOffer,/document\.querySelector\("dialog\[open\]"\)\|\|privacyNoticeOpen\(\)/);
