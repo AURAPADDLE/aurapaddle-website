@@ -41,6 +41,7 @@ test("public pages no longer expose production counters while support preserves 
   const support=fs.readFileSync(path.join(siteDir,"support/index.html"),"utf8");
   const policies=fs.readFileSync(path.join(siteDir,"policies/index.html"),"utf8");
   const yoga=fs.readFileSync(path.join(siteDir,"products/yoga-cruiser.html"),"utf8");
+  const collection=fs.readFileSync(path.join(siteDir,"inflatable-paddle-boards/index.html"),"utf8");
   assert.doesNotMatch(homepage,/data-hero-batch|\/api\/preorder-progress/);
   assert.doesNotMatch(shopScript,/\/api\/preorder-progress|progressbar/);
   assert.match(preorderGuide,/no shared minimum quantity/i);
@@ -55,4 +56,7 @@ test("public pages no longer expose production counters while support preserves 
   assert.doesNotMatch(fs.readFileSync(path.join(siteDir,"product-page.js"),"utf8"),/conditional shared production batch/);
   assert.match(support,/no-minimum production allocation/i);
   assert.match(preorderGuide,/meta property="og:description"[^>]*no shared minimum/i);
+  assert.equal((collection.match(/Estimated dispatch approximately 10 weeks after successful initial payment/g)||[]).length,2);
+  assert.doesNotMatch(collection,/Closes 30 Nov 2026 · estimated dispatch 30 Jan 2027/);
+  assert.match(collection,/dispatch\.textContent=`Estimated dispatch approximately \$\{v\.preorder\.leadTimeWeeks\|\|10\} weeks after successful initial payment`/);
 });
