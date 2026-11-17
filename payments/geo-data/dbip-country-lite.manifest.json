@@ -1,0 +1,17 @@
+{
+  "provider": "DB-IP",
+  "product": "IP to Country Lite",
+  "release": "November 2026",
+  "releaseDate": "2026-11-01",
+  "validUntil": "2026-12-16T00:00:00.000Z",
+  "downloadUrl": "https://download.db-ip.com/free/dbip-country-lite-2026-11.mmdb.gz",
+  "downloadedAt": "2026-11-16T02:22:23.000Z",
+  "compressedSha256": "75fe430010f6d38a8c4331c202bf0df6ce3221a6e6d823b9e5a6d951e4cf9758",
+  "mmdbMd5": "5974b336a7409ec854f67eacd52c2061",
+  "mmdbSha1": "09eea8433fe3eed71984fd6aac9d8ab3d9ca51f0",
+  "mmdbSha256": "145ce5dfb812d8de28547e6289bb5c5f8b3df2f1dea21d324d5b575e0431311f",
+  "license": "CC BY 4.0",
+  "licenseUrl": "https://creativecommons.org/licenses/by/4.0/",
+  "attributionUrl": "https://db-ip.com",
+  "modified": false
+}

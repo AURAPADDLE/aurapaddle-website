@@ -1,0 +1,38 @@
+const add=(params,key,value)=>params.set(key,String(value));
+const safe=value=>String(value||"").replace(/[^A-Za-z0-9_.:-]/g,"-").slice(0,100);
+
+export function createStripeCombinedAdapter({stripeRequest,siteUrl,taxRateId=""}={}){
+  if(typeof stripeRequest!=="function"||!/^https:\/\//.test(String(siteUrl||""))&&!/^http:\/\/(?:localhost|127\.0\.0\.1)(?::\d+)?$/.test(String(siteUrl||"")))throw Error("Stripe request function and HTTPS site URL are required.");
+  return {
+    async createCheckoutSession(request){
+      if(request.currency!=="aud"||!Number.isSafeInteger(request.amountTotal)||request.amountTotal<=0)throw Error("A valid AUD combined total is required.");
+      if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(request.customerEmail||"")))throw Error("A valid customer email is required.");
+      if(!/^txr_[A-Za-z0-9]+$/.test(String(taxRateId||"")))throw Error("The configured inclusive GST tax rate is required for combined checkout.");
+      const params=new URLSearchParams();add(params,"mode","payment");add(params,"success_url",`${siteUrl}/checkout-combined-success.html?session_id={CHECKOUT_SESSION_ID}`);add(params,"cancel_url",`${siteUrl}/checkout-combined-success.html?cancelled=1`);add(params,"client_reference_id",safe(request.metadata.aura_parent_order));add(params,"customer_email",request.customerEmail);add(params,"customer_creation","always");add(params,"billing_address_collection","required");add(params,"shipping_address_collection[allowed_countries][0]","AU");add(params,"phone_number_collection[enabled]","true");add(params,"allow_promotion_codes","false");add(params,"after_expiration[recovery][enabled]","false");add(params,"adaptive_pricing[enabled]","false");add(params,"excluded_payment_method_types[0]","afterpay_clearpay");add(params,"integration_identifier",safe(request.metadata.aura_integration_identifier));add(params,"expires_at",Math.floor(Date.now()/1000)+7200);add(params,"locale","en");add(params,"submit_type","pay");
+      let index=0,total=0;for(const group of request.groups||[]){for(const item of group.items||[]){const prefix=`line_items[${index++}]`,amount=Number(item.dueTodayUnitAmount),quantity=Number(item.quantity);if(!Number.isSafeInteger(amount)||amount<=0||!Number.isSafeInteger(quantity)||quantity<1)throw Error("Invalid combined line item.");add(params,`${prefix}[price_data][currency]`,"aud");add(params,`${prefix}[price_data][unit_amount]`,amount);add(params,`${prefix}[price_data][product_data][name]`,`${safe(item.sku)} · ${group.kind==="stock"?"full payment":"initial payment"}`);add(params,`${prefix}[price_data][product_data][metadata][aura_sku]`,safe(item.sku));add(params,`${prefix}[quantity]`,quantity);add(params,`${prefix}[tax_rates][0]`,taxRateId);total+=amount*quantity}if(group.shippingDueToday){const prefix=`line_items[${index++}]`,amount=Number(group.shippingDueToday);add(params,`${prefix}[price_data][currency]`,"aud");add(params,`${prefix}[price_data][unit_amount]`,amount);add(params,`${prefix}[price_data][product_data][name]`,"Confirmed shipping for in-stock items");add(params,`${prefix}[price_data][product_data][metadata][aura_line_kind]`,"shipping");add(params,`${prefix}[quantity]`,1);add(params,`${prefix}[tax_rates][0]`,taxRateId);total+=amount}}
+      if(total!==request.amountTotal)throw Error("Combined Stripe lines do not match the amount due today.");
+      for(const [key,value] of Object.entries({...request.metadata,aura_payment_stage:"combined",aura_order_mode:"mixed"}))if(value)add(params,`metadata[${key}]`,safe(value));
+      for(const [key,value] of Object.entries({...request.metadata,aura_payment_stage:"combined",aura_order_mode:"mixed"}))if(value)add(params,`payment_intent_data[metadata][${key}]`,safe(value));
+      add(params,"payment_intent_data[description]",`AURA PADDLE ${safe(request.metadata.aura_parent_order)} combined payment`);add(params,"custom_text[submit][message]","One payment today covers in-stock items in full, their confirmed shipping, and each listed pre-order initial payment. Pre-order product balances and confirmed pre-order shipping remain payable before that group dispatches; they are not charged automatically.");
+      return stripeRequest("/v1/checkout/sessions",{method:"POST",headers:{"Content-Type":"application/x-www-form-urlencoded","Idempotency-Key":request.idempotencyKey},body:params});
+    },
+    async createBalanceInvoice(request){
+      const productBalance=Number(request.productBalanceAmount),shipping=Number(request.shippingAmount),amount=productBalance+shipping,requestId=safe(request.requestId),groupId=safe(request.groupId),orderNumber=safe(request.orderNumber),customerId=safe(request.customerId),taxRateId=safe(request.taxRateId);
+      if(!Number.isSafeInteger(productBalance)||productBalance<=0||!Number.isSafeInteger(shipping)||shipping<0||!Number.isSafeInteger(amount)||amount<=0||!requestId||!groupId||!/^APO\d{5}$/.test(orderNumber)||!/^cus_[A-Za-z0-9]+$/.test(customerId)||!/^txr_[A-Za-z0-9]+$/.test(taxRateId))throw Error("A valid combined balance invoice request with the configured GST rate is required.");
+      const invoiceParams=new URLSearchParams({customer:customerId,collection_method:"send_invoice",days_until_due:"14",description:`AURA PADDLE ${orderNumber} pre-order balance and confirmed shipping`});
+      for(const [key,value] of Object.entries({aura_combined_request:requestId,aura_group_id:groupId,aura_parent_order:orderNumber,aura_payment_stage:"combined_balance"}))add(invoiceParams,`metadata[${key}]`,value);
+      const invoice=await stripeRequest("/v1/invoices",{method:"POST",headers:{"Content-Type":"application/x-www-form-urlencoded","Idempotency-Key":`${requestId}-${groupId}-balance-invoice`},body:invoiceParams});
+      for(const [kind,lineAmount,description] of [["product_balance",productBalance,`${orderNumber} — remaining pre-order product balance`],["shipping",shipping,`${orderNumber} — confirmed pre-order shipping`]]){if(!lineAmount)continue;const line=new URLSearchParams({customer:customerId,invoice:invoice.id,currency:"aud",amount:String(lineAmount),description});line.append("tax_rates[]",taxRateId);for(const [key,value] of Object.entries({aura_combined_request:requestId,aura_group_id:groupId,aura_parent_order:orderNumber,aura_line_kind:kind}))add(line,`metadata[${key}]`,value);await stripeRequest("/v1/invoiceitems",{method:"POST",headers:{"Content-Type":"application/x-www-form-urlencoded","Idempotency-Key":`${requestId}-${groupId}-balance-${kind}`},body:line})}
+      const draft=await stripeRequest(`/v1/invoices/${encodeURIComponent(invoice.id)}`);
+      if(Number(draft.amount_due)!==amount)throw Error("Combined balance invoice total does not match the approved amount.");
+      const finalised=await stripeRequest(`/v1/invoices/${encodeURIComponent(invoice.id)}/finalize`,{method:"POST",headers:{"Content-Type":"application/x-www-form-urlencoded","Idempotency-Key":`${requestId}-${groupId}-balance-finalize`},body:new URLSearchParams({auto_advance:"false"})});
+      return {id:invoice.id,status:finalised.status||invoice.status||"open",hostedInvoiceUrl:String(finalised.hosted_invoice_url||draft.hosted_invoice_url||""),amountDue:amount};
+    },
+    async retrieveBalanceInvoice(id){
+      const invoiceId=String(id||"");
+      if(!/^in_[A-Za-z0-9]+$/.test(invoiceId))throw Error("A valid bound Stripe invoice is required.");
+      return stripeRequest(`/v1/invoices/${encodeURIComponent(invoiceId)}`);
+    },
+    retrieveCheckoutSession(id){return stripeRequest(`/v1/checkout/sessions/${encodeURIComponent(String(id||""))}`)}
+  };
+}

@@ -1,0 +1,17 @@
+import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import os from 'node:os';import path from 'node:path';import {spawn} from 'node:child_process';import {fileURLToPath} from 'node:url';
+for(const enabled of [false,true])test(`newsletter HTTP access, privacy, persistence, no-send (enabled=${enabled})`,async()=>{
+const dir=fs.mkdtempSync(path.join(os.tmpdir(),'aura-newsletter-test-')),port=46000+Math.floor(Math.random()*15000),base=`http://127.0.0.1:${port}`,token='newsletter-local-test-token';
+const child=spawn(process.execPath,[fileURLToPath(new URL('./server.mjs',import.meta.url))],{env:{PATH:process.env.PATH,HOME:dir,PORT:String(port),HOST:'127.0.0.1',PUBLIC_SITE_URL:base,ORDER_DATA_DIR:dir,DATABASE_URL:'',ORDERS_DB_URL:'',RENDER_URL:'',STRIPE_API_KEY:'',STRIPE_WEBHOOK_SECRET:'',ADMIN_API_TOKEN:token,ALLOW_LIVE_PAYMENTS:'false',AGENTMAIL_API_KEY:'',AGENTMAIL_AGENTMAIL_API_KEY:'',GA4_API_SECRET:'',GA4_SERVER_EVENTS_ENABLED:'false',NEWSLETTER_ADMIN_ENABLED:String(enabled)},stdio:'pipe'});let diagnostics='';child.stderr.on('data',c=>diagnostics+=c);
+try{let ready=false;for(let n=0;n<100;n++){if(child.exitCode!==null)throw Error(diagnostics);try{if((await fetch(base+'/api/health')).ok){ready=true;break}}catch{}await new Promise(r=>setTimeout(r,50))}assert.ok(ready,diagnostics);
+const request=(suffix='',body,auth=true,origin)=>fetch(base+'/api/admin/newsletter'+suffix,{method:body?'POST':'GET',headers:{'Content-Type':'application/json',...(auth?{Authorization:`Bearer ${token}`} :{}),...(origin?{Origin:origin}:{})},...(body?{body:JSON.stringify(body)}:{})});
+assert.equal((await request('',null,false)).status,401);assert.equal((await request('/evidence',{},false)).status,401);assert.equal((await fetch(base+'/payments/newsletter.mjs')).status,404);
+if(!enabled){assert.equal((await request()).status,404);return}
+const evidence={email:'private@customer.test',source:'QA fixture',sourceId:'id1',at:'2026-11-01T00:00:00Z',evidence:'Test evidence',status:'subscribed',purpose:'newsletter',verified:true,consentText:'I agree to newsletter email.',textVersion:'test-v1'};
+assert.equal((await request('/evidence',evidence,true,'https://evil.test')).status,403);assert.equal((await request('/evidence',evidence)).status,200);assert.equal((await request('/evidence',evidence)).status,200);
+const response=await request();assert.equal(response.headers.get('cache-control'),'no-store');const data=await response.json();assert.equal(data.contacts.length,1);
+assert.equal((await request('/drafts',{sourceId:'test-update',version:'v1',title:'Update',summary:'Verified facts',kind:'website_update',url:'https://www.aurapaddle.com/'})).status,200);
+assert.equal((await request('/send',{id:'anything'})).status,404);
+const html=await (await fetch(base+'/admin/orders/newsletter/')).text();assert.doesNotMatch(html,/private@customer.test/);assert.match(html,/No email is sent here/);
+const state=JSON.parse(fs.readFileSync(path.join(dir,'state.json'),'utf8'));assert.equal(Object.keys(state.newsletter.contacts).length,1);assert.equal(Object.keys(state.newsletter.drafts).length,1);assert.deepEqual(state.transactionalEmailOutbox,{});assert.deepEqual(state.recoveryEmailOutbox,{});
+assert.equal((await fetch(base+'/api/admin/orders',{headers:{Authorization:`Bearer ${token}`}})).status,200);
+}finally{if(child.exitCode===null){const exited=new Promise(r=>child.once('exit',r));child.kill();await exited}fs.rmSync(dir,{recursive:true,force:true})}});

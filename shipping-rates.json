@@ -1,0 +1,39 @@
+{
+  "currency": "AUD",
+  "origin": "Gold Coast, QLD",
+  "flatPerBoard": {
+    "yoga-cruiser": 5000,
+    "angler-fishing": 5000,
+    "touring-performance": 5000,
+    "gannet": 15000,
+    "current": 20000,
+    "meridian": 25000
+  },
+  "regions": [
+    {"id":"gold-coast-brisbane","label":"Gold Coast / Brisbane Metro","isup":4900,"yogaCruiser":2500,"coastGo":2500,"surfboard":7900},
+    {"id":"qld-nsw-main","label":"QLD / NSW / ACT major cities, coastal areas & Melbourne Metro","isup":9900,"yogaCruiser":4500,"coastGo":4500,"surfboard":14900},
+    {"id":"canberra-melbourne","label":"Canberra / Melbourne Metro","aliasTo":"qld-nsw-main","hidden":true,"isup":9900,"yogaCruiser":4500,"coastGo":4500,"surfboard":14900},
+    {"id":"adelaide","label":"Adelaide Metro","isup":12900,"yogaCruiser":12900,"coastGo":12900,"surfboard":17900},
+    {"id":"perth","label":"Perth Metro","isup":17900,"yogaCruiser":17900,"coastGo":17900,"surfboard":22900},
+    {"id":"tasmania","label":"Tasmania","isup":14900,"yogaCruiser":14900,"coastGo":14900,"surfboard":22900},
+    {"id":"remote","label":"NT, regional, remote and island destinations","quoteRequired":true},
+    {"id":"coastgo-express","label":"Express — ACT / Adelaide / Perth / Sydney / Brisbane / Gold Coast / Melbourne","coastGo":12000,"coastGoOnly":true,"quoteRequired":true,"service":"Express","transitDays":"7–11","details":"Express is available only in ACT, Adelaide, Perth, Sydney, Brisbane, Gold Coast and Melbourne. Other regions are not eligible for express shipping."}
+  ],
+  "classes": {
+    "isup": ["yoga-cruiser", "angler-fishing", "touring-performance", "coast-go"],
+    "surfboard": ["gannet", "current", "meridian"],
+    "quoteOnly": ["inflatable-hydrofoil", "hydrofoil-set", "wayfinder", "fishing-rack"]
+  },
+  "promotions": [
+    {
+      "id": "yoga-glacier-launch-free-shipping",
+      "label": "Yoga Cruiser Glacier Blue launch — free shipping",
+      "code": "YOGAFREESHIP",
+      "requiresCode": true,
+      "sku": "AP734955",
+      "startsAt": "2026-09-20T00:00:00+10:00",
+      "endsAt": "2026-09-30T00:00:00+10:00",
+      "regionIds": ["gold-coast-brisbane", "qld-nsw-main"]
+    }
+  ]
+}
